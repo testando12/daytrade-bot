@@ -1,0 +1,4 @@
+[2026-02-23T22:37:22] Iniciando ciclo — capital: R$ 150.00
+[2026-02-23T22:37:22] Dados obtidos: 15 ativos via yahoo.finance
+[2026-02-23T22:37:22] Ciclo concluído | IRQ: 0.077 (NORMAL) | BUY:0 SELL:0 | P&L estimado: R$ 0.0000 | Total P&L: R$ 0.0000
+[2026-02-23T22:37:22] Top posições: SOL=R$6.63
