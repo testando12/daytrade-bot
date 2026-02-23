@@ -1,0 +1,48 @@
+name: Auto Trade Cycle
+
+on:
+  schedule:
+    # Roda a cada 30 min nos horários B3 (segunda a sexta)
+    # BRT = UTC-3 → horário B3 10h-17h BRT = 13h-20h UTC
+    - cron: '0,30 13-19 * * 1-5'   # seg-sex, 13h-19h UTC (10h-16h BRT)
+    - cron: '0 20 * * 1-5'          # último horário: 20:00 UTC (17h BRT)
+  workflow_dispatch:                 # disparo manual pelo GitHub UI
+
+permissions:
+  contents: write                    # necessário para fazer git push
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Executar ciclo de trading
+        run: python run_cycle.py
+        env:
+          INITIAL_CAPITAL: ${{ vars.INITIAL_CAPITAL || '150' }}
+
+      - name: Commitar resultados (data/)
+        run: |
+          git config user.name  "TradeBot"
+          git config user.email "tradebot@github.com"
+          git add data/
+          # Só commita se houver mudanças
+          git diff --staged --quiet && echo "Sem alterações" || \
+            git commit -m "cycle: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push

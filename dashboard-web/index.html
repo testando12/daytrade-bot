@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Day Trade Bot</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- =================== SIDEBAR =================== -->
+  <aside class="sidebar" id="sidebar">
+
+    <a class="sidebar-logo" href="#" onclick="navigate('dashboard')">
+      <div class="logo-icon">📈</div>
+      <div class="logo-text">Day<span>Trade</span> Bot</div>
+    </a>
+
+    <nav class="sidebar-nav">
+
+      <div class="nav-section">
+        <div class="nav-section-label">Principal</div>
+        <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+          <span class="nav-icon">🏠</span>
+          <span class="nav-label">Dashboard</span>
+          <span class="nav-tooltip">Dashboard</span>
+        </a>
+        <a class="nav-item" data-page="live" onclick="navigate('live')">
+          <span class="nav-icon">⚡</span>
+          <span class="nav-label">Análise ao Vivo</span>
+          <span class="nav-tooltip">Análise ao Vivo</span>
+        </a>
+        <a class="nav-item" data-page="market" onclick="navigate('market')">
+          <span class="nav-icon">💹</span>
+          <span class="nav-label">Mercado</span>
+          <span class="nav-tooltip">Mercado</span>
+        </a>
+        <a class="nav-item" data-page="trade" onclick="navigate('trade')">
+          <span class="nav-icon">💱</span>
+          <span class="nav-label">Trade</span>
+          <span class="nav-tooltip">Trade</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-label">Gestão</div>
+        <a class="nav-item" data-page="portfolio" onclick="navigate('portfolio')">
+          <span class="nav-icon">💼</span>
+          <span class="nav-label">Portfólio</span>
+          <span class="nav-tooltip">Portfólio</span>
+        </a>
+        <a class="nav-item" data-page="risk" onclick="navigate('risk')">
+          <span class="nav-icon">🛡️</span>
+          <span class="nav-label">Gestão de Risco</span>
+          <span class="nav-tooltip">Gestão de Risco</span>
+        </a>
+        <a class="nav-item" data-page="history" onclick="navigate('history')">
+          <span class="nav-icon">📚</span>
+          <span class="nav-label">Histórico</span>
+          <span class="nav-tooltip">Histórico</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-label">Sistema</div>
+        <a class="nav-item" data-page="settings" onclick="navigate('settings')">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Configurações</span>
+          <span class="nav-tooltip">Configurações</span>
+        </a>
+      </div>
+
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="nav-item" style="pointer-events:none; margin-bottom:6px;">
+        <span class="nav-icon">🔌</span>
+        <span class="nav-label" id="sidebar-api-label" style="font-size:12px;">Conectando...</span>
+        <div class="status-dot offline" id="sidebar-status-dot"></div>
+      </div>
+      <button class="sidebar-collapse-btn" onclick="toggleSidebar()">
+        <span class="nav-icon">◀</span>
+        <span class="nav-label">Recolher</span>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- =================== MAIN =================== -->
+  <div class="main-content" id="main-content">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-breadcrumb">
+        <span>DayTrade Bot</span>
+        <span style="color:var(--border)">›</span>
+        <span class="current" id="topbar-page-name">Dashboard</span>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-pill" id="api-status-pill">
+          <div class="dot red" id="api-dot"></div>
+          <span id="api-label">Conectando...</span>
+        </div>
+        <div class="topbar-pill" id="last-update-pill" style="display:none">
+          <span>🕐</span>
+          <span id="last-update-time">--:--</span>
+        </div>
+        <button class="btn btn-primary" onclick="refreshCurrentPage()">
+          <span>↻</span> Atualizar
+        </button>
+      </div>
+    </header>
+
+    <!-- PAGE CONTENT -->
+    <main class="page-content" id="page-content">
+
+      <!-- =========================================
+           PAGE: DASHBOARD
+           ========================================= -->
+      <div id="page-dashboard" class="page active">
+        <div class="page-title">Dashboard</div>
+        <div class="page-subtitle">Visão geral do bot em tempo real</div>
+
+        <!-- KPIs -->
+        <div class="cards-grid cards-4" id="dashboard-kpis">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Capital Total</span>
+              <div class="card-icon blue">💰</div>
+            </div>
+            <div class="kpi-value" id="kpi-capital">R$ --</div>
+            <div class="kpi-label">Capital inicial configurado</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">IRQ Risco</span>
+              <div class="card-icon green">🛡️</div>
+            </div>
+            <div class="kpi-value" id="kpi-irq">--%</div>
+            <div class="kpi-label" id="kpi-irq-label">Nível de risco do mercado</div>
+            <div class="kpi-change neutral" id="kpi-irq-level">—</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Melhor Ativo</span>
+              <div class="card-icon yellow">⭐</div>
+            </div>
+            <div class="kpi-value" id="kpi-best-asset">--</div>
+            <div class="kpi-label">Maior momentum score</div>
+            <div class="kpi-change up" id="kpi-best-score">Score: --</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Status Bot</span>
+              <div class="card-icon green">🤖</div>
+            </div>
+            <div class="kpi-value" id="kpi-bot-status" style="font-size:18px">--</div>
+            <div class="kpi-label">Estado do sistema</div>
+            <div class="kpi-change" id="kpi-trade-ok">—</div>
+          </div>
+        </div>
+
+        <!-- Row: Momentum Chart + Risk Radar -->
+        <div class="cards-grid cards-2-1 mt-16">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Momentum por Ativo</span>
+              <span id="dashboard-momentum-time" style="font-size:11px;color:var(--text-muted)"></span>
+            </div>
+            <div class="chart-container" style="height:240px">
+              <canvas id="chart-momentum"></canvas>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Sinais de Risco</span>
+              <span class="badge badge-green" id="irq-badge-dash">NORMAL</span>
+            </div>
+            <div class="chart-container" style="height:240px">
+              <canvas id="chart-risk-radar"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row: Prices + Allocation -->
+        <div class="cards-grid cards-2 mt-16">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Preços ao Vivo (Binance)</span>
+              <button class="btn btn-secondary btn-sm" onclick="loadMarketPrices()">↻</button>
+            </div>
+            <div id="dash-prices-table">
+              <div class="loading-overlay"><div class="spinner"></div> Carregando...</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Alocação de Capital</span>
+              <span id="allocation-total" class="text-muted" style="font-size:12px"></span>
+            </div>
+            <div id="dash-allocation">
+              <div class="loading-overlay"><div class="spinner"></div> Calculando...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: ANÁLISE AO VIVO
+           ========================================= -->
+      <div id="page-live" class="page">
+        <div class="page-title">⚡ Análise ao Vivo</div>
+        <div class="page-subtitle">Análise completa com dados reais da Binance — Momentum + IRQ + Alocação</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadLiveAnalysis()">
+            ⚡ Analisar Agora (Binance Live)
+          </button>
+          <button class="btn btn-secondary" onclick="loadFullAnalysis()">
+            🧪 Analisar (Dados de Teste)
+          </button>
+          <span id="live-analysis-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <div id="live-analysis-result">
+          <div class="empty-state">
+            <div class="empty-icon">⚡</div>
+            <p>Clique em "Analisar Agora" para iniciar a análise com dados Binance em tempo real</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: MERCADO
+           ========================================= -->
+      <div id="page-market" class="page">
+        <div class="page-title">💹 Mercado</div>
+        <div class="page-subtitle">Preços e dados de mercado em tempo real via Binance</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadMarketPage()">↻ Atualizar Preços</button>
+          <span id="market-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <!-- Price cards -->
+        <div id="market-assets-grid" class="assets-grid">
+          <div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div> Carregando preços...</div>
+        </div>
+
+        <div class="mt-20">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Tabela de Preços</span>
+              <span class="badge badge-blue">USDT</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Ativo</th>
+                    <th>Preço (USD)</th>
+                    <th>Momentum Score</th>
+                    <th>Classificação</th>
+                    <th>Retorno %</th>
+                    <th>Trend</th>
+                  </tr>
+                </thead>
+                <tbody id="market-table-body">
+                  <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: PORTFÓLIO
+           ========================================= -->
+      <div id="page-portfolio" class="page">
+        <div class="page-title">💼 Portfólio</div>
+        <div class="page-subtitle">Alocação de capital e recomendações por ativo</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadPortfolio()">↻ Recalcular</button>
+          <span id="portfolio-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <div class="cards-grid cards-2">
+          <!-- Pie chart -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Distribuição do Capital</span>
+              <span id="portfolio-total" style="font-size:12px;color:var(--text-muted)"></span>
+            </div>
+            <div class="chart-container" style="height:280px">
+              <canvas id="chart-portfolio-pie"></canvas>
+            </div>
+          </div>
+          <!-- Summary -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Resumo da Alocação</span>
+            </div>
+            <div id="portfolio-summary">
+              <div class="loading-overlay"><div class="spinner"></div> Calculando...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-16">
+          <div class="card-header">
+            <span class="card-title">Ações Recomendadas por Ativo</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ativo</th>
+                  <th>Classificação</th>
+                  <th>Alocação Atual</th>
+                  <th>Alocação Recomendada</th>
+                  <th>Mudança %</th>
+                  <th>Ação</th>
+                </tr>
+              </thead>
+              <tbody id="portfolio-table-body">
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: RISCO
+           ========================================= -->
+      <div id="page-risk" class="page">
+        <div class="page-title">🛡️ Gestão de Risco</div>
+        <div class="page-subtitle">Monitor IRQ, Stop Loss, limites diários e de operações</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadRiskPage()">↻ Atualizar</button>
+          <span id="risk-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <!-- Row 1: KPIs -->
+        <div class="cards-grid cards-4" id="risk-kpis">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Pode Operar?</span>
+              <div class="card-icon green">✅</div>
+            </div>
+            <div class="kpi-value" id="risk-can-trade">--</div>
+            <div class="kpi-label" id="risk-can-trade-reason">--</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">P&L Diário</span>
+              <div class="card-icon blue">📊</div>
+            </div>
+            <div class="kpi-value" id="risk-daily-pnl">R$ 0,00</div>
+            <div class="kpi-label" id="risk-daily-pnl-label">Perda máx: R$ --</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Trades/Hora</span>
+              <div class="card-icon yellow">⏱️</div>
+            </div>
+            <div class="kpi-value" id="risk-trades-hour">0 / 20</div>
+            <div class="kpi-label">Limite por hora</div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Trades/Dia</span>
+              <div class="card-icon purple">📅</div>
+            </div>
+            <div class="kpi-value" id="risk-trades-day">0 / 100</div>
+            <div class="kpi-label">Limite diário total</div>
+          </div>
+        </div>
+
+        <!-- Row 2: Stop Loss config + IRQ signals -->
+        <div class="cards-grid cards-2 mt-16">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Configurações de Proteção</span>
+              <span class="badge badge-green" id="risk-lock-badge">ATIVO</span>
+            </div>
+            <div id="risk-config-items"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Sinais IRQ (S1–S5)</span>
+              <span class="badge" id="risk-irq-badge-page">--</span>
+            </div>
+            <div id="risk-signals-list"></div>
+          </div>
+        </div>
+
+        <!-- Row 3: daily limit progress + trade limit progress -->
+        <div class="card mt-16">
+          <div class="card-header">
+            <span class="card-title">Limites de Proteção</span>
+          </div>
+          <div id="risk-limits-section"></div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: HISTÓRICO
+           ========================================= -->
+      <div id="page-history" class="page">
+        <div class="page-title">📚 Histórico</div>
+        <div class="page-subtitle">Histórico de análises e operações registradas no banco de dados</div>
+
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab(this, 'tab-analysis')">Análises</div>
+          <div class="tab" onclick="switchTab(this, 'tab-trades')">Trades</div>
+          <div class="tab" onclick="switchTab(this, 'tab-dbstats')">Banco de Dados</div>
+        </div>
+
+        <div class="tab-pane active" id="tab-analysis">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Histórico de Análises</span>
+              <button class="btn btn-secondary btn-sm" onclick="loadHistoryAnalysis()">↻</button>
+            </div>
+            <div id="history-analysis-content">
+              <div class="loading-overlay"><div class="spinner"></div> Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="tab-trades">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Trades Executados</span>
+              <button class="btn btn-secondary btn-sm" onclick="loadHistoryTrades()">↻</button>
+            </div>
+            <div id="history-trades-content">
+              <div class="loading-overlay"><div class="spinner"></div> Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="tab-dbstats">
+          <div class="cards-grid cards-3" id="db-stats-cards">
+            <div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div> Carregando...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: TRADE
+           ========================================= -->
+      <div id="page-trade" class="page">
+        <div class="page-title">💱 Trade</div>
+        <div class="page-subtitle">Deposite capital, controle o bot e acompanhe todas as operações</div>
+
+        <!-- Status Bar -->
+        <div class="card mb-16" style="padding:12px 18px">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;color:var(--text-muted)">STATUS BOT:</span>
+              <span id="trade-bot-badge" class="badge badge-gray">—</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;color:var(--text-muted)">CAPITAL:</span>
+              <span id="trade-capital-badge" style="font-size:13px;font-weight:700;color:var(--green)">R$ --</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;color:var(--text-muted)">ÚLTIMO CICLO:</span>
+              <span id="trade-last-cycle" style="font-size:12px;color:var(--text-muted)">—</span>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn btn-secondary" onclick="loadTradePage()">↻ Atualizar</button>
+              <button id="trade-toggle-btn" class="btn btn-primary" onclick="toggleTrading()">▶ Iniciar Bot</button>
+              <button class="btn btn-secondary" onclick="runTradeCycle()">🔄 Executar Ciclo</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 1: Capital deposit + Summary cards -->
+        <div class="cards-grid cards-3 mb-16">
+
+          <!-- Depositar Capital -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">💰 Capital do Bot</span>
+              <span class="badge badge-blue">Depósito</span>
+            </div>
+            <div style="margin-bottom:12px">
+              <label style="font-size:11px;color:var(--text-muted);margin-bottom:6px;display:block">VALOR EM R$</label>
+              <div style="display:flex;gap:8px">
+                <input id="trade-capital-input" type="number" min="10" step="10"
+                  placeholder="Ex: 500"
+                  style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:14px"/>
+                <button class="btn btn-primary" onclick="depositCapital()">Depositar</button>
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:12px">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <span style="font-size:12px;color:var(--text-muted)">Capital atual</span>
+                <span id="trade-current-capital" style="font-size:13px;font-weight:700;color:var(--text-primary)">R$ --</span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span style="font-size:12px;color:var(--text-muted)">P&L Total</span>
+                <span id="trade-total-pnl" style="font-size:13px;font-weight:700">R$ 0,00</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Posições Ativas -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">📊 Posições Ativas</span>
+              <span id="trade-positions-count" class="badge badge-gray">0 ativos</span>
+            </div>
+            <div id="trade-positions-mini"
+              style="display:flex;flex-direction:column;gap:6px;max-height:120px;overflow-y:auto">
+              <div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posições</p></div>
+            </div>
+          </div>
+
+          <!-- Distribuição -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🥧 Distribuição</span>
+            </div>
+            <div class="chart-container" style="height:140px">
+              <canvas id="chart-trade-donut"></canvas>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Row 2: Positions table -->
+        <div class="card mb-16">
+          <div class="card-header">
+            <span class="card-title">📈 Onde o Bot Está Aplicando</span>
+            <span id="trade-cycle-time" style="font-size:11px;color:var(--text-muted)"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ATIVO</th>
+                  <th>CLASSIFICAÇÃO</th>
+                  <th>VALOR ALOCADO</th>
+                  <th>% DO CAPITAL</th>
+                  <th>VARIAÇÃO</th>
+                  <th>AÇÃO</th>
+                </tr>
+              </thead>
+              <tbody id="trade-positions-tbody">
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Execute um ciclo para ver as posições</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Row 3: Full activity log -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📋 Histórico Completo de Atividade</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="trade-log-filter"
+                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:4px 8px;border-radius:6px;font-size:12px"
+                onchange="filterTradeLog()">
+                <option value="all">Todos</option>
+                <option value="COMPRA">Compras</option>
+                <option value="VENDA">Vendas</option>
+                <option value="HOLD">Hold</option>
+                <option value="DEPÓSITO">Depósitos</option>
+                <option value="SISTEMA">Sistema</option>
+                <option value="CICLO">Ciclos</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="clearTradeLog()">🗑 Limpar</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>DATA/HORA</th>
+                  <th>TIPO</th>
+                  <th>ATIVO</th>
+                  <th>VALOR</th>
+                  <th>DESCRIÇÃO</th>
+                </tr>
+              </thead>
+              <tbody id="trade-log-tbody">
+                <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhum evento registrado</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- =========================================
+           PAGE: CONFIGURAÇÕES
+           ========================================= -->
+      <div id="page-settings" class="page">
+        <div class="page-title">⚙️ Configurações</div>
+        <div class="page-subtitle">Status dos módulos e configurações do sistema</div>
+
+        <!-- Module status -->
+        <div class="cards-grid cards-2 mb-16">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Módulos do Sistema</span>
+              <button class="btn btn-secondary btn-sm" onclick="loadSettings()">↻</button>
+            </div>
+            <div id="settings-modules"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Configurações do Bot</span>
+            </div>
+            <div id="settings-config"></div>
+          </div>
+        </div>
+
+        <!-- API endpoint config -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Conexão com API</span>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;padding:8px 0">
+            <input
+              id="api-url-input"
+              type="text"
+              value="http://localhost:8001"
+              style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:8px 12px;border-radius:6px;font-size:13px"
+              placeholder="http://localhost:8001"
+            />
+            <button class="btn btn-primary" onclick="applyApiUrl()">Conectar</button>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">
+            URL base da API FastAPI do Day Trade Bot
+          </div>
+        </div>
+
+        <!-- Endpoints overview -->
+        <div class="card mt-16">
+          <div class="card-header">
+            <span class="card-title">Endpoints Disponíveis</span>
+            <a id="swagger-link" href="http://localhost:8001/docs" target="_blank" class="btn btn-secondary btn-sm">
+              📖 Swagger UI
+            </a>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/</td><td>Status do bot</td></tr>
+                <tr><td><span class="badge badge-green">POST</span></td><td class="monospace">/analyze/full</td><td>Análise completa (dados de teste)</td></tr>
+                <tr><td><span class="badge badge-green">POST</span></td><td class="monospace">/market/analyze-live</td><td>Análise ao vivo com Binance</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/market/prices</td><td>Preços em tempo real</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/market/klines/{asset}</td><td>Candles históricos</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/risk/status</td><td>Status do gestor de risco</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/risk/can-trade</td><td>Verificar se pode operar</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/db/stats</td><td>Estatísticas do banco</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/modules</td><td>Status dos módulos</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div><!-- /main-content -->
+
+</div><!-- /app-layout -->
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

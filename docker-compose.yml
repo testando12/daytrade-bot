@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  daytrade-bot:
+    build: .
+    ports:
+      - "8001:8001"
+    volumes:
+      # Persiste os dados (trade_state.json, performance.json) fora do container
+      - ./data:/app/data
+    environment:
+      - PORT=8001
+      - INITIAL_CAPITAL=${INITIAL_CAPITAL:-150}
+      - DEBUG=${DEBUG:-false}
+    restart: unless-stopped

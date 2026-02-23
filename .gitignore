@@ -1,0 +1,74 @@
+# Ambiente Python
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+database.db
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Cache
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Dados
+data/market_data/
+*.csv
+*.json
+backtest_report.json
+
+# OS
+.DS_Store
+Thumbs.db
+.gitignore~
+
+# Secrets
+secrets.txt
+credentials.json
+*.key
+*.pem
+
+# Backup
+*.bak
+*.backup
+*~
