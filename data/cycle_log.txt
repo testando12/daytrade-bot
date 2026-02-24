@@ -17,3 +17,7 @@
 [2026-02-24T19:40:49] Dados obtidos: 15 ativos via yahoo.finance
 [2026-02-24T19:40:49] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:2 SELL:0 | P&L estimado: R$ 25.8075 | Total P&L: R$ 25.8075
 [2026-02-24T19:40:49] Top posições: SOL=R$21.61 | BTC=R$4.19
+[2026-02-24T21:52:34] Iniciando ciclo — capital: R$ 150.00
+[2026-02-24T21:52:35] Dados obtidos: 28 ativos via yahoo.finance
+[2026-02-24T21:52:35] Ciclo concluído | IRQ: 0.081 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 46.3060 | Total P&L: R$ 46.3060
+[2026-02-24T21:52:35] Top posições: PRIO3=R$20.15 | RENT3=R$12.15 | ABEV3=R$7.72 | ETH=R$6.29
