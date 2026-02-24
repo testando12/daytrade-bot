@@ -13,3 +13,7 @@
 [2026-02-24T15:19:46] Dados obtidos: 15 ativos via yahoo.finance
 [2026-02-24T15:19:46] Ciclo concluído | IRQ: 0.079 (NORMAL) | BUY:2 SELL:0 | P&L estimado: R$ 5.1642 | Total P&L: R$ 5.1642
 [2026-02-24T15:19:46] Top posições: VALE3=R$2.72 | ITSA4=R$2.45
+[2026-02-24T19:40:48] Iniciando ciclo — capital: R$ 150.00
+[2026-02-24T19:40:49] Dados obtidos: 15 ativos via yahoo.finance
+[2026-02-24T19:40:49] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:2 SELL:0 | P&L estimado: R$ 25.8075 | Total P&L: R$ 25.8075
+[2026-02-24T19:40:49] Top posições: SOL=R$21.61 | BTC=R$4.19
