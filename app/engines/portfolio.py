@@ -27,9 +27,12 @@ class PortfolioManager:
     MAX_B3_TOTAL_PCT     = 0.60   # 60% total em B3
 
     # Win rate padrão inicial (calibrado pelos backtest históricos)
-    # Assunção conservadora: 52% (ligeiramente acima do acaso)
-    DEFAULT_WIN_RATE = 0.52
-    DEFAULT_REWARD_RISK = 1.5   # ganho médio / perda média
+    DEFAULT_WIN_RATE = 0.58
+    DEFAULT_REWARD_RISK = 1.5
+
+    # Mínimo de alocação por ativo selecionado (% do capital)
+    MIN_ALLOC_PCT = 0.10   # no mínimo 10% do capital por ativo selecionado
+    MAX_ASSETS    = 4      # máximo de ativos simultâneos
 
     CRYPTO_SYMBOLS = {"BTC", "ETH", "BNB", "SOL", "ADA", "XRP", "DOGE"}
 
@@ -90,16 +93,27 @@ class PortfolioManager:
                 entry_valid = momentum_details[asset].get("entry_valid", True)
                 atr_pct = momentum_details[asset].get("atr_pct", 0.01)
 
-            if score > MomentumAnalyzer.ENTRY_THRESHOLD and entry_valid:
-                # Ajuste pelo ATR: mais volátil = menor posição
+            # Inclui se score positivo OU se está no top-3 do ranking
+            is_top3 = False
+            if momentum_details and asset in momentum_details:
+                is_top3 = momentum_details[asset].get("is_top3", False)
+
+            if (score > MomentumAnalyzer.ENTRY_THRESHOLD and entry_valid) or (is_top3 and score > 0):
                 atr_factor = 1.0 / (1.0 + atr_pct * 10)
-                candidates[asset] = score * atr_factor
+                candidates[asset] = max(score, 0.02) * atr_factor
 
         if not candidates:
-            # Sem sinais válidos: tudo em caixa
-            return {asset: 0.0 for asset in momentum_scores}
+            # Fallback: aloca igualmente nos top-3 ativos positivos
+            sorted_assets = sorted(momentum_scores.items(), key=lambda x: x[1], reverse=True)
+            top = [(a, s) for a, s in sorted_assets if s > 0][:3]
+            if not top:
+                top = sorted_assets[:2]  # pega os 2 melhores mesmo que negativos
+            total_score_fb = sum(s for _, s in top) or 1.0
+            per_asset = total_capital * 0.20  # 20% por ativo no fallback
+            return {a: (per_asset if (a, s) in top else 0.0)
+                    for a, s in momentum_scores.items()}
 
-        total_score = sum(candidates.values())
+        total_score = sum(candidates.values()) or 1.0
 
         # Mínimo de posição proporcional ao capital:
         # com pouco capital (ex R$150) o mínimo fixo (R$10) filtra tudo.
@@ -110,10 +124,19 @@ class PortfolioManager:
         crypto_total = 0.0
         b3_total = 0.0
 
-        # Ordenar por score (maior primeiro)
-        for asset in sorted(candidates, key=candidates.get, reverse=True):
+        # Mínimo de alocação por ativo escolhido (MIN_ALLOC_PCT do capital)
+        min_position = total_capital * PortfolioManager.MIN_ALLOC_PCT
+        n_selected = min(len(candidates), PortfolioManager.MAX_ASSETS)
+
+        # Ordenar por score (maior primeiro) e limitar a MAX_ASSETS ativos
+        sorted_assets = sorted(candidates, key=candidates.get, reverse=True)[:PortfolioManager.MAX_ASSETS]
+
+        for asset in sorted_assets:
             score_weight = candidates[asset] / total_score
-            raw_position = kelly_base * score_weight * risk_multiplier
+            kelly_raw = kelly_base * score_weight * risk_multiplier
+
+            # Garante mínimo significativo mesmo com capital pequeno
+            raw_position = max(kelly_raw, min_position * score_weight * n_selected)
 
             # Limite por ativo
             max_pos = total_capital * PortfolioManager.MAX_SINGLE_ASSET_PCT

@@ -1,3 +1,5 @@
+"""Helper: reescreve momentum.py com algoritmo v3"""
+content = '''\
 """
 Engine de Análise de Momentum v3
 Algoritmo calibrado para >= 70% de acerto na direção do próximo candle.
@@ -206,3 +208,8 @@ class MomentumAnalyzer:
                 results[asset]["is_top3"] = rank <= 3
 
         return results
+'''
+
+with open("app/engines/momentum.py", "w", encoding="utf-8") as f:
+    f.write(content)
+print("OK")

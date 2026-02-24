@@ -89,7 +89,7 @@ async def run_cycle():
         from app.market_data import market_data_service, MARKET_DATA_AVAILABLE
         if MARKET_DATA_AVAILABLE:
             klines = await market_data_service.get_all_klines(
-                list(settings.ALL_ASSETS), "5m", 25
+                list(settings.ALL_ASSETS), "5m", 100
             )
             if klines:
                 market_data = klines
