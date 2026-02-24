@@ -2,6 +2,13 @@
 Aplicação FastAPI principal - Day Trade Bot
 """
 
+# Carrega variáveis do arquivo .env antes de qualquer import de configuração
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -142,6 +149,15 @@ async def redirect_to_dashboard():
     """Redireciona para o dashboard web"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/ui/")
+
+
+@app.get("/simulador", include_in_schema=False)
+async def serve_simulador():
+    """Página standalone do Simulador & Testes"""
+    sim_file = _dashboard_dir / "simulador.html"
+    if sim_file.exists():
+        return FileResponse(str(sim_file))
+    raise HTTPException(status_code=404, detail="simulador.html não encontrado")
 
 
 # Dados de teste em memória (será substituído por dados reais via API)
@@ -630,6 +646,429 @@ async def get_market_prices():
             "data": prices,
             "source": "yahoo.finance",
             "timestamp": datetime.utcnow(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Funções de previsão matemática ─────────────────────────────────────────
+
+def _linear_regression_predict(prices: list, steps_ahead: int):
+    """
+    Regressão linear por mínimos quadrados.
+    Retorna (preco_previsto, desvio_padrao_dos_residuos).
+    """
+    n = len(prices)
+    if n < 3:
+        return prices[-1], 0.0
+    x_mean = (n - 1) / 2.0
+    y_mean = sum(prices) / n
+    num = sum((i - x_mean) * (prices[i] - y_mean) for i in range(n))
+    den = sum((i - x_mean) ** 2 for i in range(n))
+    if den == 0:
+        return prices[-1], 0.0
+    b = num / den
+    a = y_mean - b * x_mean
+    predicted = a + b * (n - 1 + steps_ahead)
+    residuals = [prices[i] - (a + b * i) for i in range(n)]
+    variance = sum(r ** 2 for r in residuals) / n
+    std_dev = variance ** 0.5
+    return round(predicted, 4), round(std_dev, 4)
+
+
+def _ema_project(prices: list, period: int, steps_ahead: int) -> float:
+    """
+    Calcula EMA e extrapola steps_ahead pontos a frente
+    usando a inclinacao media dos ultimos N pontos da serie EMA.
+    """
+    if not prices:
+        return 0.0
+    period = min(period, len(prices))
+    alpha = 2.0 / (period + 1)
+    ema = prices[0]
+    ema_series = [ema]
+    for p in prices[1:]:
+        ema = p * alpha + ema * (1 - alpha)
+        ema_series.append(ema)
+    look = min(5, len(ema_series) - 1)
+    slope = (ema_series[-1] - ema_series[-1 - look]) / look if look > 0 else 0.0
+    return round(ema + slope * steps_ahead, 4)
+
+
+@app.get("/market/predict")
+async def get_market_predictions():
+    """
+    Calcula projecoes matematicas de preco para 1h e 1 dia usando:
+      - Regressao linear (minimos quadrados)
+      - EMA extrapolada (media exponencial com projecao da inclinacao)
+      - Bandas de confianca (+-1 desvio padrao dos residuos)
+
+    Horizonte 1h  -> candles de 5m, 12 passos a frente
+    Horizonte 1 dia -> candles de 1d, 1 passo a frente
+    """
+    if not MARKET_DATA_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Servico de dados de mercado nao disponivel")
+    try:
+        assets = list(settings.ALL_ASSETS)
+
+        klines_5m, klines_1d = await asyncio.gather(
+            market_data_service.get_all_klines(assets, "5m", 35),
+            market_data_service.get_all_klines(assets, "1d", 35),
+        )
+
+        predictions = {}
+        for asset in assets:
+            prices_5m = klines_5m.get(asset, {}).get("prices", [])
+            prices_1d = klines_1d.get(asset, {}).get("prices", [])
+
+            # Previsao 1 hora (12 candles de 5m a frente)
+            if len(prices_5m) < 5:
+                continue
+            lr_1h, std_1h = _linear_regression_predict(prices_5m, 12)
+            ema_1h        = _ema_project(prices_5m, 14, 12)
+            pred_1h       = round(lr_1h * 0.6 + ema_1h * 0.4, 4)
+            current       = prices_5m[-1]
+            change_1h_pct = round((pred_1h - current) / current * 100, 3) if current else 0
+            conf_low_1h   = round(pred_1h - std_1h, 4)
+            conf_high_1h  = round(pred_1h + std_1h, 4)
+
+            # Previsao 1 dia
+            if len(prices_1d) >= 5:
+                lr_1d, std_1d = _linear_regression_predict(prices_1d, 1)
+                ema_1d        = _ema_project(prices_1d, 14, 1)
+                pred_1d       = round(lr_1d * 0.6 + ema_1d * 0.4, 4)
+                current_1d    = prices_1d[-1]
+            else:
+                # Fallback: projeta 96 candles de 5m (~8h de pregao)
+                lr_1d, std_1d = _linear_regression_predict(prices_5m, 96)
+                ema_1d        = _ema_project(prices_5m, 14, 96)
+                pred_1d       = round(lr_1d * 0.6 + ema_1d * 0.4, 4)
+                current_1d    = prices_5m[-1]
+
+            change_1d_pct = round((pred_1d - current_1d) / current_1d * 100, 3) if current_1d else 0
+            conf_low_1d   = round(pred_1d - std_1d, 4)
+            conf_high_1d  = round(pred_1d + std_1d, 4)
+
+            # Grau de confianca: coeficiente de variacao dos residuos
+            cv = (std_1h / current * 100) if current else 100
+            if cv < 0.3:   confidence = "Alta"
+            elif cv < 0.8: confidence = "Media"
+            else:          confidence = "Baixa"
+
+            predictions[asset] = {
+                "current":         round(current, 4),
+                "pred_1h":         pred_1h,
+                "change_1h_pct":   change_1h_pct,
+                "conf_low_1h":     conf_low_1h,
+                "conf_high_1h":    conf_high_1h,
+                "pred_1d":         pred_1d,
+                "change_1d_pct":   change_1d_pct,
+                "conf_low_1d":     conf_low_1d,
+                "conf_high_1d":    conf_high_1d,
+                "confidence":      confidence,
+                "candles_used_1h": len(prices_5m),
+                "candles_used_1d": len(prices_1d),
+            }
+
+        return {
+            "success": True,
+            "data": predictions,
+            "note": "Previsao matematica baseada em regressao linear + EMA. Nao e recomendacao financeira.",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── Score de Oportunidade + Notícias RSS ───────────────────────────────────
+import time as _time_module
+import urllib.request as _urllib_req
+import xml.etree.ElementTree as _ET
+
+_news_cache: dict = {"data": {}, "ts": 0.0}
+_NEWS_TTL = 600  # 10 minutos
+
+_ASSET_KEYWORDS: dict = {
+    # B3 — Petróleo & Energia
+    "PETR4": ["petrobras", "petr4", "petróleo", "pré-sal", "óleo"],
+    "PRIO3": ["petrorio", "prio3", "petróleo", "bacia de campos"],
+    "CSAN3": ["cosan", "csan3", "raízen", "comgás"],
+    "EGIE3": ["engie", "egie3", "energia elétrica", "geração"],
+    # B3 — Mineração & Siderurgia
+    "VALE3": ["vale", "vale3", "minério", "minério de ferro", "níquel"],
+    "GGBR4": ["gerdau", "ggbr4", "aço", "siderurgia"],
+    # B3 — Bancos & Finanças
+    "ITUB4": ["itaú", "itub4", "itaú unibanco"],
+    "BBDC4": ["bradesco", "bbdc4"],
+    "BBAS3": ["banco do brasil", "bbas3"],
+    "ITSA4": ["itaúsa", "itsa4"],
+    # B3 — Consumo & Varejo
+    "ABEV3": ["ambev", "abev3", "cerveja", "bebida"],
+    "MGLU3": ["magazine luiza", "magalu", "mglu3", "varejo"],
+    "LREN3": ["lojas renner", "lren3", "moda", "varejo de moda"],
+    # B3 — Indústria & Tecnologia
+    "WEGE3": ["weg", "wege3", "motor", "elétrico"],
+    "EMBR3": ["embraer", "embr3", "avião", "aeronave", "aviação"],
+    # B3 — Logística & Locação
+    "RENT3": ["localiza", "rent3", "aluguel de carros"],
+    # B3 — Alimentos
+    "JBSS3": ["jbs", "jbss3", "carne", "frigorífico", "exportação carne"],
+    # B3 — Papel & Celulose
+    "SUZB3": ["suzano", "suzb3", "celulose", "papel", "eucalipto"],
+    # B3 — Telecom
+    "VIVT3": ["vivo", "vivt3", "telefônica", "telecom", "telecomunicações"],
+    # B3 — Saúde
+    "RDOR3": ["rede d'or", "rdor3", "hospital", "saúde"],
+    # Crypto
+    "BTC":  ["bitcoin", "btc", "criptomoeda", "crypto"],
+    "ETH":  ["ethereum", "eth", "ether"],
+    "BNB":  ["bnb", "binance coin", "binance"],
+    "SOL":  ["solana", "sol"],
+    "ADA":  ["cardano", "ada"],
+    "XRP":  ["xrp", "ripple", "xrp ledger"],
+    "DOGE": ["dogecoin", "doge", "meme coin"],
+    "AVAX": ["avalanche", "avax"],
+    "DOT":  ["polkadot", "dot"],
+    "LINK": ["chainlink", "link"],
+}
+
+_POS_WORDS = [
+    "alta", "sobe", "subiu", "subindo", "valoriza", "valorização",
+    "lucro", "crescimento", "compra", "positivo", "forte",
+    "recuperação", "expansão", "dividendo", "supera", "recorde",
+    "acima do esperado", "resultado positivo",
+]
+
+_NEG_WORDS = [
+    "queda", "cai", "caiu", "caindo", "desvaloriza", "desvalorização",
+    "prejuízo", "baixa", "venda", "redução", "risco", "fraco",
+    "abaixo do esperado", "decepção", "investigação", "multa",
+    "processo", "endividamento", "rebaixamento", "crise",
+]
+
+_RSS_FEEDS = [
+    "https://www.infomoney.com.br/feed/",
+    "https://g1.globo.com/rss/g1/economia/",
+]
+
+
+def _fetch_news_raw() -> list:
+    """Busca RSS gratuito — retorna lista de trechos de texto em minúsculas."""
+    items = []
+    for url in _RSS_FEEDS:
+        try:
+            req = _urllib_req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with _urllib_req.urlopen(req, timeout=5) as resp:
+                xml_data = resp.read().decode("utf-8", errors="ignore")
+            root = _ET.fromstring(xml_data)
+            for item in root.iter("item"):
+                title = (item.findtext("title") or "").lower()
+                desc  = (item.findtext("description") or "").lower()
+                items.append(title + " " + desc)
+        except Exception:
+            pass
+    return items
+
+
+def _score_news(asset: str, all_items: list) -> float:
+    """Retorna sentimento de notícias: -1.0 a +1.0 para o ativo."""
+    keywords = _ASSET_KEYWORDS.get(asset, [asset.lower()])
+    relevant = [item for item in all_items if any(kw in item for kw in keywords)]
+    if not relevant:
+        return 0.0
+    pos = sum(1 for item in relevant for w in _POS_WORDS if w in item)
+    neg = sum(1 for item in relevant for w in _NEG_WORDS if w in item)
+    total = pos + neg
+    if total == 0:
+        return 0.0
+    return round((pos - neg) / total, 3)
+
+
+def _calc_rsi(prices: list, period: int = 14) -> float:
+    """RSI usando suavização de Wilder."""
+    if len(prices) < period + 1:
+        return 50.0
+    gains, losses = [], []
+    for i in range(1, len(prices)):
+        d = prices[i] - prices[i - 1]
+        gains.append(max(d, 0.0))
+        losses.append(max(-d, 0.0))
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+    if avg_loss == 0:
+        return 100.0
+    return round(100 - 100 / (1 + avg_gain / avg_loss), 2)
+
+
+def _calc_ema_series(prices: list, period: int) -> list:
+    """Retorna série completa de EMA."""
+    if not prices:
+        return []
+    period = min(period, len(prices))
+    alpha = 2.0 / (period + 1)
+    ema = prices[0]
+    result = [ema]
+    for p in prices[1:]:
+        ema = p * alpha + ema * (1 - alpha)
+        result.append(ema)
+    return result
+
+
+def _opportunity_score(prices: list, volumes: list, news_sentiment: float, preds_mini: dict) -> dict:
+    """Calcula score de oportunidade 0-100 com breakdown por componente."""
+    if len(prices) < 15:
+        return {
+            "score": 0, "rsi": 50.0, "ema_signal": "SEM_DADOS",
+            "vol_ratio": 1.0, "news": 0.0, "breakdown": {},
+        }
+    rsi   = _calc_rsi(prices)
+    ema9  = _calc_ema_series(prices, 9)
+    ema21 = _calc_ema_series(prices, 21)
+
+    # RSI score (0-25)
+    if 35 <= rsi <= 55:    rsi_pts = 25
+    elif 55 < rsi <= 65:   rsi_pts = 20
+    elif 25 <= rsi < 35:   rsi_pts = 15
+    elif 65 < rsi <= 75:   rsi_pts = 10
+    else:                  rsi_pts = 5
+
+    # EMA crossover score (0-25)
+    e9, e21_v = ema9[-1], ema21[-1]
+    e9_prev   = ema9[-min(4, len(ema9))]
+    ema_rising = e9 > e9_prev
+    if e9 > e21_v and ema_rising:
+        ema_pts, ema_signal = 25, "ALTA_FORTE"
+    elif e9 > e21_v:
+        ema_pts, ema_signal = 18, "ALTA"
+    elif e21_v > 0 and abs(e9 - e21_v) / e21_v < 0.002:
+        ema_pts, ema_signal = 8, "NEUTRO"
+    else:
+        ema_pts, ema_signal = 2, "BAIXA"
+
+    # Volume score (0-20)
+    vol_ratio, vol_pts = 1.0, 5
+    if len(volumes) >= 10:
+        avg_vol   = sum(volumes[-10:]) / 10
+        cur_vol   = volumes[-1]
+        vol_ratio = round(cur_vol / avg_vol, 2) if avg_vol > 0 else 1.0
+        if vol_ratio >= 2.0:    vol_pts = 20
+        elif vol_ratio >= 1.5:  vol_pts = 15
+        elif vol_ratio >= 1.2:  vol_pts = 10
+        elif vol_ratio >= 1.0:  vol_pts = 5
+        else:                   vol_pts = 2
+
+    # Projeção alinhada (0-20)
+    c1h = preds_mini.get("change_1h_pct", 0) or 0
+    c1d = preds_mini.get("change_1d_pct", 0) or 0
+    if c1h > 0 and c1d > 0:   pred_pts = 20
+    elif c1h > 0:              pred_pts = 12
+    elif c1d > 0:              pred_pts = 8
+    else:                      pred_pts = 0
+
+    # Notícias (0-10)
+    if news_sentiment >= 0.5:     news_pts = 10
+    elif news_sentiment >= 0.2:   news_pts = 7
+    elif news_sentiment >= -0.1:  news_pts = 5
+    elif news_sentiment >= -0.3:  news_pts = 2
+    else:                         news_pts = 0
+
+    total = rsi_pts + ema_pts + vol_pts + pred_pts + news_pts
+    return {
+        "score":      min(total, 100),
+        "rsi":        rsi,
+        "ema_signal": ema_signal,
+        "vol_ratio":  vol_ratio,
+        "news":       news_sentiment,
+        "breakdown": {
+            "rsi":        rsi_pts,
+            "ema":        ema_pts,
+            "volume":     vol_pts,
+            "prediction": pred_pts,
+            "news":       news_pts,
+        },
+    }
+
+
+@app.get("/market/score")
+async def get_market_score():
+    """
+    Calcula score de oportunidade 0-100 por ativo, ranqueado do maior para o menor.
+    Combina: RSI + cruzamento EMA9/EMA21 + volume relativo + alinhamento de projeção + sentimento de notícias RSS.
+    """
+    if not MARKET_DATA_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Serviço de dados de mercado não disponível")
+    try:
+        assets = list(settings.ALL_ASSETS)
+
+        klines_5m, klines_1d = await asyncio.gather(
+            market_data_service.get_all_klines(assets, "5m", 50),
+            market_data_service.get_all_klines(assets, "1d", 35),
+        )
+
+        # Notícias RSS (cache 10 min)
+        global _news_cache
+        now = _time_module.time()
+        if now - _news_cache["ts"] > _NEWS_TTL:
+            loop = asyncio.get_event_loop()
+            raw = await loop.run_in_executor(None, _fetch_news_raw)
+            sentiment_map = {a: _score_news(a, raw) for a in assets}
+            _news_cache = {"data": sentiment_map, "ts": now}
+        else:
+            sentiment_map = _news_cache["data"]
+
+        scored = {}
+        for asset in assets:
+            data5m    = klines_5m.get(asset, {})
+            prices5m  = data5m.get("prices", [])
+            volumes5m = data5m.get("volumes", [])
+            prices1d  = klines_1d.get(asset, {}).get("prices", [])
+
+            if len(prices5m) < 5:
+                continue
+            current = prices5m[-1]
+
+            lr_1h, _ = _linear_regression_predict(prices5m, 12)
+            ema_1h   = _ema_project(prices5m, 14, 12)
+            pred_1h  = lr_1h * 0.6 + ema_1h * 0.4
+
+            if len(prices1d) >= 5:
+                lr_1d, _ = _linear_regression_predict(prices1d, 1)
+                ema_1d   = _ema_project(prices1d, 14, 1)
+                pred_1d  = lr_1d * 0.6 + ema_1d * 0.4
+                c_1d     = prices1d[-1]
+            else:
+                lr_1d, _ = _linear_regression_predict(prices5m, 96)
+                ema_1d   = _ema_project(prices5m, 14, 96)
+                pred_1d  = lr_1d * 0.6 + ema_1d * 0.4
+                c_1d     = current
+
+            preds_mini = {
+                "change_1h_pct": ((pred_1h - current) / current * 100) if current else 0,
+                "change_1d_pct": ((pred_1d - c_1d) / c_1d * 100) if c_1d else 0,
+            }
+
+            result = _opportunity_score(prices5m, volumes5m, sentiment_map.get(asset, 0.0), preds_mini)
+            result.update({
+                "current":       round(current, 4),
+                "pred_1h":       round(pred_1h, 4),
+                "change_1h_pct": round(preds_mini["change_1h_pct"], 3),
+                "pred_1d":       round(pred_1d, 4),
+                "change_1d_pct": round(preds_mini["change_1d_pct"], 3),
+                "news_found":    sentiment_map.get(asset, 0.0) != 0.0,
+            })
+            scored[asset] = result
+
+        ranked = dict(sorted(scored.items(), key=lambda x: x[1]["score"], reverse=True))
+        top3   = list(ranked.keys())[:3]
+
+        return {
+            "success":      True,
+            "data":         ranked,
+            "top3":         top3,
+            "generated_at": datetime.now().isoformat(),
+            "note":         "Score 0-100: RSI + EMA + volume + projeção + notícias. Não é recomendação financeira.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1305,6 +1744,272 @@ async def get_performance():
             "current_capital":  _trade_state.get("capital"),
         },
     }
+
+
+# ═══════════════════════════════════════════
+# ENDPOINTS: SIMULAÇÃO & TESTES
+# ═══════════════════════════════════════════
+
+@app.post("/simulate")
+async def run_simulation(body: dict = None):
+    """
+    Executa N ciclos de simulação em sequência com dados reais do Yahoo Finance.
+    Retorna equity curve, P&L, win rate e detalhes por ativo.
+    """
+    body = body or {}
+    capital   = float(body.get("capital", 150))
+    cycles    = min(int(body.get("cycles", 10)), 100)
+    interval  = body.get("interval", "5m")
+    limit     = min(int(body.get("limit", 100)), 200)
+
+    equity_curve = [capital]
+    events = []
+    asset_stats = {}
+    wins = 0
+    losses = 0
+    best_cycle_pnl = 0.0
+    worst_cycle_pnl = 0.0
+    sim_capital = capital
+
+    try:
+        # Buscar dados de mercado uma vez
+        all_assets = list(settings.ALL_ASSETS)
+        market_data = None
+
+        if MARKET_DATA_AVAILABLE and market_data_service:
+            try:
+                klines = await market_data_service.get_all_klines(all_assets, interval, limit)
+                if klines:
+                    market_data = klines
+            except Exception:
+                pass
+
+        if not market_data:
+            market_data = test_assets_data
+
+        for cycle_num in range(1, cycles + 1):
+            # Analisar momentum
+            momentum_results = MomentumAnalyzer.calculate_multiple_assets(market_data)
+            if not momentum_results:
+                continue
+
+            momentum_scores = {a: d["momentum_score"] for a, d in momentum_results.items()}
+
+            # Risco
+            ref_asset = list(market_data.keys())[0]
+            ref_data = market_data[ref_asset]
+            risk_analysis = RiskAnalyzer.calculate_irq(
+                ref_data.get("prices", []),
+                ref_data.get("volumes", []),
+            )
+            irq_score = risk_analysis["irq_score"]
+
+            # Alocação
+            allocation = PortfolioManager.calculate_portfolio_allocation(
+                momentum_scores, irq_score, sim_capital,
+            )
+            rebalancing = PortfolioManager.apply_rebalancing_rules(
+                allocation, momentum_results, sim_capital, irq_score,
+            )
+
+            # Simular P&L baseado na variação real do último candle
+            cycle_pnl = 0.0
+            for asset, alloc in rebalancing.items():
+                rec = alloc.get("recommended_amount", 0)
+                action = alloc.get("action", "HOLD")
+                classif = alloc.get("classification", "—")
+
+                if rec > 0:
+                    # Pegar variação real do ativo
+                    prices = market_data.get(asset, {}).get("prices", [])
+                    if len(prices) >= 2:
+                        pct_change = (prices[-1] - prices[-2]) / prices[-2]
+                    else:
+                        pct_change = 0
+
+                    asset_pnl = rec * pct_change
+                    cycle_pnl += asset_pnl
+
+                    # Track asset stats
+                    if asset not in asset_stats:
+                        asset_stats[asset] = {
+                            "total_allocated": 0,
+                            "times_selected": 0,
+                            "avg_score": 0,
+                            "classification": classif,
+                        }
+                    asset_stats[asset]["total_allocated"] += rec
+                    asset_stats[asset]["times_selected"] += 1
+                    asset_stats[asset]["avg_score"] += momentum_scores.get(asset, 0)
+                    asset_stats[asset]["classification"] = classif
+
+                if action in ("BUY", "SELL") and rec > 0:
+                    events.append({
+                        "cycle": cycle_num,
+                        "type": action,
+                        "asset": asset,
+                        "amount": rec,
+                        "classification": classif,
+                    })
+
+            sim_capital += cycle_pnl
+            equity_curve.append(round(sim_capital, 4))
+
+            if cycle_pnl > 0:
+                wins += 1
+            elif cycle_pnl < 0:
+                losses += 1
+
+            best_cycle_pnl = max(best_cycle_pnl, cycle_pnl)
+            worst_cycle_pnl = min(worst_cycle_pnl, cycle_pnl)
+
+        # Calcular médias dos asset stats
+        for asset in asset_stats:
+            t = asset_stats[asset]["times_selected"]
+            if t > 0:
+                asset_stats[asset]["avg_score"] /= t
+                asset_stats[asset]["avg_score"] = round(asset_stats[asset]["avg_score"], 4)
+            asset_stats[asset]["total_allocated"] = round(asset_stats[asset]["total_allocated"], 2)
+
+        total_pnl = sim_capital - capital
+        total_cycles = wins + losses
+
+        return {
+            "success": True,
+            "data": {
+                "total_cycles": cycles,
+                "final_capital": round(sim_capital, 4),
+                "total_pnl": round(total_pnl, 4),
+                "win_rate_pct": round(wins / total_cycles * 100, 2) if total_cycles > 0 else 0,
+                "avg_pnl_per_cycle": round(total_pnl / cycles, 4) if cycles > 0 else 0,
+                "best_cycle": round(best_cycle_pnl, 4),
+                "worst_cycle": round(worst_cycle_pnl, 4),
+                "equity_curve": equity_curve,
+                "asset_summary": asset_stats,
+                "events": events[-50:],  # últimos 50 eventos
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/simulate/test-momentum")
+async def test_momentum_accuracy():
+    """Testa o acerto de direção do motor de momentum com dados reais."""
+    try:
+        all_assets = list(settings.ALL_ASSETS)
+        market_data = None
+
+        if MARKET_DATA_AVAILABLE and market_data_service:
+            try:
+                klines = await market_data_service.get_all_klines(all_assets, "5m", 60)
+                if klines:
+                    market_data = klines
+            except Exception:
+                pass
+
+        if not market_data:
+            market_data = test_assets_data
+
+        results = []
+        correct = 0
+        total = 0
+
+        for asset, data in market_data.items():
+            prices = data.get("prices", [])
+            volumes = data.get("volumes", [1.0] * len(prices))
+            if len(prices) < 10:
+                continue
+
+            # Prever com dados até o penúltimo candle
+            m = MomentumAnalyzer.calculate_momentum_score(prices[:-1], volumes[:-1])
+            predicted_up = m["momentum_score"] > 0
+            real_up = prices[-1] > prices[-2]
+            is_correct = (predicted_up == real_up)
+
+            # Lateral é considerado acerto se movimento < 0.05%
+            pct = abs((prices[-1] - prices[-2]) / prices[-2] * 100)
+            if pct < 0.05:
+                is_correct = True
+
+            results.append({
+                "asset": asset,
+                "score": round(m["momentum_score"], 4),
+                "predicted": "ALTA" if predicted_up else "QUEDA",
+                "actual": "ALTA" if real_up else "QUEDA",
+                "correct": is_correct,
+                "change_pct": round(pct, 4),
+            })
+
+            if is_correct:
+                correct += 1
+            total += 1
+
+        acc = round(correct / total * 100, 2) if total > 0 else 0
+
+        return {
+            "success": True,
+            "data": {
+                "total_assets": total,
+                "correct": correct,
+                "total": total,
+                "accuracy_pct": acc,
+                "assets": results,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/simulate/test-allocation")
+async def test_allocation(body: dict = None):
+    """Testa a alocação de capital com dados reais."""
+    body = body or {}
+    capital = float(body.get("capital", 150))
+
+    try:
+        all_assets = list(settings.ALL_ASSETS)
+        market_data = None
+
+        if MARKET_DATA_AVAILABLE and market_data_service:
+            try:
+                klines = await market_data_service.get_all_klines(all_assets, "5m", 100)
+                if klines:
+                    market_data = klines
+            except Exception:
+                pass
+
+        if not market_data:
+            market_data = test_assets_data
+
+        momentum_results = MomentumAnalyzer.calculate_multiple_assets(market_data)
+        momentum_scores = {a: d["momentum_score"] for a, d in momentum_results.items()}
+
+        ref_asset = list(market_data.keys())[0]
+        ref_data = market_data[ref_asset]
+        risk_analysis = RiskAnalyzer.calculate_irq(
+            ref_data.get("prices", []),
+            ref_data.get("volumes", []),
+        )
+        irq_score = risk_analysis["irq_score"]
+
+        allocation = PortfolioManager.calculate_portfolio_allocation(
+            momentum_scores, irq_score, capital,
+        )
+
+        total_allocated = sum(v for v in allocation.values() if v > 0)
+
+        return {
+            "success": True,
+            "data": {
+                "irq": round(irq_score, 4),
+                "total_allocated": round(total_allocated, 2),
+                "allocation_pct": round(total_allocated / capital * 100, 2) if capital > 0 else 0,
+                "allocations": {a: round(v, 2) for a, v in allocation.items()},
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/backtest")

@@ -1,5 +1,5 @@
 /* =============================================
-   DAY TRADE BOT — App JavaScript
+   DAY TRADE BOT â€” App JavaScript
    SPA com roteamento, fetch API e Chart.js
    ============================================= */
 
@@ -28,18 +28,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =============================================
-// NAVIGAÇÃO / ROTEAMENTO
+// NAVIGAÃ‡ÃƒO / ROTEAMENTO
 // =============================================
 
 const PAGE_NAMES = {
   dashboard: 'Dashboard',
-  live: 'Análise ao Vivo',
+  live: 'AnÃ¡lise ao Vivo',
   market: 'Mercado',
   trade: 'Trade',
-  portfolio: 'Portfólio',
-  risk: 'Gestão de Risco',
-  history: 'Histórico',
-  settings: 'Configurações',
+  portfolio: 'PortfÃ³lio',
+  risk: 'GestÃ£o de Risco',
+  history: 'HistÃ³rico',
+  settings: 'ConfiguraÃ§Ãµes',
 };
 
 function navigate(page) {
@@ -49,10 +49,10 @@ function navigate(page) {
   const activeItem = document.querySelector(`[data-page="${page}"]`);
   if (activeItem) activeItem.classList.add('active');
 
-  // Esconde todas as páginas
+  // Esconde todas as pÃ¡ginas
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
 
-  // Mostra a página selecionada
+  // Mostra a pÃ¡gina selecionada
   const pageEl = document.getElementById(`page-${page}`);
   if (pageEl) pageEl.classList.add('active');
 
@@ -108,7 +108,7 @@ async function api(path, options = {}, timeoutMs = 12000) {
     if (!res.ok) throw new Error(`API ${path} retornou ${res.status}`);
     return res.json();
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Timeout na requisição ${path} (${timeoutMs/1000}s)`);
+    if (e.name === 'AbortError') throw new Error(`Timeout na requisiÃ§Ã£o ${path} (${timeoutMs/1000}s)`);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -167,10 +167,10 @@ function setLastUpdate() {
 
 function toast(message, type = 'info') {
   const container = document.getElementById('toast-container');
-  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  const icons = { success: 'âœ…', error: 'âŒ', info: 'â„¹ï¸', warning: 'âš ï¸' };
   const div = document.createElement('div');
   div.className = `toast ${type}`;
-  div.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
+  div.innerHTML = `<span>${icons[type] || 'â„¹ï¸'}</span><span>${message}</span>`;
   container.appendChild(div);
   setTimeout(() => div.remove(), 3500);
 }
@@ -216,7 +216,7 @@ function irqBadgeClass(level) {
     'NORMAL':      'badge-green',
     'ALTO':        'badge-yellow',
     'MUITO_ALTO':  'badge-orange',
-    'CRÍTICO':     'badge-red',
+    'CRÃTICO':     'badge-red',
     'CRITICO':     'badge-red',
   };
   return map[level] || 'badge-gray';
@@ -314,7 +314,7 @@ function renderDashboardKPIs(data, riskStatus) {
 
   // Bot status
   const canTrade = riskStatus?.data?.is_locked === false;
-  document.getElementById('kpi-bot-status').textContent = canTrade ? '✅ Operacional' : '🔒 Bloqueado';
+  document.getElementById('kpi-bot-status').textContent = canTrade ? 'âœ… Operacional' : 'ðŸ”’ Bloqueado';
   document.getElementById('kpi-trade-ok').textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
   document.getElementById('kpi-trade-ok').className = `kpi-change ${canTrade ? 'up' : 'down'}`;
 }
@@ -329,7 +329,7 @@ async function loadMarketPrices() {
 
     const prices = data.data;
     const keys = Object.keys(prices).slice(0, 8);
-    let html = '<table><thead><tr><th>Ativo</th><th>Preço</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Ativo</th><th>PreÃ§o</th></tr></thead><tbody>';
     for (const asset of keys) {
       html += `<tr>
         <td><strong>${asset}</strong></td>
@@ -339,7 +339,7 @@ async function loadMarketPrices() {
     html += '</tbody></table>';
     el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><p>Binance offline ou sem conexão</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">ðŸ“¡</div><p>Binance offline ou sem conexÃ£o</p></div>`;
   }
 }
 
@@ -404,7 +404,7 @@ function renderRiskRadar(data) {
     S5: risk.s5_losing_streak || 0,
   };
 
-  const labels = ['S1 Tendência', 'S2 Pressão', 'S3 Volatilidade', 'S4 RSI', 'S5 Perdas'];
+  const labels = ['S1 TendÃªncia', 'S2 PressÃ£o', 'S3 Volatilidade', 'S4 RSI', 'S5 Perdas'];
   const vals = [signals.S1, signals.S2, signals.S3, signals.S4, signals.S5];
 
   charts['risk-radar'] = new Chart(ctx, {
@@ -441,7 +441,7 @@ function renderDashboardAllocation(data) {
   const el = document.getElementById('dash-allocation');
   const allocs = data.allocations;
   if (!allocs) {
-    el.innerHTML = '<div class="empty-state"><p>Sem dados de alocação</p></div>';
+    el.innerHTML = '<div class="empty-state"><p>Sem dados de alocaÃ§Ã£o</p></div>';
     return;
   }
 
@@ -465,7 +465,7 @@ function renderDashboardAllocation(data) {
       </div>`;
   }
 
-  if (!html) html = '<div class="empty-state"><p>Sem alocações recomendadas no momento</p></div>';
+  if (!html) html = '<div class="empty-state"><p>Sem alocaÃ§Ãµes recomendadas no momento</p></div>';
   el.innerHTML = html;
 
   const totalEl = document.getElementById('allocation-total');
@@ -473,7 +473,7 @@ function renderDashboardAllocation(data) {
 }
 
 // =============================================
-// PAGE: ANÁLISE AO VIVO
+// PAGE: ANÃLISE AO VIVO
 // =============================================
 
 async function loadLiveAnalysis() {
@@ -484,15 +484,15 @@ async function loadLiveAnalysis() {
   try {
     const data = await api('/market/analyze-live', { method: 'POST' });
     if (data.success) {
-      renderAnalysisResult(el, data.data, '⚡ Binance Live');
+      renderAnalysisResult(el, data.data, 'âš¡ Binance Live');
       timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
-      toast('Análise ao vivo concluída', 'success');
+      toast('AnÃ¡lise ao vivo concluÃ­da', 'success');
     } else {
-      el.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>${data.detail || 'Erro na análise'}</p></div>`;
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">âŒ</div><p>${data.detail || 'Erro na anÃ¡lise'}</p></div>`;
     }
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><p>Binance offline — tente a análise com dados de teste</p></div>`;
-    toast('Binance indisponível', 'warning');
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">ðŸ“¡</div><p>Binance offline â€” tente a anÃ¡lise com dados de teste</p></div>`;
+    toast('Binance indisponÃ­vel', 'warning');
   }
 }
 
@@ -504,11 +504,11 @@ async function loadFullAnalysis() {
   try {
     const data = await api('/analyze/full', { method: 'POST' });
     if (data.success) {
-      renderAnalysisResult(el, data.data, '🧪 Dados de Teste');
+      renderAnalysisResult(el, data.data, 'ðŸ§ª Dados de Teste');
       timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
     }
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Erro na API</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">âŒ</div><p>Erro na API</p></div>`;
   }
 }
 
@@ -535,7 +535,7 @@ function renderAnalysisResult(el, data, source) {
           <div><span class="text-muted">Score:</span> <strong style="color:${scoreColor(score)}">${score.toFixed(4)}</strong></div>
           <div><span class="text-muted">Retorno:</span> <strong class="${m.return_pct >= 0 ? 'text-green' : 'text-red'}">${(m.return_pct * 100).toFixed(2)}%</strong></div>
           <div><span class="text-muted">Trend:</span> ${m.trend_status}</div>
-          <div><span class="text-muted">Alocação:</span> <strong>${alloc ? fmtMoney(alloc.recommended_amount) : '--'}</strong></div>
+          <div><span class="text-muted">AlocaÃ§Ã£o:</span> <strong>${alloc ? fmtMoney(alloc.recommended_amount) : '--'}</strong></div>
         </div>
       </div>`;
   }
@@ -547,11 +547,11 @@ function renderAnalysisResult(el, data, source) {
     </div>
 
     <div class="card mb-16" style="padding:16px">
-      <div class="card-title mb-12">🛡️ IRQ — Índice de Risco de Queda</div>
+      <div class="card-title mb-12">ðŸ›¡ï¸ IRQ â€” Ãndice de Risco de Queda</div>
       <div style="display:flex;align-items:center;gap:24px">
         <div>
           <div style="font-size:48px;font-weight:800;color:var(--${irqColor})">${irqPct}%</div>
-          <div class="text-muted" style="font-size:12px">Nível de Risco: <strong class="text-${irqColor}">${risk.level || risk.protection_level}</strong></div>
+          <div class="text-muted" style="font-size:12px">NÃ­vel de Risco: <strong class="text-${irqColor}">${risk.level || risk.protection_level}</strong></div>
         </div>
         <div style="flex:1">
           ${renderSignalsInline(risk)}
@@ -559,14 +559,14 @@ function renderAnalysisResult(el, data, source) {
         <div style="text-align:right">
           <div style="font-size:12px;color:var(--text-muted)">RSI</div>
           <div style="font-size:22px;font-weight:700">${risk.rsi ? risk.rsi.toFixed(1) : '--'}</div>
-          <div style="font-size:12px;color:var(--text-muted)">Redução Capital</div>
+          <div style="font-size:12px;color:var(--text-muted)">ReduÃ§Ã£o Capital</div>
           <div style="font-size:18px;font-weight:700;color:var(--red)">${risk.reduction_percentage != null ? (risk.reduction_percentage * 100).toFixed(0) + '%' : '0%'}</div>
         </div>
       </div>
     </div>
 
     <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">
-      Análise por Ativo (${Object.keys(mom).length})
+      AnÃ¡lise por Ativo (${Object.keys(mom).length})
     </div>
     <div class="assets-grid">
       ${assetsHtml}
@@ -581,7 +581,7 @@ function renderSignalsInline(risk) {
     S4: risk.s4_rsi_divergence || 0,
     S5: risk.s5_losing_streak || 0,
   };
-  const labels = { S1: 'Tendência', S2: 'Pressão Vend.', S3: 'Volatilidade', S4: 'RSI Div.', S5: 'Seq. Perdas' };
+  const labels = { S1: 'TendÃªncia', S2: 'PressÃ£o Vend.', S3: 'Volatilidade', S4: 'RSI Div.', S5: 'Seq. Perdas' };
   let html = '';
   for (const [k, v] of Object.entries(signals)) {
     const pct = Math.min((v || 0) * 100, 100);
@@ -603,29 +603,42 @@ function renderSignalsInline(risk) {
 // =============================================
 
 async function loadMarketPage() {
-  const grid = document.getElementById('market-assets-grid');
-  const tbody = document.getElementById('market-table-body');
-  const timeEl = document.getElementById('market-update-time');
+  const grid      = document.getElementById('market-assets-grid');
+  const tbody     = document.getElementById('market-table-body');
+  const ptbody    = document.getElementById('market-predict-tbody');
+  const scoreCard = document.getElementById('market-score-cards');
+  const scoreTb   = document.getElementById('market-score-tbody');
+  const timeEl    = document.getElementById('market-update-time');
 
-  grid.innerHTML = '<div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div> Carregando...</div>';
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando...</td></tr>';
+  grid.innerHTML      = '<div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div> Carregando...</div>';
+  tbody.innerHTML     = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando...</td></tr>';
+  ptbody.innerHTML    = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Calculando projecoes...</td></tr>';
+  if (scoreCard) scoreCard.innerHTML = '<div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div> Calculando scores...</div>';
 
   try {
-    const [pricesRes, analysisRes] = await Promise.all([
+    const [pricesRes, analysisRes, predictRes, scoreRes] = await Promise.all([
       api('/market/prices').catch(() => null),
       api('/analyze/full', { method: 'POST' }).catch(() => null),
+      api('/market/predict').catch(() => null),
+      api('/market/score').catch(() => null),
     ]);
 
-    const prices = pricesRes?.data || {};
-    const mom = analysisRes?.data?.momentum_analysis || {};
+    const prices    = pricesRes?.data   || {};
+    const mom       = analysisRes?.data?.momentum_analysis || {};
+    const preds     = predictRes?.data  || {};
+    const scoreData = scoreRes?.data    || {};
+    const top3      = scoreRes?.top3    || [];
 
-    // Asset cards
+    // Cards de ativos (agora com mini-projecao de 1h)
     let cardsHtml = '';
     for (const [asset, price] of Object.entries(prices)) {
-      const m = mom[asset];
+      const m     = mom[asset];
+      const p     = preds[asset];
       const score = m?.momentum_score;
-      const cls = m?.classification || 'LATERAL';
-      const up = score != null && score >= 0;
+      const cls   = m?.classification || 'LATERAL';
+      const up    = score != null && score >= 0;
+      const c1h   = p?.change_1h_pct;
+      const col1h = c1h != null ? (c1h >= 0 ? 'var(--green)' : 'var(--red)') : '';
       cardsHtml += `
         <div class="asset-card">
           <div class="asset-header">
@@ -633,12 +646,13 @@ async function loadMarketPage() {
             ${classifBadge(cls)}
           </div>
           <div class="asset-price">${fmtPrice(price)}</div>
-          ${score != null ? `<div class="asset-change ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} Score: ${score.toFixed(4)}</div>` : ''}
+          ${score != null ? `<div class="asset-change ${up ? 'up' : 'down'}">${up ? '&#9650;' : '&#9660;'} Score: ${score.toFixed(4)}</div>` : ''}
+          ${c1h != null ? `<div style="font-size:11px;color:${col1h};margin-top:4px">${c1h >= 0 ? '&#9650;' : '&#9660;'} 1h: ${fmtPrice(p.pred_1h)} (${c1h > 0 ? '+' : ''}${c1h}%)</div>` : ''}
         </div>`;
     }
     grid.innerHTML = cardsHtml || '<div class="empty-state" style="grid-column:1/-1"><p>Sem dados</p></div>';
 
-    // Table
+    // Tabela de precos
     let rows = '';
     const assets = Object.keys(prices).length ? Object.keys(prices) : Object.keys(mom);
     for (const asset of assets) {
@@ -654,16 +668,99 @@ async function loadMarketPage() {
       </tr>`;
     }
     tbody.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Sem dados</td></tr>';
+
+    // Tabela de projecoes matematicas
+    const confColor = c => c === 'Alta' ? 'var(--green)' : c === 'Media' ? 'var(--yellow)' : 'var(--red)';
+    const sign      = v => v > 0 ? '+' : '';
+    let prows = '';
+    const predEntries = Object.entries(preds)
+      .sort((a, b) => Math.abs(b[1].change_1h_pct) - Math.abs(a[1].change_1h_pct));
+    for (const [asset, p] of predEntries) {
+      const c1h = p.change_1h_pct;
+      const c1d = p.change_1d_pct;
+      prows += `<tr>
+        <td><strong>${asset}</strong></td>
+        <td>${fmtPrice(p.current)}</td>
+        <td style="font-weight:700;color:${c1h >= 0 ? 'var(--green)' : 'var(--red)'}">
+          ${fmtPrice(p.pred_1h)}
+          <div style="font-size:10px;color:var(--text-muted)">banda: ${fmtPrice(p.conf_low_1h)} &ndash; ${fmtPrice(p.conf_high_1h)}</div>
+        </td>
+        <td class="${c1h >= 0 ? 'text-green' : 'text-red'}" style="font-weight:700">${sign(c1h)}${c1h}%</td>
+        <td style="font-weight:700;color:${c1d >= 0 ? 'var(--green)' : 'var(--red)'}">
+          ${p.pred_1d ? fmtPrice(p.pred_1d) : '--'}
+          ${p.pred_1d ? `<div style="font-size:10px;color:var(--text-muted)">banda: ${fmtPrice(p.conf_low_1d)} &ndash; ${fmtPrice(p.conf_high_1d)}</div>` : ''}
+        </td>
+        <td class="${c1d >= 0 ? 'text-green' : 'text-red'}" style="font-weight:700">${p.pred_1d ? sign(c1d) + c1d + '%' : '--'}</td>
+        <td><span style="font-size:12px;font-weight:600;color:${confColor(p.confidence)}">${p.confidence}</span></td>
+      </tr>`;
+    }
+    ptbody.innerHTML = prows || '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Sem dados de projecao</td></tr>';
+
+    // ── Score de Oportunidade ──────────────────────────────────────────────
+    const scoreCol  = s => s >= 70 ? 'var(--green)' : s >= 45 ? 'var(--yellow)' : 'var(--red)';
+    const emaLabel  = sig => ({ 'ALTA_FORTE': '&#8679; Alta Forte', 'ALTA': '&#8679; Alta',
+                                 'NEUTRO': '&#8594; Neutro', 'BAIXA': '&#8681; Baixa',
+                                 'SEM_DADOS': '--' })[sig] || sig;
+    const newsLbl   = n => n > 0.2 ? '&#128240;+' : n < -0.2 ? '&#128240;&#8722;' : '&#128240;~';
+
+    if (scoreCard) {
+      const medals = ['&#129351;','&#129352;','&#129353;'];
+      const top3Html = top3.slice(0,3).map((asset, idx) => {
+        const s = scoreData[asset]; if (!s) return '';
+        const c1h = s.change_1h_pct, c1d = s.change_1d_pct;
+        return `<div class="asset-card" style="border:2px solid ${scoreCol(s.score)};position:relative">
+          <div style="position:absolute;top:8px;right:8px;font-size:18px">${medals[idx]}</div>
+          <div class="asset-header">
+            <span class="asset-symbol">${asset}</span>
+            <span style="font-size:22px;font-weight:800;color:${scoreCol(s.score)}">${s.score}</span>
+          </div>
+          <div class="asset-price">${fmtPrice(s.current)}</div>
+          <div style="font-size:11px;margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:3px">
+            <span>RSI: <b>${s.rsi}</b></span>
+            <span>Vol: <b>${s.vol_ratio}&#215;</b></span>
+            <span style="color:${c1h>=0?'var(--green)':'var(--red)'}">1h: ${c1h>0?'+':''}${c1h}%</span>
+            <span style="color:${c1d>=0?'var(--green)':'var(--red)'}">1d: ${c1d>0?'+':''}${c1d}%</span>
+          </div>
+          <div style="font-size:10px;margin-top:5px;color:var(--text-muted)">${emaLabel(s.ema_signal)} &nbsp; ${newsLbl(s.news)}</div>
+        </div>`;
+      }).join('');
+      scoreCard.innerHTML = top3Html || '<div class="empty-state" style="grid-column:1/-1"><p>Sem dados de score</p></div>';
+    }
+
+    if (scoreTb) {
+      let srows = '', rank = 1;
+      for (const [asset, s] of Object.entries(scoreData)) {
+        const c1h = s.change_1h_pct, c1d = s.change_1d_pct;
+        const isTop = top3.includes(asset);
+        const medal = isTop ? ['&#129351;','&#129352;','&#129353;'][top3.indexOf(asset)] : rank;
+        srows += `<tr style="${isTop?'background:rgba(0,200,83,0.06)':''}">
+          <td>${medal}</td>
+          <td><strong>${asset}</strong></td>
+          <td>
+            <span style="font-weight:800;font-size:15px;color:${scoreCol(s.score)}">${s.score}</span>
+            <div style="font-size:9px;color:var(--text-muted)">RSI:${s.breakdown.rsi} EMA:${s.breakdown.ema} Vol:${s.breakdown.volume} Prev:${s.breakdown.prediction} News:${s.breakdown.news}</div>
+          </td>
+          <td style="color:${s.rsi<35?'var(--green)':s.rsi>70?'var(--red)':'var(--text)'}">${s.rsi}</td>
+          <td>${emaLabel(s.ema_signal)}</td>
+          <td>${s.vol_ratio}&#215;</td>
+          <td class="${c1h>=0?'text-green':'text-red'}">${c1h>0?'+':''}${c1h}%</td>
+          <td class="${c1d>=0?'text-green':'text-red'}">${c1d>0?'+':''}${c1d}%</td>
+          <td>${s.news_found ? newsLbl(s.news) : '<span style="color:var(--text-muted)">sem dados</span>'}</td>
+        </tr>`;
+        rank++;
+      }
+      scoreTb.innerHTML = srows || '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Sem dados de score</td></tr>';
+    }
+
     timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
 
   } catch (e) {
-    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📡</div><p>Erro ao carregar dados</p></div>';
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">&#128225;</div><p>Erro ao carregar dados</p></div>';
     toast('Erro ao carregar mercado', 'error');
   }
 }
-
 // =============================================
-// PAGE: PORTFÓLIO
+// PAGE: PORTFÃ“LIO
 // =============================================
 
 async function loadPortfolio() {
@@ -720,7 +817,7 @@ async function loadPortfolio() {
         }
       });
     } else if (pieCtx) {
-      pieCtx.parentElement.innerHTML = '<div class="empty-state"><div class="empty-icon">💼</div><p>Sem alocações positivas no momento</p></div>';
+      pieCtx.parentElement.innerHTML = '<div class="empty-state"><div class="empty-icon">ðŸ’¼</div><p>Sem alocaÃ§Ãµes positivas no momento</p></div>';
     }
 
     // Summary
@@ -754,8 +851,8 @@ async function loadPortfolio() {
     timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
 
   } catch (e) {
-    summaryEl.innerHTML = '<div class="empty-state"><p>Erro ao carregar portfólio</p></div>';
-    toast('Erro ao carregar portfólio', 'error');
+    summaryEl.innerHTML = '<div class="empty-state"><p>Erro ao carregar portfÃ³lio</p></div>';
+    toast('Erro ao carregar portfÃ³lio', 'error');
   }
 }
 
@@ -780,7 +877,7 @@ async function loadRiskPage() {
     // KPIs
     const canTrade = ct.allowed;
     const kpiCanEl = document.getElementById('risk-can-trade');
-    kpiCanEl.textContent = canTrade ? '✅ SIM' : '🔒 NÃO';
+    kpiCanEl.textContent = canTrade ? 'âœ… SIM' : 'ðŸ”’ NÃƒO';
     kpiCanEl.style.fontSize = '20px';
     document.getElementById('risk-can-trade-reason').textContent = ct.reason || '--';
 
@@ -788,7 +885,7 @@ async function loadRiskPage() {
     const pnlEl = document.getElementById('risk-daily-pnl');
     pnlEl.textContent = fmtMoney(pnl);
     pnlEl.className = `kpi-value ${pnl >= 0 ? 'text-green' : 'text-red'}`;
-    document.getElementById('risk-daily-pnl-label').textContent = `Perda máx: ${fmtMoney(rs.daily_loss_limit?.max_loss)}`;
+    document.getElementById('risk-daily-pnl-label').textContent = `Perda mÃ¡x: ${fmtMoney(rs.daily_loss_limit?.max_loss)}`;
 
     document.getElementById('risk-trades-hour').textContent =
       `${rs.trade_limits?.trades_last_hour || 0} / ${ct.trade_limits?.remaining_hour != null ? (ct.trade_limits.remaining_hour + (rs.trade_limits?.trades_last_hour||0)) : 20}`;
@@ -800,15 +897,15 @@ async function loadRiskPage() {
     configEl.innerHTML = `
       <div class="config-item"><span class="config-key">Stop Loss</span><span class="config-value text-red">${rs.stop_loss_pct || 5}%</span></div>
       <div class="config-item"><span class="config-key">Take Profit</span><span class="config-value text-green">${rs.take_profit_pct || 10}%</span></div>
-      <div class="config-item"><span class="config-key">Limite Diário de Perda</span><span class="config-value">${fmtMoney(rs.daily_loss_limit?.max_loss)}</span></div>
-      <div class="config-item"><span class="config-key">Trades Últimas 1h</span><span class="config-value">${rs.trade_limits?.trades_last_hour || 0}</span></div>
+      <div class="config-item"><span class="config-key">Limite DiÃ¡rio de Perda</span><span class="config-value">${fmtMoney(rs.daily_loss_limit?.max_loss)}</span></div>
+      <div class="config-item"><span class="config-key">Trades Ãšltimas 1h</span><span class="config-value">${rs.trade_limits?.trades_last_hour || 0}</span></div>
       <div class="config-item"><span class="config-key">Trades Hoje</span><span class="config-value">${rs.trade_limits?.trades_today || 0}</span></div>
-      <div class="config-item"><span class="config-key">Posições Abertas</span><span class="config-value">${rs.open_positions || 0}</span></div>
+      <div class="config-item"><span class="config-key">PosiÃ§Ãµes Abertas</span><span class="config-value">${rs.open_positions || 0}</span></div>
     `;
 
     // IRQ Signals
     const lockBadge = document.getElementById('risk-lock-badge');
-    lockBadge.textContent = rs.is_locked ? '🔒 BLOQUEADO' : '🟢 OK';
+    lockBadge.textContent = rs.is_locked ? 'ðŸ”’ BLOQUEADO' : 'ðŸŸ¢ OK';
     lockBadge.className = `badge ${rs.is_locked ? 'badge-red' : 'badge-green'}`;
 
     const irqBadgeEl = document.getElementById('risk-irq-badge-page');
@@ -818,7 +915,7 @@ async function loadRiskPage() {
       irqBadgeEl.className = `badge ${irqBadgeClass(level)}`;
       document.getElementById('risk-signals-list').innerHTML = renderSignalsInline(irq);
     } else {
-      document.getElementById('risk-signals-list').innerHTML = '<div class="loading-overlay">Análise não disponível</div>';
+      document.getElementById('risk-signals-list').innerHTML = '<div class="loading-overlay">AnÃ¡lise nÃ£o disponÃ­vel</div>';
     }
 
     // Limits progress
@@ -831,7 +928,7 @@ async function loadRiskPage() {
     document.getElementById('risk-limits-section').innerHTML = `
       <div style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
-          <span class="text-muted">Perda Diária Usada</span>
+          <span class="text-muted">Perda DiÃ¡ria Usada</span>
           <span>${fmtMoney(pnl)} / ${fmtMoney(limits?.max_loss)}</span>
         </div>
         <div class="progress-bar" style="height:10px">
@@ -840,7 +937,7 @@ async function loadRiskPage() {
       </div>
       <div style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
-          <span class="text-muted">Trades Últimas 1h</span>
+          <span class="text-muted">Trades Ãšltimas 1h</span>
           <span>${trades?.trades_last_hour || 0} / 20</span>
         </div>
         <div class="progress-bar" style="height:10px">
@@ -866,7 +963,7 @@ async function loadRiskPage() {
 }
 
 // =============================================
-// PAGE: HISTÓRICO
+// PAGE: HISTÃ“RICO
 // =============================================
 
 async function loadHistoryPage() {
@@ -881,10 +978,10 @@ async function loadHistoryAnalysis() {
     const data = await api('/db/analysis-history');
     const items = data.data || [];
     if (!items.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>Nenhuma análise registrada ainda.<br>Execute uma análise para começar o histórico.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">ðŸ“Š</div><p>Nenhuma anÃ¡lise registrada ainda.<br>Execute uma anÃ¡lise para comeÃ§ar o histÃ³rico.</p></div>';
       return;
     }
-    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>IRQ</th><th>Nível</th><th>Melhor Ativo</th><th>Score</th></tr></thead><tbody>';
+    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>IRQ</th><th>NÃ­vel</th><th>Melhor Ativo</th><th>Score</th></tr></thead><tbody>';
     for (const row of items) {
       html += `<tr>
         <td>${row.timestamp ? new Date(row.timestamp).toLocaleString('pt-BR') : '--'}</td>
@@ -897,7 +994,7 @@ async function loadHistoryAnalysis() {
     html += '</tbody></table></div>';
     el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = '<div class="empty-state"><p>Erro ao carregar histórico</p></div>';
+    el.innerHTML = '<div class="empty-state"><p>Erro ao carregar histÃ³rico</p></div>';
   }
 }
 
@@ -908,10 +1005,10 @@ async function loadHistoryTrades() {
     const data = await api('/db/trades');
     const items = data.data || [];
     if (!items.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📚</div><p>Nenhum trade registrado ainda.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">ðŸ“š</div><p>Nenhum trade registrado ainda.</p></div>';
       return;
     }
-    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>Ativo</th><th>Tipo</th><th>Quantidade</th><th>Preço</th><th>P&L</th></tr></thead><tbody>';
+    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>Ativo</th><th>Tipo</th><th>Quantidade</th><th>PreÃ§o</th><th>P&L</th></tr></thead><tbody>';
     for (const row of items) {
       html += `<tr>
         <td>${row.timestamp ? new Date(row.timestamp).toLocaleString('pt-BR') : '--'}</td>
@@ -934,14 +1031,14 @@ async function loadDbStats() {
   try {
     const data = await api('/db/stats');
     const stats = data.data || {};
-    const icons = { portfolios: '💼', positions: '📊', trades: '🔄', analysis_history: '📈', market_snapshots: '📸' };
-    const labels = { portfolios: 'Portfólios', positions: 'Posições', trades: 'Trades', analysis_history: 'Análises', market_snapshots: 'Snapshots' };
+    const icons = { portfolios: 'ðŸ’¼', positions: 'ðŸ“Š', trades: 'ðŸ”„', analysis_history: 'ðŸ“ˆ', market_snapshots: 'ðŸ“¸' };
+    const labels = { portfolios: 'PortfÃ³lios', positions: 'PosiÃ§Ãµes', trades: 'Trades', analysis_history: 'AnÃ¡lises', market_snapshots: 'Snapshots' };
     let html = '';
     for (const [key, val] of Object.entries(stats)) {
       html += `<div class="card">
         <div class="card-header">
           <span class="card-title">${labels[key] || key}</span>
-          <div class="card-icon blue">${icons[key] || '📊'}</div>
+          <div class="card-icon blue">${icons[key] || 'ðŸ“Š'}</div>
         </div>
         <div class="kpi-value">${val}</div>
         <div class="kpi-label">registros</div>
@@ -949,7 +1046,7 @@ async function loadDbStats() {
     }
     el.innerHTML = html || '<div class="empty-state" style="grid-column:1/-1"><p>Sem dados</p></div>';
   } catch (e) {
-    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Erro ao carregar estatísticas</p></div>';
+    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Erro ao carregar estatÃ­sticas</p></div>';
   }
 }
 
@@ -961,20 +1058,47 @@ let _tradeLogCache = [];  // full log for client-side filtering
 
 async function loadTradePage() {
   try {
-    const res = await api('/trade/status');
+    const [res, perfRes] = await Promise.all([
+      api('/trade/status'),
+      api('/performance')
+    ]);
     if (!res.success) return;
     const d = res.data;
+
+    // Valor Total card
+    const perf = perfRes?.data || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const todayCycles = (perf.recent_cycles || []).filter(c => (c.timestamp || '').startsWith(today));
+    const todayPnl = todayCycles.reduce((s, c) => s + (c.pnl || 0), 0);
+    const totalPnl = perf.total_pnl || d.total_pnl || 0;
+    const totalCycles = perf.total_cycles || 0;
+
+    const gainTodayEl = document.getElementById('trade-gain-today');
+    if (gainTodayEl) {
+      gainTodayEl.textContent = fmtMoney(todayPnl);
+      gainTodayEl.style.color = todayPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    const gainTodayCyclesEl = document.getElementById('trade-gain-today-cycles');
+    if (gainTodayCyclesEl) gainTodayCyclesEl.textContent = `${todayCycles.length} ciclo${todayCycles.length !== 1 ? 's' : ''} hoje`;
+
+    const gainTotalEl = document.getElementById('trade-gain-total');
+    if (gainTotalEl) {
+      gainTotalEl.textContent = fmtMoney(totalPnl);
+      gainTotalEl.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    const gainTotalCyclesEl = document.getElementById('trade-gain-total-cycles');
+    if (gainTotalCyclesEl) gainTotalCyclesEl.textContent = `${totalCycles} ciclo${totalCycles !== 1 ? 's' : ''} no total`;
 
     // Status bar
     const isActive = d.auto_trading;
     const badge = document.getElementById('trade-bot-badge');
     if (badge) {
-      badge.textContent = isActive ? '🟢 ATIVO' : '⏸ PARADO';
+      badge.textContent = isActive ? 'ðŸŸ¢ ATIVO' : 'â¸ PARADO';
       badge.className = `badge ${isActive ? 'badge-green' : 'badge-gray'}`;
     }
     const toggleBtn = document.getElementById('trade-toggle-btn');
     if (toggleBtn) {
-      toggleBtn.textContent = isActive ? '⏸ Pausar Bot' : '▶ Iniciar Bot';
+      toggleBtn.textContent = isActive ? 'â¸ Pausar Bot' : 'â–¶ Iniciar Bot';
       toggleBtn.className = `btn ${isActive ? 'btn-secondary' : 'btn-primary'}`;
     }
     const capitalBadge = document.getElementById('trade-capital-badge');
@@ -984,7 +1108,7 @@ async function loadTradePage() {
     if (lastCycle) {
       lastCycle.textContent = d.last_cycle
         ? new Date(d.last_cycle).toLocaleString('pt-BR')
-        : '—';
+        : 'â€”';
     }
 
     // Capital card
@@ -1011,7 +1135,7 @@ async function loadTradePage() {
     const miniEl = document.getElementById('trade-positions-mini');
     if (miniEl) {
       if (!posEntries.length) {
-        miniEl.innerHTML = '<div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posições</p></div>';
+        miniEl.innerHTML = '<div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posiÃ§Ãµes</p></div>';
       } else {
         miniEl.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
@@ -1029,7 +1153,7 @@ async function loadTradePage() {
     const tbody = document.getElementById('trade-positions-tbody');
     if (tbody) {
       if (!posEntries.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Execute um ciclo para ver as posições</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Execute um ciclo para ver as posiÃ§Ãµes</td></tr>';
       } else {
         tbody.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
@@ -1045,7 +1169,7 @@ async function loadTradePage() {
                 <span style="font-size:12px;color:var(--text-muted)">${p.pct}%</span>
               </div>
             </td>
-            <td class="${(p.change_pct || 0) >= 0 ? 'text-green' : 'text-red'}">${p.change_pct != null ? (p.change_pct >= 0 ? '+' : '') + p.change_pct.toFixed(1) + '%' : '—'}</td>
+            <td class="${(p.change_pct || 0) >= 0 ? 'text-green' : 'text-red'}">${p.change_pct != null ? (p.change_pct >= 0 ? '+' : '') + p.change_pct.toFixed(1) + '%' : 'â€”'}</td>
             <td>${actionBadge(p.action)}</td>
           </tr>`).join('');
       }
@@ -1100,26 +1224,26 @@ function renderTradeLog(entries) {
   }
 
   const typeStyles = {
-    'COMPRA':    { cls: 'badge-green',  icon: '📈' },
-    'VENDA':     { cls: 'badge-red',    icon: '📉' },
-    'HOLD':      { cls: 'badge-gray',   icon: '⏸' },
-    'DEPÓSITO':  { cls: 'badge-blue',   icon: '💰' },
-    'RETIRADA':  { cls: 'badge-yellow', icon: '💸' },
-    'CICLO':     { cls: 'badge-blue',   icon: '🔄' },
-    'SISTEMA':   { cls: 'badge-gray',   icon: '⚙️' },
-    'ERRO':      { cls: 'badge-red',    icon: '❌' },
+    'COMPRA':    { cls: 'badge-green',  icon: 'ðŸ“ˆ' },
+    'VENDA':     { cls: 'badge-red',    icon: 'ðŸ“‰' },
+    'HOLD':      { cls: 'badge-gray',   icon: 'â¸' },
+    'DEPÃ“SITO':  { cls: 'badge-blue',   icon: 'ðŸ’°' },
+    'RETIRADA':  { cls: 'badge-yellow', icon: 'ðŸ’¸' },
+    'CICLO':     { cls: 'badge-blue',   icon: 'ðŸ”„' },
+    'SISTEMA':   { cls: 'badge-gray',   icon: 'âš™ï¸' },
+    'ERRO':      { cls: 'badge-red',    icon: 'âŒ' },
   };
 
   tbody.innerHTML = entries.map(ev => {
-    const style = typeStyles[ev.type] || { cls: 'badge-gray', icon: '•' };
-    const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleString('pt-BR') : '—';
-    const amtHtml = ev.amount > 0 ? `<span style="font-weight:700">${fmtMoney(ev.amount)}</span>` : '<span style="color:var(--text-muted)">—</span>';
+    const style = typeStyles[ev.type] || { cls: 'badge-gray', icon: 'â€¢' };
+    const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleString('pt-BR') : 'â€”';
+    const amtHtml = ev.amount > 0 ? `<span style="font-weight:700">${fmtMoney(ev.amount)}</span>` : '<span style="color:var(--text-muted)">â€”</span>';
     return `<tr>
       <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${ts}</td>
       <td><span class="badge ${style.cls}">${style.icon} ${ev.type}</span></td>
-      <td><strong>${ev.asset || '—'}</strong></td>
+      <td><strong>${ev.asset || 'â€”'}</strong></td>
       <td>${amtHtml}</td>
-      <td style="font-size:12px;color:var(--text-muted)">${ev.note || '—'}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${ev.note || 'â€”'}</td>
     </tr>`;
   }).join('');
 }
@@ -1135,14 +1259,14 @@ function filterTradeLog() {
 async function depositCapital() {
   const inp = document.getElementById('trade-capital-input');
   const val = parseFloat(inp?.value);
-  if (!val || val <= 0) { toast('Digite um valor válido', 'warning'); return; }
+  if (!val || val <= 0) { toast('Digite um valor vÃ¡lido', 'warning'); return; }
   try {
     const res = await api('/trade/capital', {
       method: 'POST',
       body: JSON.stringify({ amount: val }),
     });
     if (res.success) {
-      toast(`💰 Capital atualizado para ${fmtMoney(res.capital)}`, 'success');
+      toast(`ðŸ’° Capital atualizado para ${fmtMoney(res.capital)}`, 'success');
       if (inp) inp.value = '';
       await loadTradePage();
     }
@@ -1158,7 +1282,7 @@ async function toggleTrading() {
     const endpoint = isActive ? '/trade/stop' : '/trade/start';
     const res = await api(endpoint, { method: 'POST' });
     if (res.success) {
-      toast(res.auto_trading ? '✅ Bot iniciado' : '⏸ Bot pausado', 'success');
+      toast(res.auto_trading ? 'âœ… Bot iniciado' : 'â¸ Bot pausado', 'success');
       await loadTradePage();
     }
   } catch (e) {
@@ -1168,11 +1292,11 @@ async function toggleTrading() {
 
 async function runTradeCycle() {
   const btn = document.querySelector('[onclick="runTradeCycle()"]');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Processando...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'â³ Processando...'; }
   try {
     const res = await api('/trade/cycle', { method: 'POST' });
     if (res.success) {
-      toast(`🔄 Ciclo executado — ${res.data?.assets_analyzed || 0} ativos analisados`, 'success');
+      toast(`ðŸ”„ Ciclo executado â€” ${res.data?.assets_analyzed || 0} ativos analisados`, 'success');
       await loadTradePage();
     } else {
       toast('Sem dados de mercado para ciclo', 'warning');
@@ -1180,22 +1304,22 @@ async function runTradeCycle() {
   } catch (e) {
     toast('Erro ao executar ciclo', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔄 Executar Ciclo'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'ðŸ”„ Executar Ciclo'; }
   }
 }
 
 async function clearTradeLog() {
-  if (!confirm('Limpar todo o histórico de atividade?')) return;
+  if (!confirm('Limpar todo o histÃ³rico de atividade?')) return;
   try {
     // Clear via local state (server keeps its own)
     _tradeLogCache = [];
     renderTradeLog([]);
-    toast('Histórico limpo', 'info');
+    toast('HistÃ³rico limpo', 'info');
   } catch (e) { /* silent */ }
 }
 
 // =============================================
-// PAGE: CONFIGURAÇÕES
+// PAGE: CONFIGURAÃ‡Ã•ES
 // =============================================
 
 async function loadSettings() {
@@ -1213,7 +1337,7 @@ async function loadSettings() {
       const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       html += `<div class="config-item">
         <span class="config-key">${label}</span>
-        <span class="badge ${val ? 'badge-green' : 'badge-red'}">${val ? '✅ Online' : '❌ Offline'}</span>
+        <span class="badge ${val ? 'badge-green' : 'badge-red'}">${val ? 'âœ… Online' : 'âŒ Offline'}</span>
       </div>`;
     }
     enginesEl.innerHTML = html;
@@ -1224,9 +1348,9 @@ async function loadSettings() {
       initial_capital: 'Capital Inicial',
       stop_loss: 'Stop Loss',
       take_profit: 'Take Profit',
-      max_daily_loss: 'Perda Máx. Diária',
-      max_trades_hour: 'Trades/Hora (máx)',
-      max_trades_day: 'Trades/Dia (máx)',
+      max_daily_loss: 'Perda MÃ¡x. DiÃ¡ria',
+      max_trades_hour: 'Trades/Hora (mÃ¡x)',
+      max_trades_day: 'Trades/Dia (mÃ¡x)',
     };
     for (const [k, v] of Object.entries(cfg)) {
       if (k === 'allowed_assets') continue;
@@ -1244,7 +1368,7 @@ async function loadSettings() {
     configEl.innerHTML = cfgHtml;
 
   } catch (e) {
-    toast('Erro ao carregar configurações', 'error');
+    toast('Erro ao carregar configuraÃ§Ãµes', 'error');
   }
 }
 

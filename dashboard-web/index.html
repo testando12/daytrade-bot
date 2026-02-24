@@ -253,14 +253,14 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">Tabela de Preços</span>
-              <span class="badge badge-blue">USDT</span>
+              <span class="badge badge-blue">B3 / Crypto</span>
             </div>
             <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Ativo</th>
-                    <th>Preço (USD)</th>
+                    <th>Preço</th>
                     <th>Momentum Score</th>
                     <th>Classificação</th>
                     <th>Retorno %</th>
@@ -269,6 +269,70 @@
                 </thead>
                 <tbody id="market-table-body">
                   <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Oportunidades -->
+        <div class="mt-20">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🏆 Top Oportunidades</span>
+              <span class="badge badge-green">RSI + EMA + Volume + Notícias</span>
+            </div>
+            <div style="padding:6px 0 12px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);margin-bottom:16px">
+              Score 0–100 combinando RSI, cruzamento EMA9/EMA21, volume relativo, projeção matemática e sentimento de notícias RSS gratuito.
+              <strong style="color:var(--yellow)">⚠ Não é recomendação financeira.</strong>
+            </div>
+            <div id="market-score-cards" class="assets-grid" style="margin-bottom:16px">
+              <div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div> Calculando scores...</div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th><th>Ativo</th><th>Score</th><th>RSI</th>
+                    <th>EMA Signal</th><th>Vol. Ratio</th>
+                    <th>Var. 1h</th><th>Var. 1 Dia</th><th>Notícias</th>
+                  </tr>
+                </thead>
+                <tbody id="market-score-tbody">
+                  <tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Calculando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Projeções Matemáticas -->
+        <div class="mt-20">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">🔮 Projeções Matemáticas de Preço</span>
+              <span class="badge badge-blue">Regressão Linear + EMA</span>
+            </div>
+            <div style="padding:8px 0 12px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);margin-bottom:12px">
+              Estimativas baseadas em regressão linear (mínimos quadrados) + extrapolação EMA.
+              Maior confiança = menor variabilidade histórica dos resíduos.
+              <strong style="color:var(--yellow)">⚠ Não é recomendação financeira.</strong>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Ativo</th>
+                    <th>Preço Atual</th>
+                    <th>Projeção 1h</th>
+                    <th>Var. 1h</th>
+                    <th>Projeção 1 Dia</th>
+                    <th>Var. 1 Dia</th>
+                    <th>Confiança</th>
+                  </tr>
+                </thead>
+                <tbody id="market-predict-tbody">
+                  <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando projeções...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -535,6 +599,27 @@
             </div>
           </div>
 
+        </div>
+
+        <!-- Row 1.5: Valor Total -->
+        <div class="card mb-16">
+          <div class="card-header">
+            <span class="card-title">💰 Valor Total</span>
+            <span class="badge badge-blue">Desempenho</span>
+          </div>
+          <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:space-around;padding:8px 0">
+            <div style="text-align:center;min-width:140px">
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ganho Hoje</div>
+              <div id="trade-gain-today" style="font-size:26px;font-weight:800;color:var(--text-primary)">R$ --</div>
+              <div id="trade-gain-today-cycles" style="font-size:11px;color:var(--text-muted);margin-top:4px">— ciclos hoje</div>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="text-align:center;min-width:140px">
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ganho Total</div>
+              <div id="trade-gain-total" style="font-size:26px;font-weight:800;color:var(--text-primary)">R$ --</div>
+              <div id="trade-gain-total-cycles" style="font-size:11px;color:var(--text-muted);margin-top:4px">— ciclos totais</div>
+            </div>
+          </div>
         </div>
 
         <!-- Row 2: Positions table -->

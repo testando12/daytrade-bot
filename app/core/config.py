@@ -40,6 +40,12 @@ class Settings:
     BINANCE_API_SECRET: str = os.getenv("BINANCE_API_SECRET", "")
     BINANCE_BASE_URL: str = "https://api.binance.com"
 
+    # BRAPI — API B3 brasileira (brapi.dev)
+    # Sem token: funciona para PETR4, MGLU3, VALE3, ITUB4 (plano gratuito)
+    # Com token: todos os ativos, atualização a cada 5-30min conforme plano
+    # Obtenha grátis em: https://brapi.dev/dashboard
+    BRAPI_TOKEN: str = os.getenv("BRAPI_TOKEN", "")
+
     # Alertas
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
@@ -59,13 +65,32 @@ class Settings:
 
     # Ativos permitidos — ações da B3 (Bovespa)
     ALLOWED_ASSETS: List[str] = [
-        "PETR4", "VALE3", "ITUB4", "BBDC4", "ABEV3",
-        "WEGE3", "MGLU3", "BBAS3", "ITSA4", "RENT3",
+        # Petróleo & Energia
+        "PETR4", "PRIO3", "CSAN3", "EGIE3",
+        # Mineração & Siderurgia
+        "VALE3", "GGBR4",
+        # Bancos & Finanças
+        "ITUB4", "BBDC4", "BBAS3", "ITSA4",
+        # Consumo & Varejo
+        "ABEV3", "MGLU3", "LREN3",
+        # Indústria & Tecnologia
+        "WEGE3", "EMBR3",
+        # Logística & Locação
+        "RENT3",
+        # Alimentos
+        "JBSS3",
+        # Papel & Celulose
+        "SUZB3",
+        # Telecom
+        "VIVT3",
+        # Saúde
+        "RDOR3",
     ]
 
     # Criptomoedas (Yahoo Finance: BTC-USD, ETH-USD, ...)
     CRYPTO_ASSETS: List[str] = [
         "BTC", "ETH", "BNB", "SOL", "ADA",
+        "XRP", "DOGE", "AVAX", "DOT", "LINK",
     ]
 
     # Todos os ativos (B3 + Crypto)

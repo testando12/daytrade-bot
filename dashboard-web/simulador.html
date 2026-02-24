@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulador — Day Trade Bot</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #1c2128;
+      --bg4: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --dimmed: #6e7681;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --blue: #388bfd;
+      --orange: #db6d28;
+      --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-logo { font-size: 20px; }
+    .header-title { font-size: 16px; font-weight: 600; color: var(--text); }
+    .header-subtitle { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .api-status {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted);
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--dimmed);
+    }
+    .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.offline { background: var(--red); }
+    .back-link {
+      color: var(--blue); font-size: 12px; text-decoration: none;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .back-link:hover { text-decoration: underline; }
+
+    /* ── LAYOUT ── */
+    .main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .grid-1 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (max-width: 1100px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 720px)  { .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+    .mb { margin-bottom: 16px; }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+    }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .card-body { padding: 16px; }
+
+    /* ── CONTROLS ── */
+    .field { margin-bottom: 12px; }
+    .field label {
+      display: block; font-size: 11px; font-weight: 500;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 5px;
+    }
+    .field input, .field select {
+      width: 100%;
+      background: var(--bg4);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .field input:focus, .field select:focus { border-color: var(--blue); }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 6px; padding: 8px 14px; border-radius: 6px;
+      font-size: 13px; font-weight: 500;
+      border: none; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: #1f6feb; color: #fff; }
+    .btn-danger  { background: var(--red); color: #fff; }
+    .btn-ghost {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+    .btn-test {
+      width: 100%; text-align: left; justify-content: flex-start;
+      background: var(--bg4); color: var(--text);
+      border: 1px solid var(--border); margin-bottom: 6px;
+    }
+    .btn-test:hover { border-color: var(--blue); color: var(--blue); }
+    .btn-run {
+      width: 100%; background: #1f6feb; color: #fff;
+      font-size: 14px; padding: 10px 16px; margin-top: 4px;
+    }
+
+    /* ── METRICS GRID ── */
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metric {
+      background: var(--bg4);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .metric-label {
+      font-size: 10px; font-weight: 600; color: var(--dimmed);
+      text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px;
+    }
+    .metric-value { font-size: 17px; font-weight: 700; color: var(--text); }
+
+    /* ── BADGE ── */
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 12px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-green  { background: rgba(63,185,80,.15);  color: var(--green); }
+    .badge-red    { background: rgba(248,81,73,.15);  color: var(--red); }
+    .badge-yellow { background: rgba(210,153,34,.15); color: var(--yellow); }
+    .badge-blue   { background: rgba(56,139,253,.15); color: var(--blue); }
+    .badge-muted  { background: var(--bg4); color: var(--muted); }
+
+    /* ── LOG ── */
+    .log {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.75;
+      max-height: 450px;
+      overflow-y: auto;
+    }
+    .log::-webkit-scrollbar { width: 5px; }
+    .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .log-line { display: block; }
+
+    /* ── TABLE ── */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase;
+         letter-spacing: 0.4px; padding: 6px 10px; text-align: left;
+         border-bottom: 1px solid var(--border); }
+    td { padding: 8px 10px; border-bottom: 1px solid var(--bg4); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg4); }
+
+    /* ── PLACEHOLDER ── */
+    .placeholder { text-align: center; padding: 40px 0; color: var(--dimmed); font-size: 13px; }
+
+    /* ── ASSET CHIPS ── */
+    .asset-monitor {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+    }
+    .asset-chip {
+      background: var(--bg4);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      cursor: default;
+      transition: border-color .15s;
+    }
+    .asset-chip:hover { border-color: var(--blue); }
+    .chip-top { display:flex; justify-content:space-between; align-items:center; }
+    .chip-sym { font-size:12px; font-weight:700; }
+    .chip-score { font-size:11px; font-weight:600; }
+    .chip-price { font-size:12px; color:var(--muted); margin-top:3px; }
+    .chip-sector { font-size:10px; color:var(--dimmed); margin-top:1px; }
+
+    /* ── SPINNER ── */
+    .spin {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.2);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin .7s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── TOPBAR API ── */
+    #api-url-bar {
+      font-size: 12px; background: var(--bg4); border: 1px solid var(--border);
+      color: var(--text); padding: 4px 10px; border-radius: 6px; width: 240px; outline: none;
+    }
+    #api-url-bar:focus { border-color: var(--blue); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header class="header">
+  <div class="header-left">
+    <span class="header-logo">🧪</span>
+    <div>
+      <div class="header-title">Simulador</div>
+      <div class="header-subtitle">Day Trade Bot — Testes &amp; Simulações</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="api-status">
+      <div class="dot" id="api-dot"></div>
+      <span id="api-label">Conectando...</span>
+    </div>
+    <input id="api-url-bar" type="text" value="http://localhost:8001" placeholder="URL da API" />
+    <button class="btn btn-ghost" onclick="connectApi()">Conectar</button>
+    <a class="back-link" href="/dashboard">← Dashboard</a>
+  </div>
+</header>
+
+<!-- ═══════════════════ MAIN ═══════════════════ -->
+<main class="main">
+
+  <!-- ROW 0: Monitor de Ativos -->
+  <div class="card mb">
+    <div class="card-header">
+      <span class="card-title">🌐 Ativos Monitorados — <span id="asset-count" style="color:var(--blue)">carregando...</span></span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;color:var(--muted)">Score = oportunidade 0-100 &nbsp;|&nbsp; 🏦 B3 &nbsp;·&nbsp; ₿ Crypto</span>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="loadAssetMonitor()">↻ Atualizar</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="asset-monitor" id="asset-monitor">
+        <div class="placeholder">Carregando ativos...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROW 1: Parâmetros | Resultado | Testes -->
+  <div class="grid-3 mb">
+
+    <!-- Card: Parâmetros -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">⚙️ Parâmetros da Simulação</span>
+      </div>
+      <div class="card-body">
+        <div class="field">
+          <label>Capital Inicial (R$)</label>
+          <input type="number" id="sim-capital" value="150" min="10" step="10" />
+        </div>
+        <div class="field">
+          <label>Número de Ciclos</label>
+          <input type="number" id="sim-cycles" value="10" min="1" max="100" />
+        </div>
+        <div class="field">
+          <label>Intervalo dos Candles</label>
+          <select id="sim-interval">
+            <option value="5m" selected>5 minutos</option>
+            <option value="15m">15 minutos</option>
+            <option value="1h">1 hora</option>
+            <option value="1d">1 dia</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Candles Históricos</label>
+          <input type="number" id="sim-limit" value="100" min="30" max="200" />
+        </div>
+        <button class="btn btn-run" id="btn-run" onclick="runSimulation()">
+          ▶ Iniciar Simulação
+        </button>
+      </div>
+    </div>
+
+    <!-- Card: Resultado -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📊 Resultado</span>
+        <span class="badge badge-muted" id="sim-badge">Aguardando</span>
+      </div>
+      <div class="card-body" id="sim-result">
+        <div class="placeholder">Configure os parâmetros e<br/>clique em "Iniciar Simulação"</div>
+      </div>
+    </div>
+
+    <!-- Card: Testes Individuais -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">✅ Testes Individuais</span>
+      </div>
+      <div class="card-body">
+        <button class="btn btn-test" onclick="runTestMomentum()">🎯 Acerto de Direção (Momentum)</button>
+        <button class="btn btn-test" onclick="runTestAllocation()">💰 Alocação de Capital</button>
+        <button class="btn btn-test" onclick="runTestCycle()">🔄 Ciclo ao Vivo</button>
+        <button class="btn btn-test" onclick="runTestBacktest()">📈 Backtest Histórico</button>
+        <button class="btn btn-run" onclick="runAllTests()">🚀 Executar Todos os Testes</button>
+        <div style="margin-top:10px;text-align:right">
+          <button class="btn btn-ghost" style="font-size:11px" onclick="clearLog()">Limpar Log</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ROW 2: Equity Chart | Detalhamento por Ativo -->
+  <div class="grid-2 mb">
+
+    <!-- Equity Chart -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📈 Curva de Capital</span>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="clearChart()">Limpar</button>
+      </div>
+      <div class="card-body" style="height:300px;position:relative">
+        <canvas id="equity-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Detalhamento por Ativo -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📋 Ativos Selecionados pela Simulação</span>
+        <span id="diversif-badge" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div class="card-body tbl-wrap" id="assets-table">
+        <div class="placeholder">Nenhuma simulação executada</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ROW 3: Log  -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">📝 Log de Execução</span>
+      <span id="log-count" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+    <div class="card-body">
+      <div class="log" id="log">
+        <span class="log-line" style="color:var(--dimmed)">Aguardando testes...</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+'use strict';
+
+// ── CONFIG ──────────────────────────────────────
+let API = (localStorage.getItem('sim_api') || 'http://localhost:8001').replace(/\/$/, '');
+document.getElementById('api-url-bar').value = API;
+
+let equityChart = null;
+let logCount = 0;
+
+// ── SETOR MAP ────────────────────────────────────
+const SECTORS = {
+  PETR4:'Petróleo', PRIO3:'Petróleo', CSAN3:'Energia', EGIE3:'Energia',
+  VALE3:'Mineração', GGBR4:'Siderurgia',
+  ITUB4:'Banco', BBDC4:'Banco', BBAS3:'Banco', ITSA4:'Banco',
+  ABEV3:'Consumo', MGLU3:'Varejo', LREN3:'Moda',
+  WEGE3:'Indústria', EMBR3:'Aeronáutica',
+  RENT3:'Locação', JBSS3:'Alimentos', SUZB3:'Celulose',
+  VIVT3:'Telecom', RDOR3:'Saúde',
+  BTC:'Crypto', ETH:'Crypto', BNB:'Crypto', SOL:'Crypto', ADA:'Crypto',
+  XRP:'Crypto', DOGE:'Crypto', AVAX:'Crypto', DOT:'Crypto', LINK:'Crypto',
+};
+const IS_CRYPTO = new Set(['BTC','ETH','BNB','SOL','ADA','XRP','DOGE','AVAX','DOT','LINK']);
+
+// ── INIT ────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initChart();
+  checkApi();
+  loadAssetMonitor();
+});
+
+// ── ASSET MONITOR ────────────────────────────────
+async function loadAssetMonitor() {
+  const el     = document.getElementById('asset-monitor');
+  const countEl = document.getElementById('asset-count');
+  el.innerHTML = '<div class="placeholder">Carregando...</div>';
+  try {
+    const [pricesR, scoreR] = await Promise.all([
+      fetch(`${API}/market/prices`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/market/score`).then(r => r.json()).catch(() => null),
+    ]);
+    const prices    = pricesR?.data  || {};
+    const scoreData = scoreR?.data   || {};
+    const top3      = scoreR?.top3   || [];
+    const assets    = Object.keys(prices);
+    countEl.textContent = `${assets.length} ativos`;
+
+    const scoreCol = s => s >= 70 ? '#3fb950' : s >= 45 ? '#d29922' : '#8b949e';
+    const fmtP = v => {
+      if (v == null) return '--';
+      if (v >= 1000) return 'R$' + v.toLocaleString('pt-BR', {maximumFractionDigits:0});
+      if (v < 10)    return 'R$' + v.toFixed(4);
+      return 'R$' + v.toFixed(2);
+    };
+
+    // Sort: top3 first, then by score desc
+    const sorted = [...assets].sort((a, b) => {
+      const ti = top3.indexOf(a), tj = top3.indexOf(b);
+      if (ti !== -1 && tj === -1) return -1;
+      if (tj !== -1 && ti === -1) return 1;
+      return (scoreData[b]?.score || 0) - (scoreData[a]?.score || 0);
+    });
+
+    el.innerHTML = sorted.map(asset => {
+      const sc      = scoreData[asset]?.score;
+      const isCrypto = IS_CRYPTO.has(asset);
+      const sector  = SECTORS[asset] || (isCrypto ? 'Crypto' : 'B3');
+      const icon    = isCrypto ? '₿' : '🏦';
+      const isTop   = top3.includes(asset);
+      const border  = isTop ? `border-color:${scoreCol(sc || 0)}` : '';
+      return `<div class="asset-chip" style="${border}">
+        <div class="chip-top">
+          <span class="chip-sym">${icon} ${asset}</span>
+          ${sc != null ? `<span class="chip-score" style="color:${scoreCol(sc)}">${sc}</span>` : ''}
+        </div>
+        <div class="chip-price">${fmtP(prices[asset])}</div>
+        <div class="chip-sector">${sector}${isTop ? ' ⭐' : ''}</div>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    el.innerHTML = `<div class="placeholder">Erro: ${err.message}</div>`;
+  }
+}
+
+function connectApi() {
+  API = document.getElementById('api-url-bar').value.replace(/\/$/, '');
+  localStorage.setItem('sim_api', API);
+  checkApi();
+}
+
+async function checkApi() {
+  const dot   = document.getElementById('api-dot');
+  const label = document.getElementById('api-label');
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      dot.className = 'dot online';
+      label.textContent = 'Conectado';
+    } else throw new Error();
+  } catch {
+    dot.className = 'dot offline';
+    label.textContent = 'Offline';
+  }
+}
+
+// ── CHART ───────────────────────────────────────
+function initChart() {
+  const ctx = document.getElementById('equity-chart').getContext('2d');
+  equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Capital (R$)',
+        data: [],
+        borderColor: '#3fb950',
+        backgroundColor: 'rgba(63,185,80,0.08)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: {
+          label: ctx => `Capital: R$ ${ctx.parsed.y.toFixed(4)}`
+        }
+      }},
+      scales: {
+        x: { ticks: { color: '#8b949e', maxTicksLimit: 14 }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e', callback: v => 'R$' + v.toFixed(2) }, grid: { color: '#21262d' } },
+      }
+    }
+  });
+}
+
+function clearChart() {
+  equityChart.data.labels = [];
+  equityChart.data.datasets[0].data = [];
+  equityChart.update();
+}
+
+// ── LOG ─────────────────────────────────────────
+const COLORS = {
+  info:    '#8b949e',
+  success: '#3fb950',
+  error:   '#f85149',
+  warn:    '#d29922',
+  header:  '#388bfd',
+};
+
+function log(msg, type = 'info') {
+  const el = document.getElementById('log');
+  // Remove placeholder on first real entry
+  if (el.children.length === 1 && el.children[0].style.color === 'var(--dimmed)') {
+    el.innerHTML = '';
+  }
+  const time = new Date().toLocaleTimeString('pt-BR');
+  const line = document.createElement('span');
+  line.className = 'log-line';
+  line.style.color = COLORS[type] || COLORS.info;
+  line.innerHTML = `<span style="color:var(--dimmed)">[${time}]</span>  ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  logCount++;
+  document.getElementById('log-count').textContent = `${logCount} linhas`;
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML =
+    '<span class="log-line" style="color:var(--dimmed)">Log limpo.</span>';
+  logCount = 0;
+  document.getElementById('log-count').textContent = '';
+}
+
+// ── SIMULATION ──────────────────────────────────
+let running = false;
+
+async function runSimulation() {
+  if (running) return;
+  running = true;
+
+  const capital  = parseFloat(document.getElementById('sim-capital').value) || 150;
+  const cycles   = Math.min(parseInt(document.getElementById('sim-cycles').value) || 10, 100);
+  const interval = document.getElementById('sim-interval').value;
+  const limit    = Math.min(parseInt(document.getElementById('sim-limit').value) || 100, 200);
+
+  const btn   = document.getElementById('btn-run');
+  const badge = document.getElementById('sim-badge');
+
+  btn.innerHTML = '<span class="spin"></span> Executando...';
+  btn.disabled = true;
+  badge.textContent = 'Executando...';
+  badge.className = 'badge badge-yellow';
+
+  log('══════════════════════════════════════════', 'header');
+  log(`SIMULAÇÃO — R$ ${capital.toFixed(2)} | ${cycles} ciclos | ${interval}`, 'header');
+  log('══════════════════════════════════════════', 'header');
+
+  try {
+    const res = await fetch(`${API}/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ capital, cycles, interval, limit }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} — ${await res.text()}`);
+    const { data: d } = await res.json();
+
+    const profit = d.total_pnl >= 0;
+    const sign   = d.total_pnl >= 0 ? '+' : '';
+    const pnlCol = profit ? 'var(--green)' : 'var(--red)';
+
+    badge.textContent = profit ? 'Lucrativo ✅' : 'Prejuízo ❌';
+    badge.className = `badge ${profit ? 'badge-green' : 'badge-red'}`;
+
+    // Result card
+    document.getElementById('sim-result').innerHTML = `
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Capital Final</div>
+          <div class="metric-value" style="color:${pnlCol}">R$ ${d.final_capital.toFixed(4)}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">P&L Total</div>
+          <div class="metric-value" style="color:${pnlCol}">${sign}R$ ${d.total_pnl.toFixed(4)}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Win Rate</div>
+          <div class="metric-value">${d.win_rate_pct.toFixed(1)}%</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Ciclos</div>
+          <div class="metric-value">${d.total_cycles}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">P&L/ciclo</div>
+          <div class="metric-value">${sign}R$ ${d.avg_pnl_per_cycle.toFixed(4)}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Projeção/dia (~14 ciclos)</div>
+          <div class="metric-value">${sign}R$ ${(d.avg_pnl_per_cycle * 14).toFixed(4)}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Ativos usados</div>
+          <div class="metric-value">${Object.values(d.asset_summary||{}).filter(v=>v.total_allocated>0).length} / 30</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Diversif. B3/Crypto</div>
+          <div class="metric-value" style="font-size:13px" id="sim-diversif-metric">--</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Melhor Ciclo</div>
+          <div class="metric-value" style="color:var(--green)">R$ ${d.best_cycle.toFixed(4)}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Pior Ciclo</div>
+          <div class="metric-value" style="color:var(--red)">R$ ${d.worst_cycle.toFixed(4)}</div>
+        </div>
+      </div>
+    `;
+
+    // Equity chart
+    equityChart.data.labels = d.equity_curve.map((_, i) => `C${i}`);
+    equityChart.data.datasets[0].data = d.equity_curve;
+    equityChart.data.datasets[0].borderColor = profit ? '#3fb950' : '#f85149';
+    equityChart.data.datasets[0].backgroundColor = profit ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.07)';
+    equityChart.update();
+
+    // Diversification split
+    const summary = d.asset_summary || {};
+    const b3Total  = Object.entries(summary).filter(([a]) => !IS_CRYPTO.has(a)).reduce((s,[,v]) => s + v.total_allocated, 0);
+    const cryTotal = Object.entries(summary).filter(([a]) =>  IS_CRYPTO.has(a)).reduce((s,[,v]) => s + v.total_allocated, 0);
+    const allTotal = b3Total + cryTotal;
+    const b3pct    = allTotal > 0 ? (b3Total / allTotal * 100).toFixed(0) : 0;
+    const crPct    = allTotal > 0 ? (cryTotal / allTotal * 100).toFixed(0) : 0;
+    document.getElementById('diversif-badge').innerHTML =
+      `🏦 B3: <b style="color:var(--blue)">${b3pct}%</b> &nbsp;·&nbsp; ₿ Crypto: <b style="color:var(--yellow)">${crPct}%</b>`;
+
+    // Update metric inside result card too
+    const dm = document.getElementById('sim-diversif-metric');
+    if (dm) dm.innerHTML = `<span style="color:var(--blue)">${b3pct}%</span> B3 &nbsp;/ <span style="color:var(--yellow)">${crPct}%</span> Crypto`;
+
+    // Assets table
+    const assetRows = Object.entries(summary)
+      .filter(([, v]) => v.total_allocated > 0)
+      .sort((a, b) => b[1].total_allocated - a[1].total_allocated);
+
+    if (assetRows.length) {
+      const rows = assetRows.map(([asset, v]) => {
+        const sc     = v.avg_score;
+        const col    = sc >= 0 ? 'var(--green)' : 'var(--red)';
+        const sector = SECTORS[asset] || '--';
+        const icon   = IS_CRYPTO.has(asset) ? '₿' : '🏦';
+        return `<tr>
+          <td><strong>${icon} ${asset}</strong><div style="font-size:10px;color:var(--dimmed)">${sector}</div></td>
+          <td style="color:${col}">${sc >= 0 ? '+' : ''}${sc.toFixed(4)}</td>
+          <td>R$ ${v.total_allocated.toFixed(2)}</td>
+          <td>${v.times_selected}×</td>
+          <td style="color:var(--muted);font-size:12px">${v.classification}</td>
+        </tr>`;
+      }).join('');
+      document.getElementById('assets-table').innerHTML = `
+        <table><thead><tr>
+          <th>Ativo</th><th>Score Médio</th><th>Total Alocado</th><th>Seleções</th><th>Classe</th>
+        </tr></thead><tbody>${rows}</tbody></table>`;
+    } else {
+      document.getElementById('assets-table').innerHTML =
+        '<div class="placeholder">Nenhum ativo alocado</div>';
+    }
+
+    // Log events
+    for (const ev of (d.events || []).slice(-30)) {
+      const t = ev.type === 'BUY' ? 'success' : ev.type === 'SELL' ? 'warn' : 'info';
+      log(`Ciclo ${ev.cycle} │ ${ev.type} ${ev.asset} — R$ ${ev.amount.toFixed(2)} (${ev.classification})`, t);
+    }
+
+    log('══════════════════════════════════════════', 'header');
+    log(`RESULTADO: ${sign}R$ ${d.total_pnl.toFixed(4)} | Win Rate: ${d.win_rate_pct.toFixed(1)}%`, profit ? 'success' : 'error');
+
+  } catch (err) {
+    badge.textContent = 'Erro ❌';
+    badge.className = 'badge badge-red';
+    log(`Erro na simulação: ${err.message}`, 'error');
+    log('Verifique se o servidor está online e tente conectar novamente.', 'warn');
+  } finally {
+    btn.innerHTML = '▶ Iniciar Simulação';
+    btn.disabled = false;
+    running = false;
+  }
+}
+
+// ── TESTES INDIVIDUAIS ──────────────────────────
+async function runTestMomentum() {
+  log('── TESTE: Acerto de Direção ──', 'header');
+  try {
+    const res = await fetch(`${API}/simulate/test-momentum`, { method: 'POST' });
+    const { data: d } = await res.json();
+    log(`Ativos testados: ${d.total_assets}`, 'info');
+    for (const a of d.assets) {
+      const ok = a.correct;
+      log(`  ${a.asset}: score ${a.score>=0?'+':''}${a.score.toFixed(4)} → previu ${a.predicted} | real ${a.actual} (var: ${a.change_pct.toFixed(3)}%) ${ok?'✅':'❌'}`, ok ? 'success' : 'error');
+    }
+    const pass = d.accuracy_pct >= 70;
+    log(`Acerto: ${d.correct}/${d.total} = ${d.accuracy_pct.toFixed(1)}% — ${pass ? '✅ PASSA' : '❌ ABAIXO DE 70%'}`, pass ? 'success' : 'warn');
+  } catch (err) {
+    log(`Erro: ${err.message}`, 'error');
+  }
+}
+
+async function runTestAllocation() {
+  log('── TESTE: Alocação de Capital ──', 'header');
+  const capital = parseFloat(document.getElementById('sim-capital').value) || 150;
+  try {
+    const res = await fetch(`${API}/simulate/test-allocation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ capital }),
+    });
+    const { data: d } = await res.json();
+    log(`Capital: R$ ${capital.toFixed(2)} | IRQ: ${d.irq.toFixed(4)}`, 'info');
+    log(`Total alocado: R$ ${d.total_allocated.toFixed(2)} (${d.allocation_pct.toFixed(1)}%)`, d.total_allocated > 0 ? 'success' : 'warn');
+    const sorted = Object.entries(d.allocations).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+    for (const [asset, amt] of sorted) {
+      log(`  ${asset}: R$ ${amt.toFixed(2)} (${(amt/capital*100).toFixed(1)}%)`, 'success');
+    }
+    if (sorted.length === 0) log('  Nenhum ativo alocado!', 'error');
+  } catch (err) {
+    log(`Erro: ${err.message}`, 'error');
+  }
+}
+
+async function runTestCycle() {
+  log('── TESTE: Ciclo ao Vivo ──', 'header');
+  try {
+    const res = await fetch(`${API}/trade/cycle`, { method: 'POST' });
+    const { data: d } = await res.json();
+    log(`Fonte: ${d.data_source} | Ativos: ${d.assets_analyzed} | IRQ: ${d.irq.toFixed(4)} (${d.irq_level})`, 'info');
+    const positions = Object.entries(d.positions).filter(([, p]) => p.amount > 0);
+    for (const [asset, pos] of positions) {
+      const icon = pos.action === 'BUY' ? '🟢' : pos.action === 'SELL' ? '🔴' : '🔵';
+      const t = pos.action === 'BUY' ? 'success' : pos.action === 'SELL' ? 'error' : 'info';
+      log(`  ${icon} ${asset}: ${pos.action} R$ ${pos.amount.toFixed(2)} — ${pos.classification}`, t);
+    }
+    const ok = d.cycle_pnl >= 0;
+    log(`P&L ciclo: ${ok?'+':''}R$ ${d.cycle_pnl.toFixed(4)}`, ok ? 'success' : 'error');
+  } catch (err) {
+    log(`Erro: ${err.message}`, 'error');
+  }
+}
+
+async function runTestBacktest() {
+  log('── TESTE: Backtest Histórico ──', 'header');
+  const capital  = parseFloat(document.getElementById('sim-capital').value) || 150;
+  const interval = document.getElementById('sim-interval').value;
+  log('Buscando dados históricos... (pode demorar 10–30s)', 'info');
+  try {
+    const res = await fetch(`${API}/backtest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interval, limit: 120, capital }),
+    });
+    const { data: d } = await res.json();
+    const retOk = d.total_return_pct >= 0;
+    log(`Períodos: ${d.total_periods} | Retorno: ${retOk?'+':''}${d.total_return_pct.toFixed(2)}%`, retOk ? 'success' : 'error');
+    log(`Win Rate: ${d.win_rate_pct.toFixed(1)}% | Sharpe: ${d.sharpe_ratio.toFixed(2)} | Max DD: ${d.max_drawdown_pct.toFixed(2)}%`, 'info');
+    log(`P&L médio/período: R$ ${d.avg_daily_pnl.toFixed(4)} | Fonte: ${d.data_source || 'yahoo.finance'}`, 'info');
+  } catch (err) {
+    log(`Erro: ${err.message}`, 'error');
+  }
+}
+
+async function runAllTests() {
+  log('', 'info');
+  log('══════════════════════════════════════════', 'header');
+  log('EXECUTANDO TODOS OS TESTES', 'header');
+  log('══════════════════════════════════════════', 'header');
+  await runTestMomentum();
+  await runTestAllocation();
+  await runTestCycle();
+  await runTestBacktest();
+  log('══════════════════════════════════════════', 'header');
+  log('TODOS OS TESTES CONCLUÍDOS', 'header');
+  log('══════════════════════════════════════════', 'header');
+}
+</script>
+</body>
+</html>

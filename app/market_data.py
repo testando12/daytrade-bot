@@ -1,9 +1,15 @@
 ﻿"""
-Servico de dados de mercado - Yahoo Finance (B3 / Bovespa)
-Fornece precos em tempo real e historico de acoes brasileiras.
+Servico de dados de mercado — BRAPI (primário) + Yahoo Finance (fallback)
 
-Usa a API publica do Yahoo Finance (v8/finance/chart)  gratuita, sem token.
-Acoes B3 usam o sufixo .SA (ex.: PETR4.SA, VALE3.SA).
+Fontes de dados:
+  1. BRAPI (brapi.dev) — API nativa para B3, sem sufixo .SA
+     - Sem token: PETR4, MGLU3, VALE3, ITUB4 (gratuito, delay ~30min)
+     - Com token: todos os ativos (obtenha grátis em brapi.dev/dashboard)
+  2. Yahoo Finance — fallback automático se BRAPI falhar
+     - Gratuito, delay ~15min, usa sufixo .SA
+
+Configure o token via variável de ambiente:
+  set BRAPI_TOKEN=seu_token_aqui
 """
 
 import asyncio
@@ -19,6 +25,22 @@ except ImportError:
 from app.core.config import settings
 
 
+# ── BRAPI ────────────────────────────────────────────────────────────────────
+_BRAPI_BASE    = "https://brapi.dev/api"
+_BRAPI_HEADERS = {"Accept": "application/json"}
+
+# Ativos suportados gratuitamente sem token (plano free da BRAPI)
+_BRAPI_FREE_SYMBOLS = {"PETR4", "MGLU3", "VALE3", "ITUB4"}
+
+# BRAPI interval → range
+_BRAPI_RANGE = {
+    "1m":  "1d",  "2m":  "1d",  "5m":  "1d",
+    "15m": "5d",  "30m": "1mo", "60m": "1mo",
+    "1h":  "1mo", "1d":  "6mo",
+}
+
+# ── Yahoo Finance (fallback) ──────────────────────────────────────────────────
+_YF_BASE    = "https://query1.finance.yahoo.com/v8/finance/chart"
 _YF_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -27,99 +49,277 @@ _YF_HEADERS = {
     ),
     "Accept": "application/json",
 }
-
-# Yahoo Finance interval -> range mapping
 _YF_RANGE = {
     "1m": "1d", "2m": "5d", "5m": "5d",
     "15m": "5d", "30m": "1mo", "60m": "1mo",
     "1h": "1mo", "1d": "6mo",
 }
 
+_CRYPTO_SYMBOLS = {
+    "BTC","ETH","BNB","SOL","ADA","XRP","DOGE",
+    "DOT","AVAX","MATIC","LINK","LTC","UNI","ATOM","TRX"
+}
+
 
 class BrapiMarketData:
     """
-    Cliente de dados de mercado da B3 via Yahoo Finance.
-    Compativel com a interface anterior (BrapiMarketData).
-    Suporta PETR4, VALE3, ITUB4, BBDC4, ABEV3, WEGE3, MGLU3, BBAS3, ITSA4, RENT3.
+    Cliente de dados da B3.
+    Usa BRAPI como fonte principal e Yahoo Finance como fallback automático.
     """
 
-    BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
     VALID_INTERVALS = ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "1d"]
 
     def __init__(self):
         if not HTTPX_AVAILABLE:
             raise ImportError("httpx nao instalado. Execute: pip install httpx")
         self.timeout = getattr(settings, "MARKET_API_TIMEOUT", 15)
+        self.token   = getattr(settings, "BRAPI_TOKEN", "").strip()
+        source = "BRAPI" + ("+token" if self.token else " free (PETR4/VALE3/MGLU3/ITUB4)") + " → fallback Yahoo"
+        print(f"[market] Fonte de dados: {source}", flush=True)
 
-    # Criptomoedas que usam sufixo -USD no Yahoo Finance
-    CRYPTO_SYMBOLS: set = {"BTC","ETH","BNB","SOL","ADA","XRP","DOGE","DOT","AVAX","MATIC","LINK","LTC","UNI","ATOM","TRX"}
+    # ── helpers de símbolo ────────────────────────────────────────────────────
+
+    def _is_crypto(self, asset: str) -> bool:
+        return asset.upper() in _CRYPTO_SYMBOLS
 
     def _yf_symbol(self, asset: str) -> str:
-        """
-        Converte símbolo para Yahoo Finance:
-          B3:    PETR4  -> PETR4.SA
-          Crypto: BTC   -> BTC-USD
-        """
         s = asset.upper()
         if s.endswith(".SA") or s.endswith("-USD"):
             return s
-        if s in self.CRYPTO_SYMBOLS:
-            return f"{s}-USD"
-        return f"{s}.SA"
+        return f"{s}-USD" if self._is_crypto(s) else f"{s}.SA"
 
-    async def _fetch_single_price(self, client, asset: str) -> tuple:
-        """Retorna (asset, price) ou (asset, None) em caso de falha."""
-        symbol = self._yf_symbol(asset)
+    def _brapi_supported(self, asset: str) -> bool:
+        """BRAPI suporta o ativo? (com token: todos; sem token: só free set)"""
+        if self._is_crypto(asset):
+            return False  # BRAPI foca em B3; criptos vão para Yahoo
+        return bool(self.token) or asset.upper() in _BRAPI_FREE_SYMBOLS
+
+    def _brapi_params(self, extra: dict = None) -> dict:
+        params = {}
+        if self.token:
+            params["token"] = self.token
+        if extra:
+            params.update(extra)
+        return params
+
+    # ── BRAPI: preço atual (batch) ────────────────────────────────────────────
+
+    async def _brapi_get_prices(self, client: httpx.AsyncClient, assets: List[str]) -> Dict[str, float]:
+        """Busca preços atuais de vários ativos via BRAPI em uma requisição."""
+        assets_upper = [a.upper() for a in assets]
+        symbols = ",".join(assets_upper)
         try:
             r = await client.get(
-                f"{self.BASE_URL}/{symbol}",
+                f"{_BRAPI_BASE}/quote/{symbols}",
+                params=self._brapi_params(),
+                headers=_BRAPI_HEADERS,
+            )
+            if r.status_code != 200:
+                return {}
+            results = r.json().get("results", [])
+            prices: Dict[str, float] = {}
+            # Map each result back to the requested symbol (by exact match first,
+            # then by position) so BRAPI symbol drift doesn't pollute our keys.
+            requested_set = set(assets_upper)
+            matched = set()
+            for item in results:
+                brapi_sym = item.get("symbol", "")
+                price     = item.get("regularMarketPrice")
+                if price is None:
+                    continue
+                if brapi_sym in requested_set:
+                    prices[brapi_sym] = float(price)
+                    matched.add(brapi_sym)
+            # For anything BRAPI returned with a drifted symbol, match by order
+            unmatched_req = [a for a in assets_upper if a not in matched]
+            extra_items   = [it for it in results if it.get("symbol", "") not in requested_set
+                             and it.get("regularMarketPrice") is not None]
+            for req, item in zip(unmatched_req, extra_items):
+                prices[req] = float(item["regularMarketPrice"])
+            return prices
+        except Exception as e:
+            print(f"[brapi] Erro ao buscar preços {symbols}: {e}", flush=True)
+            return {}
+
+    # ── BRAPI: klines (histórico) ─────────────────────────────────────────────
+
+    async def _brapi_get_klines(self, client: httpx.AsyncClient, asset: str, interval: str, limit: int) -> Optional[Dict]:
+        """Busca candles históricos de um ativo via BRAPI."""
+        ticker = asset.upper()
+        brapi_range = _BRAPI_RANGE.get(interval, "1d")
+        try:
+            r = await client.get(
+                f"{_BRAPI_BASE}/quote/{ticker}",
+                params=self._brapi_params({
+                    "range":                 brapi_range,
+                    "interval":              interval,
+                    "fundamental":           "false",
+                    "dividends":             "false",
+                }),
+                headers=_BRAPI_HEADERS,
+            )
+            if r.status_code != 200:
+                return None
+
+            results = r.json().get("results", [])
+            if not results:
+                return None
+
+            item   = results[0]
+            hist   = item.get("historicalDataPrice", [])
+            if not hist:
+                # sem histórico — pelo menos retorna preço atual como 1 ponto
+                price = item.get("regularMarketPrice")
+                if price:
+                    return {
+                        "asset": ticker, "symbol": ticker, "interval": interval,
+                        "prices": [float(price)], "volumes": [0.0],
+                        "highs":  [float(price)], "lows":    [float(price)],
+                        "timestamps": [0], "count": 1, "source": "brapi",
+                    }
+                return None
+
+            hist = hist[-limit:]
+            prices  = [float(h["close"])  for h in hist if h.get("close")  is not None]
+            volumes = [float(h.get("volume", 0) or 0) for h in hist]
+            highs   = [float(h.get("high",  prices[i]) or prices[i]) for i, h in enumerate(hist) if h.get("close") is not None]
+            lows    = [float(h.get("low",   prices[i]) or prices[i]) for i, h in enumerate(hist) if h.get("close") is not None]
+            ts      = [int(h.get("date", 0)) for h in hist if h.get("close") is not None]
+
+            if not prices:
+                return None
+
+            return {
+                "asset": ticker, "symbol": ticker, "interval": interval,
+                "prices": prices, "volumes": volumes,
+                "highs":  highs,  "lows":    lows,
+                "timestamps": ts, "count": len(prices), "source": "brapi",
+            }
+        except Exception as e:
+            print(f"[brapi] Erro ao buscar klines {ticker}: {e}", flush=True)
+            return None
+
+    # ── Yahoo Finance (fallback) ──────────────────────────────────────────────
+
+    async def _yf_get_price(self, client: httpx.AsyncClient, asset: str) -> Optional[float]:
+        try:
+            r = await client.get(
+                f"{_YF_BASE}/{self._yf_symbol(asset)}",
                 params={"interval": "1m", "range": "1d"},
                 headers=_YF_HEADERS,
             )
             if r.status_code == 200:
-                meta = r.json()["chart"]["result"][0]["meta"]
-                price = meta.get("regularMarketPrice")
-                if price is not None:
-                    return (asset.upper(), float(price))
+                price = r.json()["chart"]["result"][0]["meta"].get("regularMarketPrice")
+                return float(price) if price is not None else None
         except Exception as e:
-            print(f"[yahoo] Erro ao obter preco de {asset}: {e}", flush=True)
-        return (asset.upper(), None)
+            print(f"[yahoo] Erro preco {asset}: {e}", flush=True)
+        return None
+
+    async def _yf_get_klines(self, client: httpx.AsyncClient, asset: str, interval: str, limit: int) -> Optional[Dict]:
+        ticker   = asset.upper()
+        yf_range = _YF_RANGE.get(interval, "5d")
+        try:
+            r = await client.get(
+                f"{_YF_BASE}/{self._yf_symbol(ticker)}",
+                params={"interval": interval, "range": yf_range},
+                headers=_YF_HEADERS,
+            )
+            if r.status_code != 200:
+                return None
+            chart_result = r.json()["chart"]["result"]
+            if not chart_result:
+                return None
+            res    = chart_result[0]
+            ts_raw = res.get("timestamp", [])
+            q      = res.get("indicators", {}).get("quote", [{}])[0]
+            closes = q.get("close",  [])
+            vols   = q.get("volume", [])
+            highs  = q.get("high",   [])
+            lows   = q.get("low",    [])
+            valid  = [i for i in range(len(closes)) if closes[i] is not None][-limit:]
+            if not valid:
+                return None
+            return {
+                "asset": ticker, "symbol": ticker, "interval": interval,
+                "prices":  [float(closes[i]) for i in valid],
+                "volumes": [float(vols[i])   if vols  and vols[i]  is not None else 0.0 for i in valid],
+                "highs":   [float(highs[i])  if highs and highs[i] is not None else 0.0 for i in valid],
+                "lows":    [float(lows[i])   if lows  and lows[i]  is not None else 0.0 for i in valid],
+                "timestamps": [ts_raw[i] if i < len(ts_raw) else 0 for i in valid],
+                "count": len(valid), "source": "yahoo",
+            }
+        except Exception as e:
+            print(f"[yahoo] Erro klines {ticker}: {e}", flush=True)
+        return None
+
+    # ── Interface pública ─────────────────────────────────────────────────────
 
     async def get_current_price(self, asset: str) -> Optional[Dict]:
-        """Preco atual de um ativo da B3."""
+        """Preço atual de um ativo. Tenta BRAPI, fallback Yahoo."""
+        ticker = asset.upper()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            sym, price = await self._fetch_single_price(client, asset)
+            price = None
+            if self._brapi_supported(ticker):
+                prices = await self._brapi_get_prices(client, [ticker])
+                price  = prices.get(ticker)
+                if price:
+                    print(f"[brapi] {ticker}: R$ {price}", flush=True)
+            if price is None:
+                price = await self._yf_get_price(client, ticker)
+                if price:
+                    print(f"[yahoo] {ticker}: R$ {price}", flush=True)
             if price is not None:
                 return {
-                    "asset":     sym,
-                    "symbol":    sym,
-                    "price":     price,
-                    "timestamp": datetime.now().isoformat(),
+                    "asset": ticker, "symbol": ticker,
+                    "price": price, "timestamp": datetime.now().isoformat(),
                 }
         return None
 
     async def get_all_prices(self, assets: Optional[List[str]] = None) -> Dict[str, float]:
-        """
-        Precos atuais de multiplos ativos de forma concorrente.
-        Retorna: {"PETR4": 38.69, "VALE3": 88.06, ...}
-        """
+        """Preços atuais de múltiplos ativos. Tenta BRAPI em batch, fallback Yahoo."""
         if assets is None:
             assets = settings.ALLOWED_ASSETS
 
         prices: Dict[str, float] = {}
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+        brapi_assets = [a for a in assets if self._brapi_supported(a)]
+        yf_assets    = [a for a in assets if not self._brapi_supported(a)]
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # BRAPI batch (até 20 por vez no Pro; free: 1 por vez)
+            if brapi_assets:
+                if self.token:
+                    # Pro/Startup: batch de 20
+                    for i in range(0, len(brapi_assets), 20):
+                        chunk = brapi_assets[i:i+20]
+                        got   = await self._brapi_get_prices(client, chunk)
+                        prices.update(got)
+                        # Fallback Yahoo para os que falharam no BRAPI
+                        failed = [a for a in chunk if a.upper() not in prices]
+                        for a in failed:
+                            p = await self._yf_get_price(client, a)
+                            if p:
+                                prices[a.upper()] = p
+                else:
+                    # Free: 1 por vez (só free symbols)
+                    tasks = [self._brapi_get_prices(client, [a]) for a in brapi_assets]
+                    for a, result in zip(brapi_assets, await asyncio.gather(*tasks, return_exceptions=True)):
+                        if isinstance(result, dict) and result:
+                            prices.update(result)
+                        else:
+                            p = await self._yf_get_price(client, a)
+                            if p:
+                                prices[a.upper()] = p
+
+            # Yahoo para criptos e ativos sem suporte BRAPI
+            if yf_assets:
                 results = await asyncio.gather(
-                    *[self._fetch_single_price(client, a) for a in assets],
+                    *[self._yf_get_price(client, a) for a in yf_assets],
                     return_exceptions=True,
                 )
-                for result in results:
-                    if isinstance(result, tuple):
-                        sym, price = result
-                        if price is not None:
-                            prices[sym] = price
-        except Exception as e:
-            print(f"[yahoo] Erro ao obter precos: {e}", flush=True)
+                for a, p in zip(yf_assets, results):
+                    if isinstance(p, float):
+                        prices[a.upper()] = p
+
         return prices
 
     async def get_klines(
@@ -128,62 +328,17 @@ class BrapiMarketData:
         interval: str = "5m",
         limit: int = 25,
     ) -> Optional[Dict]:
-        """Candles historicos de um ativo da B3."""
+        """Candles históricos de um ativo. Tenta BRAPI, fallback Yahoo."""
         ticker = asset.upper()
         if interval not in self.VALID_INTERVALS:
             interval = "5m"
-        yf_range = _YF_RANGE.get(interval, "5d")
-
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                r = await client.get(
-                    f"{self.BASE_URL}/{self._yf_symbol(ticker)}",
-                    params={"interval": interval, "range": yf_range},
-                    headers=_YF_HEADERS,
-                )
-                if r.status_code != 200:
-                    print(f"[yahoo] Erro {r.status_code} para klines {ticker}", flush=True)
-                    return None
-
-                chart_result = r.json()["chart"]["result"]
-                if not chart_result:
-                    return None
-
-                res = chart_result[0]
-                timestamps_raw = res.get("timestamp", [])
-                quotes = res.get("indicators", {}).get("quote", [{}])[0]
-
-                closes  = quotes.get("close",  [])
-                highs   = quotes.get("high",   [])
-                lows    = quotes.get("low",    [])
-                volumes = quotes.get("volume", [])
-
-                valid = [i for i in range(len(closes)) if closes[i] is not None]
-                valid = valid[-limit:]
-
-                prices_list  = [float(closes[i]) for i in valid]
-                volumes_list = [float(volumes[i]) if volumes and volumes[i] is not None else 0.0 for i in valid]
-                highs_list   = [float(highs[i])   if highs   and highs[i]   is not None else 0.0 for i in valid]
-                lows_list    = [float(lows[i])    if lows    and lows[i]    is not None else 0.0 for i in valid]
-                ts_list      = [timestamps_raw[i] if i < len(timestamps_raw) else 0 for i in valid]
-
-                if not prices_list:
-                    return None
-
-                return {
-                    "asset":      ticker,
-                    "symbol":     ticker,
-                    "interval":   interval,
-                    "prices":     prices_list,
-                    "volumes":    volumes_list,
-                    "highs":      highs_list,
-                    "lows":       lows_list,
-                    "timestamps": ts_list,
-                    "count":      len(prices_list),
-                }
-        except Exception as e:
-            print(f"[yahoo] Erro ao obter klines de {ticker}: {e}", flush=True)
-        return None
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            result = None
+            if self._brapi_supported(ticker):
+                result = await self._brapi_get_klines(client, ticker, interval, limit)
+            if result is None:
+                result = await self._yf_get_klines(client, ticker, interval, limit)
+            return result
 
     async def get_all_klines(
         self,
@@ -191,16 +346,16 @@ class BrapiMarketData:
         interval: str = "5m",
         limit: int = 25,
     ) -> Dict[str, Dict]:
-        """Klines de multiplos ativos de forma concorrente."""
+        """Klines de múltiplos ativos (BRAPI + Yahoo fallback)."""
         if assets is None:
             assets = settings.ALLOWED_ASSETS
 
-        tasks = [self.get_klines(a, interval, limit) for a in assets]
-        results = await asyncio.gather(*tasks)
+        tasks   = [self.get_klines(a, interval, limit) for a in assets]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         market_data: Dict[str, Dict] = {}
         for asset, klines in zip(assets, results):
-            if klines and klines["count"] > 0:
+            if isinstance(klines, dict) and klines and klines.get("count", 0) > 0:
                 market_data[asset.upper()] = {
                     "prices":  klines["prices"],
                     "volumes": klines["volumes"],
@@ -208,43 +363,66 @@ class BrapiMarketData:
         return market_data
 
     async def get_24h_ticker(self, asset: str) -> Optional[Dict]:
-        """Estatisticas de 24h de um ativo da B3."""
+        """Estatísticas de 24h de um ativo."""
         ticker = asset.upper()
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            if self._brapi_supported(ticker):
+                try:
+                    r = await client.get(
+                        f"{_BRAPI_BASE}/quote/{ticker}",
+                        params=self._brapi_params(),
+                        headers=_BRAPI_HEADERS,
+                    )
+                    if r.status_code == 200:
+                        items = r.json().get("results", [])
+                        if items:
+                            i = items[0]
+                            price  = float(i.get("regularMarketPrice", 0) or 0)
+                            change = float(i.get("regularMarketChangePercent", 0) or 0)
+                            return {
+                                "asset": ticker, "symbol": ticker,
+                                "last_price":       price,
+                                "price_change_pct": round(change, 2),
+                                "volume":           int(i.get("regularMarketVolume", 0) or 0),
+                                "high_24h":         float(i.get("regularMarketDayHigh", 0) or 0),
+                                "low_24h":          float(i.get("regularMarketDayLow",  0) or 0),
+                                "timestamp":        datetime.now().isoformat(),
+                                "source":           "brapi",
+                            }
+                except Exception as e:
+                    print(f"[brapi] Erro 24h {ticker}: {e}", flush=True)
+
+            # Fallback Yahoo
+            try:
                 r = await client.get(
-                    f"{self.BASE_URL}/{self._yf_symbol(ticker)}",
+                    f"{_YF_BASE}/{self._yf_symbol(ticker)}",
                     params={"interval": "1d", "range": "2d"},
                     headers=_YF_HEADERS,
                 )
                 if r.status_code == 200:
-                    meta = r.json()["chart"]["result"][0]["meta"]
+                    meta       = r.json()["chart"]["result"][0]["meta"]
                     price      = float(meta.get("regularMarketPrice", 0))
                     prev_close = float(meta.get("chartPreviousClose", price) or price)
                     change_pct = ((price - prev_close) / prev_close * 100) if prev_close else 0.0
-                    volume     = int(meta.get("regularMarketVolume", 0) or 0)
-                    day_high   = float(meta.get("regularMarketDayHigh", 0) or 0)
-                    day_low    = float(meta.get("regularMarketDayLow",  0) or 0)
-
                     return {
-                        "asset":            ticker,
-                        "symbol":           ticker,
+                        "asset": ticker, "symbol": ticker,
                         "last_price":       price,
                         "price_change_pct": round(change_pct, 2),
-                        "volume":           volume,
-                        "high_24h":         day_high,
-                        "low_24h":          day_low,
+                        "volume":           int(meta.get("regularMarketVolume", 0) or 0),
+                        "high_24h":         float(meta.get("regularMarketDayHigh", 0) or 0),
+                        "low_24h":          float(meta.get("regularMarketDayLow",  0) or 0),
                         "timestamp":        datetime.now().isoformat(),
+                        "source":           "yahoo",
                     }
-        except Exception as e:
-            print(f"[yahoo] Erro ao obter 24h ticker de {ticker}: {e}", flush=True)
+            except Exception as e:
+                print(f"[yahoo] Erro 24h {ticker}: {e}", flush=True)
         return None
 
 
-# Instancia global
+# Instância global
 if HTTPX_AVAILABLE:
-    market_data_service = BrapiMarketData()
+    market_data_service  = BrapiMarketData()
     MARKET_DATA_AVAILABLE = True
 else:
-    market_data_service = None
+    market_data_service  = None
     MARKET_DATA_AVAILABLE = False

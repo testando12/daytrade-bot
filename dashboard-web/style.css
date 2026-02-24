@@ -935,3 +935,47 @@ tbody tr:last-child {
 .gap-8 { gap: 8px; }
 .gap-12 { gap: 12px; }
 .gap-16 { gap: 16px; }
+
+/* =============================================
+   SIMULAÇÃO & TESTES
+   ============================================= */
+
+.sim-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sim-field label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.sim-field input, .sim-field select {
+  font-size: 13px;
+}
+
+.sim-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.sim-metric {
+  padding: 10px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-light);
+}
+.sim-metric-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.sim-metric-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
