@@ -383,7 +383,10 @@
 'use strict';
 
 // ── CONFIG ──────────────────────────────────────
-let API = (localStorage.getItem('sim_api') || 'http://localhost:8001').replace(/\/$/, '');
+const _defaultApi = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8001'
+  : window.location.origin;
+let API = (localStorage.getItem('sim_api') || _defaultApi).replace(/\/$/, '');
 document.getElementById('api-url-bar').value = API;
 
 let equityChart = null;

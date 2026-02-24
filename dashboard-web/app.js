@@ -9,7 +9,10 @@
 // CONFIG
 // =============================================
 
-let API_BASE = 'http://localhost:8001';
+// Auto-detecta: localhost em dev, mesma origem no Railway/produção
+let API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8001'
+  : window.location.origin;
 let currentPage = 'dashboard';
 let autoRefreshInterval = null;
 let charts = {};
