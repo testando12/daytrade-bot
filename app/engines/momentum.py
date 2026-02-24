@@ -67,8 +67,8 @@ class MomentumAnalyzer:
     W_MACD     = 0.15   # diferença MACD normalizada
 
     # Filtro de qualidade: só entra em posição se score >= ENTRY_THRESHOLD
-    # 0.10 = sinal líquido modesto; 0.30 era muito estrito para dados reais
-    ENTRY_THRESHOLD = 0.10
+    # 0.05 = limiar baixo para operar mesmo em mercado lateral
+    ENTRY_THRESHOLD = 0.05
 
     @staticmethod
     def calculate_momentum_score(
@@ -169,12 +169,11 @@ class MomentumAnalyzer:
         agreement = abs(positives - negatives) / len(scores)
         signal_quality = agreement  # 0 = discordância total, 1 = todos concordam
 
-        # Entrada válida: score mínimo + concordância parcial + ATR razoável
-        # signal_quality >= 0.33 = 2 de 3 indicadores de tendência concordam
+        # Entrada válida: score mínimo OU é top3 com qualquer concordância
+        # Relaxado para garantir que o bot opere mesmo em mercados laterais
         entry_valid = (
             abs(momentum_score) >= MomentumAnalyzer.ENTRY_THRESHOLD
-            and signal_quality >= 0.33
-            and atr_pct > 0.001  # ativo com volatilidade mínima
+            or signal_quality >= 0.33
         )
 
         trend_status = (

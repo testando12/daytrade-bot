@@ -136,10 +136,22 @@ async def run_cycle():
     cycle_pnl     = 0.0
     buys, sells = 0, 0
 
+    prev_positions = trade_state.get("positions", {})
+
     for asset, alloc in rebalancing.items():
         action     = alloc.get("action", "HOLD")
         rec_amount = alloc.get("recommended_amount", 0)
-        cur_amount = alloc.get("current_amount", 0)
+        # Usa posição anterior salva (capital alocado no ciclo anterior)
+        cur_amount = prev_positions.get(asset, {}).get("amount", 0) \
+                     if isinstance(prev_positions.get(asset), dict) \
+                     else prev_positions.get(asset, 0)
+
+        # Se não havia posição e há alocação recomendada → é uma compra
+        if action == "HOLD" and rec_amount > 0 and cur_amount == 0:
+            action = "BUY"
+        # Se havia posição e a recomendação é 0 → é uma venda
+        elif action == "HOLD" and rec_amount == 0 and cur_amount > 0:
+            action = "SELL"
 
         new_positions[asset] = {
             "amount":         round(rec_amount, 2),
