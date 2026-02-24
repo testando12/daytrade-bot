@@ -81,6 +81,8 @@ async def _auto_cycle_loop():
     """Loop interno do scheduler: executa ciclos de trading automaticamente."""
     _scheduler_state["running"] = True
     print("[scheduler] Iniciado — intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
+    # Aguarda o servidor subir completamente antes do primeiro ciclo
+    await asyncio.sleep(20)
     while _scheduler_state["running"]:
         interval_sec = _scheduler_state["interval_minutes"] * 60
         _scheduler_state["next_run"] = datetime.now().isoformat()
