@@ -648,8 +648,13 @@ async function loadMarketPage() {
     const top3      = scoreRes?.top3    || [];
 
     // Cards de ativos (agora com mini-projecao de 1h)
+    // Usa preços se disponíveis; caso contrário, usa ativos do momentum
+    const cardAssets = Object.keys(prices).length
+      ? Object.keys(prices)
+      : Object.keys(mom);
     let cardsHtml = '';
-    for (const [asset, price] of Object.entries(prices)) {
+    for (const asset of cardAssets) {
+      const price = prices[asset];
       const m     = mom[asset];
       const p     = preds[asset];
       const score = m?.momentum_score;
@@ -663,7 +668,7 @@ async function loadMarketPage() {
             <span class="asset-symbol">${asset}</span>
             ${classifBadge(cls)}
           </div>
-          <div class="asset-price">${fmtPrice(price)}</div>
+          <div class="asset-price">${price != null ? fmtPrice(price) : '--'}</div>
           ${score != null ? `<div class="asset-change ${up ? 'up' : 'down'}">${up ? '&#9650;' : '&#9660;'} Score: ${score.toFixed(4)}</div>` : ''}
           ${c1h != null ? `<div style="font-size:11px;color:${col1h};margin-top:4px">${c1h >= 0 ? '&#9650;' : '&#9660;'} 1h: ${fmtPrice(p.pred_1h)} (${c1h > 0 ? '+' : ''}${c1h}%)</div>` : ''}
         </div>`;

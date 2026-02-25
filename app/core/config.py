@@ -93,10 +93,34 @@ class Settings:
         "XRP", "DOGE", "AVAX", "DOT", "LINK",
     ]
 
-    # Todos os ativos (B3 + Crypto)
+    # Ações dos EUA — NYSE / NASDAQ (Yahoo Finance sem sufixo)
+    US_STOCKS: List[str] = [
+        # Big Tech
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
+        # Semicondutores & Hardware
+        "AMD", "INTC", "QCOM", "AVGO", "MU",
+        # Software & Cloud
+        "ORCL", "CRM", "ADBE", "CSCO", "IBM",
+        # Internet & Serviços
+        "NFLX", "PYPL", "SNAP", "UBER", "LYFT",
+        # Finanças
+        "JPM", "BAC", "GS", "V", "MA", "WFC", "AXP",
+        # Saúde & Farma
+        "JNJ", "PFE", "UNH", "ABBV", "MRK", "CVS",
+        # Consumo & Varejo
+        "DIS", "SBUX", "NKE", "WMT", "COST", "TGT", "HD",
+        # Energia
+        "XOM", "CVX", "COP",
+        # Telecomunicações
+        "T", "VZ",
+        # Outros
+        "KO", "PEP", "MCD",
+    ]
+
+    # Todos os ativos (B3 + US + Crypto)
     @property
     def ALL_ASSETS(self) -> List[str]:
-        return self.ALLOWED_ASSETS + self.CRYPTO_ASSETS
+        return self.ALLOWED_ASSETS + self.US_STOCKS + self.CRYPTO_ASSETS
 
     # Logs
     LOG_LEVEL: str = "INFO"

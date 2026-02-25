@@ -87,15 +87,28 @@ def _is_market_open() -> bool:
 
 def _current_session() -> tuple:
     """
-    Retorna (assets, session_label) de acordo com o horário:
-    - B3 aberta (seg-sex 10-17h BRT) → B3 + Crypto (30 ativos)
-    - B3 fechada                      → somente Crypto 24/7 (10 ativos)
+    Retorna (assets, session_label) de acordo com o horário BRT:
+    - B3 aberta (seg-sex 10-17h)       → B3 + US + Crypto (todos os ativos)
+    - NYSE aberta fora B3 (13h30-20h)  → US Stocks + Crypto
+    - Fora de horário                  → somente Crypto 24/7
     """
     from datetime import timezone, timedelta
     brt = timezone(timedelta(hours=-3))
     now = datetime.now(brt)
-    if now.weekday() < 5 and 10 <= now.hour < 17:
-        return settings.ALL_ASSETS, f"🇧🇷 B3 + 🌍 Crypto (30 ativos)"
+    weekday = now.weekday()  # 0=seg .. 4=sex
+    hour    = now.hour
+    minute  = now.minute
+
+    b3_open  = weekday < 5 and 10 <= hour < 17
+    # NYSE abre 9h30 EST = 13h30 BRT (-3h do fuso de NY em horário de verão dos EUA)
+    nyse_open = weekday < 5 and (hour > 13 or (hour == 13 and minute >= 30)) and hour < 20
+
+    if b3_open:
+        total = len(settings.ALL_ASSETS)
+        return settings.ALL_ASSETS, f"🇧🇷 B3 + 🇺🇸 US + 🌍 Crypto ({total} ativos)"
+    elif nyse_open:
+        us_crypto = settings.US_STOCKS + settings.CRYPTO_ASSETS
+        return us_crypto, f"🇺🇸 NYSE + 🌍 Crypto ({len(us_crypto)} ativos)"
     else:
         return settings.CRYPTO_ASSETS, f"🌍 Crypto 24/7 ({len(settings.CRYPTO_ASSETS)} ativos)"
 

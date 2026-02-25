@@ -60,6 +60,9 @@ _CRYPTO_SYMBOLS = {
     "DOT","AVAX","MATIC","LINK","LTC","UNI","ATOM","TRX"
 }
 
+# US stocks set — populated at import time from settings (lazy to avoid circular import)
+_US_STOCK_SYMBOLS: set = set()
+
 
 class BrapiMarketData:
     """
@@ -74,25 +77,39 @@ class BrapiMarketData:
             raise ImportError("httpx nao instalado. Execute: pip install httpx")
         self.timeout = getattr(settings, "MARKET_API_TIMEOUT", 15)
         self.token   = getattr(settings, "BRAPI_TOKEN", "").strip()
+        # Populate US stock set from settings
+        global _US_STOCK_SYMBOLS
+        _US_STOCK_SYMBOLS = {s.upper() for s in getattr(settings, "US_STOCKS", [])}
         source = "BRAPI" + ("+token" if self.token else " free (PETR4/VALE3/MGLU3/ITUB4)") + " → fallback Yahoo"
         print(f"[market] Fonte de dados: {source}", flush=True)
+        print(f"[market] US stocks carregadas: {len(_US_STOCK_SYMBOLS)}", flush=True)
 
     # ── helpers de símbolo ────────────────────────────────────────────────────
 
     def _is_crypto(self, asset: str) -> bool:
         return asset.upper() in _CRYPTO_SYMBOLS
 
+    def _is_us_stock(self, asset: str) -> bool:
+        return asset.upper() in _US_STOCK_SYMBOLS
+
     def _yf_symbol(self, asset: str) -> str:
         s = asset.upper()
         if s.endswith(".SA") or s.endswith("-USD"):
             return s
-        return f"{s}-USD" if self._is_crypto(s) else f"{s}.SA"
+        if self._is_crypto(s):
+            return f"{s}-USD"
+        if self._is_us_stock(s):
+            return s          # US stocks: AAPL, MSFT — no suffix
+        return f"{s}.SA"      # B3: PETR4 → PETR4.SA
 
     def _brapi_supported(self, asset: str) -> bool:
-        """BRAPI suporta o ativo? (com token: todos; sem token: só free set)"""
-        if self._is_crypto(asset):
+        """BRAPI suporta o ativo? (com token: só B3; sem token: só free set)"""
+        s = asset.upper()
+        if self._is_crypto(s):
             return False  # BRAPI foca em B3; criptos vão para Yahoo
-        return bool(self.token) or asset.upper() in _BRAPI_FREE_SYMBOLS
+        if self._is_us_stock(s):
+            return False  # US stocks via Yahoo Finance direto
+        return bool(self.token) or s in _BRAPI_FREE_SYMBOLS
 
     def _brapi_params(self, extra: dict = None) -> dict:
         params = {}
