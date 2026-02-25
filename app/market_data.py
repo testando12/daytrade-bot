@@ -465,7 +465,7 @@ class BrapiMarketData:
         interval: str = "5m",
         limit: int = 25,
     ) -> Dict[str, Dict]:
-        """Klines de múltiplos ativos (BRAPI + Yahoo fallback). Timeout global de 25s."""
+        """Klines de múltiplos ativos (BRAPI + Yahoo fallback). Timeout global de 10s."""
         if assets is None:
             assets = settings.ALLOWED_ASSETS
 
@@ -473,10 +473,10 @@ class BrapiMarketData:
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),
-                timeout=25.0
+                timeout=10.0
             )
         except asyncio.TimeoutError:
-            print(f"[market] get_all_klines timeout global (25s) para {len(assets)} ativos", flush=True)
+            print(f"[market] get_all_klines timeout global (10s) para {len(assets)} ativos", flush=True)
             results = []
 
         market_data: Dict[str, Dict] = {}

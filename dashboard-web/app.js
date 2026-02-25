@@ -1,5 +1,5 @@
-﻿/* =============================================
-   DAY TRADE BOT â€” App JavaScript
+/* =============================================
+   DAY TRADE BOT — App JavaScript
    SPA com roteamento, fetch API e Chart.js
    ============================================= */
 
@@ -31,18 +31,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // =============================================
-// NAVIGAÃ‡ÃƒO / ROTEAMENTO
+// NAVIGAÇÃO / ROTEAMENTO
 // =============================================
 
 const PAGE_NAMES = {
   dashboard: 'Dashboard',
-  live: 'AnÃ¡lise ao Vivo',
+  live: 'Análise ao Vivo',
   market: 'Mercado',
   trade: 'Trade',
-  portfolio: 'PortfÃ³lio',
-  risk: 'GestÃ£o de Risco',
-  history: 'HistÃ³rico',
-  settings: 'ConfiguraÃ§Ãµes',
+  portfolio: 'Portfólio',
+  risk: 'Gestão de Risco',
+  history: 'Histórico',
+  settings: 'Configurações',
 };
 
 function navigate(page) {
@@ -52,10 +52,10 @@ function navigate(page) {
   const activeItem = document.querySelector(`[data-page="${page}"]`);
   if (activeItem) activeItem.classList.add('active');
 
-  // Esconde todas as pÃ¡ginas
+  // Esconde todas as páginas
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
 
-  // Mostra a pÃ¡gina selecionada
+  // Mostra a página selecionada
   const pageEl = document.getElementById(`page-${page}`);
   if (pageEl) pageEl.classList.add('active');
 
@@ -111,7 +111,7 @@ async function api(path, options = {}, timeoutMs = 30000) {
     if (!res.ok) throw new Error(`API ${path} retornou ${res.status}`);
     return res.json();
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Timeout na requisiÃ§Ã£o ${path} (${timeoutMs/1000}s)`);
+    if (e.name === 'AbortError') throw new Error(`Timeout na requisição ${path} (${timeoutMs/1000}s)`);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -170,10 +170,10 @@ function setLastUpdate() {
 
 function toast(message, type = 'info') {
   const container = document.getElementById('toast-container');
-  const icons = { success: 'âœ…', error: 'âŒ', info: 'â„¹ï¸', warning: 'âš ï¸' };
+  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: 'âš ️' };
   const div = document.createElement('div');
   div.className = `toast ${type}`;
-  div.innerHTML = `<span>${icons[type] || 'â„¹ï¸'}</span><span>${message}</span>`;
+  div.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
   container.appendChild(div);
   setTimeout(() => div.remove(), 3500);
 }
@@ -219,7 +219,7 @@ function irqBadgeClass(level) {
     'NORMAL':      'badge-green',
     'ALTO':        'badge-yellow',
     'MUITO_ALTO':  'badge-orange',
-    'CRÃTICO':     'badge-red',
+    'CRÍTICO':     'badge-red',
     'CRITICO':     'badge-red',
   };
   return map[level] || 'badge-gray';
@@ -272,26 +272,56 @@ function _is_market_open_js() {
 async function loadDashboard() {
   try {
     setApiStatus(true);
-    // Parallel: full analysis + trade status + risk status
-    const [analysis, tradeStatus, riskStatus] = await Promise.all([
-      api('/analyze/full', { method: 'POST' }).catch(() => null),
+
+    // 1) Fast data first (trade + risk load in ~2-5s)
+    const [tradeStatus, riskStatus, perfData] = await Promise.all([
       api('/trade/status').catch(() => null),
       api('/risk/status').catch(() => null),
+      api('/performance').catch(() => null),
     ]);
 
+    // Render partial KPIs immediately from fast endpoints
+    renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData);
+
+    // Prices separately
+    loadMarketPrices();
+    setLastUpdate();
+
+    // 2) Heavy analysis in background (90s timeout)
+    const analysis = await api('/analyze/full', { method: 'POST' }, 90000).catch(() => null);
     if (analysis && analysis.success) {
       renderDashboardKPIs(analysis.data, riskStatus, tradeStatus);
       renderMomentumChart(analysis.data);
       renderRiskRadar(analysis.data);
       renderDashboardAllocation(analysis.data);
     }
-
-    // Prices separately (may take longer)
-    loadMarketPrices();
     setLastUpdate();
   } catch (e) {
     setApiStatus(false);
     toast('Erro ao conectar com a API', 'error');
+  }
+}
+
+function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData) {
+  // Render KPIs from fast endpoints immediately
+  const td = tradeStatus?.data || {};
+  const perf = perfData?.data || {};
+  const capital = td.capital || 2000;
+  document.getElementById('kpi-capital').textContent = fmtMoney(capital);
+  const pnlVal = perf.total_pnl || td.total_pnl || 0;
+  const pnlEl = document.getElementById('kpi-pnl');
+  if (pnlEl) {
+    pnlEl.textContent = `P&L: ${fmtMoney(pnlVal)}`;
+    pnlEl.className = `kpi-change ${pnlVal >= 0 ? 'up' : 'down'}`;
+  }
+  // Bot status from risk
+  const canTrade = riskStatus?.data?.is_locked === false;
+  const statusEl = document.getElementById('kpi-bot-status');
+  if (statusEl) statusEl.textContent = canTrade ? 'Operacional' : 'Bloqueado';
+  const tradeOkEl = document.getElementById('kpi-trade-ok');
+  if (tradeOkEl) {
+    tradeOkEl.textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
+    tradeOkEl.className = `kpi-change ${canTrade ? 'up' : 'down'}`;
   }
 }
 
@@ -332,7 +362,7 @@ function renderDashboardKPIs(data, riskStatus, tradeStatus) {
 
   // Bot status
   const canTrade = riskStatus?.data?.is_locked === false;
-  document.getElementById('kpi-bot-status').textContent = canTrade ? 'âœ… Operacional' : 'ðŸ”’ Bloqueado';
+  document.getElementById('kpi-bot-status').textContent = canTrade ? '✅ Operacional' : '🔒 Bloqueado';
   document.getElementById('kpi-trade-ok').textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
   document.getElementById('kpi-trade-ok').className = `kpi-change ${canTrade ? 'up' : 'down'}`;
 }
@@ -347,7 +377,7 @@ async function loadMarketPrices() {
 
     const prices = data.data;
     const keys = Object.keys(prices).slice(0, 8);
-    let html = '<table><thead><tr><th>Ativo</th><th>PreÃ§o</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th>Ativo</th><th>Preço</th></tr></thead><tbody>';
     for (const asset of keys) {
       html += `<tr>
         <td><strong>${asset}</strong></td>
@@ -357,7 +387,7 @@ async function loadMarketPrices() {
     html += '</tbody></table>';
     el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">ðŸ“¡</div><p>Binance offline ou sem conexÃ£o</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><p>Binance offline ou sem conexão</p></div>`;
   }
 }
 
@@ -422,7 +452,7 @@ function renderRiskRadar(data) {
     S5: risk.s5_losing_streak || 0,
   };
 
-  const labels = ['S1 TendÃªncia', 'S2 PressÃ£o', 'S3 Volatilidade', 'S4 RSI', 'S5 Perdas'];
+  const labels = ['S1 Tendência', 'S2 Pressão', 'S3 Volatilidade', 'S4 RSI', 'S5 Perdas'];
   const vals = [signals.S1, signals.S2, signals.S3, signals.S4, signals.S5];
 
   charts['risk-radar'] = new Chart(ctx, {
@@ -459,7 +489,7 @@ function renderDashboardAllocation(data) {
   const el = document.getElementById('dash-allocation');
   const allocs = data.allocations;
   if (!allocs) {
-    el.innerHTML = '<div class="empty-state"><p>Sem dados de alocaÃ§Ã£o</p></div>';
+    el.innerHTML = '<div class="empty-state"><p>Sem dados de alocação</p></div>';
     return;
   }
 
@@ -483,7 +513,7 @@ function renderDashboardAllocation(data) {
       </div>`;
   }
 
-  if (!html) html = '<div class="empty-state"><p>Sem alocaÃ§Ãµes recomendadas no momento</p></div>';
+  if (!html) html = '<div class="empty-state"><p>Sem alocações recomendadas no momento</p></div>';
   el.innerHTML = html;
 
   const totalEl = document.getElementById('allocation-total');
@@ -491,7 +521,7 @@ function renderDashboardAllocation(data) {
 }
 
 // =============================================
-// PAGE: ANÃLISE AO VIVO
+// PAGE: ANÁLISE AO VIVO
 // =============================================
 
 async function loadLiveAnalysis() {
@@ -500,17 +530,17 @@ async function loadLiveAnalysis() {
   el.innerHTML = '<div class="loading-overlay"><div class="spinner"></div> Buscando dados da Binance...</div>';
 
   try {
-    const data = await api('/market/analyze-live', { method: 'POST' });
+    const data = await api('/market/analyze-live', { method: 'POST' }, 90000);
     if (data.success) {
-      renderAnalysisResult(el, data.data, 'âš¡ Binance Live');
+      renderAnalysisResult(el, data.data, '⚡ Binance Live');
       timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
-      toast('AnÃ¡lise ao vivo concluÃ­da', 'success');
+      toast('Análise ao vivo concluída', 'success');
     } else {
-      el.innerHTML = `<div class="empty-state"><div class="empty-icon">âŒ</div><p>${data.detail || 'Erro na anÃ¡lise'}</p></div>`;
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>${data.detail || 'Erro na análise'}</p></div>`;
     }
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">ðŸ“¡</div><p>Binance offline â€” tente a anÃ¡lise com dados de teste</p></div>`;
-    toast('Binance indisponÃ­vel', 'warning');
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><p>Binance offline — tente a análise com dados de teste</p></div>`;
+    toast('Binance indisponível', 'warning');
   }
 }
 
@@ -520,13 +550,13 @@ async function loadFullAnalysis() {
   el.innerHTML = '<div class="loading-overlay"><div class="spinner"></div> Analisando...</div>';
 
   try {
-    const data = await api('/analyze/full', { method: 'POST' });
+    const data = await api('/analyze/full', { method: 'POST' }, 90000);
     if (data.success) {
-      renderAnalysisResult(el, data.data, 'ðŸ§ª Dados de Teste');
+      renderAnalysisResult(el, data.data, '🧪 Dados de Teste');
       timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
     }
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">âŒ</div><p>Erro na API</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Erro na API</p></div>`;
   }
 }
 
@@ -553,7 +583,7 @@ function renderAnalysisResult(el, data, source) {
           <div><span class="text-muted">Score:</span> <strong style="color:${scoreColor(score)}">${score.toFixed(4)}</strong></div>
           <div><span class="text-muted">Retorno:</span> <strong class="${m.return_pct >= 0 ? 'text-green' : 'text-red'}">${(m.return_pct * 100).toFixed(2)}%</strong></div>
           <div><span class="text-muted">Trend:</span> ${m.trend_status}</div>
-          <div><span class="text-muted">AlocaÃ§Ã£o:</span> <strong>${alloc ? fmtMoney(alloc.recommended_amount) : '--'}</strong></div>
+          <div><span class="text-muted">Alocação:</span> <strong>${alloc ? fmtMoney(alloc.recommended_amount) : '--'}</strong></div>
         </div>
       </div>`;
   }
@@ -565,11 +595,11 @@ function renderAnalysisResult(el, data, source) {
     </div>
 
     <div class="card mb-16" style="padding:16px">
-      <div class="card-title mb-12">ðŸ›¡ï¸ IRQ â€” Ãndice de Risco de Queda</div>
+      <div class="card-title mb-12">🛡️ IRQ — Índice de Risco de Queda</div>
       <div style="display:flex;align-items:center;gap:24px">
         <div>
           <div style="font-size:48px;font-weight:800;color:var(--${irqColor})">${irqPct}%</div>
-          <div class="text-muted" style="font-size:12px">NÃ­vel de Risco: <strong class="text-${irqColor}">${risk.level || risk.protection_level}</strong></div>
+          <div class="text-muted" style="font-size:12px">Nível de Risco: <strong class="text-${irqColor}">${risk.level || risk.protection_level}</strong></div>
         </div>
         <div style="flex:1">
           ${renderSignalsInline(risk)}
@@ -577,14 +607,14 @@ function renderAnalysisResult(el, data, source) {
         <div style="text-align:right">
           <div style="font-size:12px;color:var(--text-muted)">RSI</div>
           <div style="font-size:22px;font-weight:700">${risk.rsi ? risk.rsi.toFixed(1) : '--'}</div>
-          <div style="font-size:12px;color:var(--text-muted)">ReduÃ§Ã£o Capital</div>
+          <div style="font-size:12px;color:var(--text-muted)">Redução Capital</div>
           <div style="font-size:18px;font-weight:700;color:var(--red)">${risk.reduction_percentage != null ? (risk.reduction_percentage * 100).toFixed(0) + '%' : '0%'}</div>
         </div>
       </div>
     </div>
 
     <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px">
-      AnÃ¡lise por Ativo (${Object.keys(mom).length})
+      Análise por Ativo (${Object.keys(mom).length})
     </div>
     <div class="assets-grid">
       ${assetsHtml}
@@ -599,7 +629,7 @@ function renderSignalsInline(risk) {
     S4: risk.s4_rsi_divergence || 0,
     S5: risk.s5_losing_streak || 0,
   };
-  const labels = { S1: 'TendÃªncia', S2: 'PressÃ£o Vend.', S3: 'Volatilidade', S4: 'RSI Div.', S5: 'Seq. Perdas' };
+  const labels = { S1: 'Tendência', S2: 'Pressão Vend.', S3: 'Volatilidade', S4: 'RSI Div.', S5: 'Seq. Perdas' };
   let html = '';
   for (const [k, v] of Object.entries(signals)) {
     const pct = Math.min((v || 0) * 100, 100);
@@ -635,10 +665,10 @@ async function loadMarketPage() {
 
   try {
     const [pricesRes, analysisRes, predictRes, scoreRes] = await Promise.all([
-      api('/market/prices').catch(() => null),
-      api('/analyze/full', { method: 'POST' }).catch(() => null),
-      api('/market/predict').catch(() => null),
-      api('/market/score').catch(() => null),
+      api('/market/prices', {}, 60000).catch(() => null),
+      api('/analyze/full', { method: 'POST' }, 90000).catch(() => null),
+      api('/market/predict', {}, 60000).catch(() => null),
+      api('/market/score', {}, 60000).catch(() => null),
     ]);
 
     const prices    = pricesRes?.data   || {};
@@ -783,7 +813,7 @@ async function loadMarketPage() {
   }
 }
 // =============================================
-// PAGE: PORTFÃ“LIO
+// PAGE: PORTFÓLIO
 // =============================================
 
 async function loadPortfolio() {
@@ -796,14 +826,13 @@ async function loadPortfolio() {
   tbodyEl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Calculando...</td></tr>';
 
   try {
-    const [data, tradeStatus, perfData] = await Promise.all([
-      api('/analyze/full', { method: 'POST' }),
+    // 1) Fast data first (loads in 2-5s)
+    const [tradeStatus, perfData] = await Promise.all([
       api('/trade/status').catch(() => null),
       api('/performance').catch(() => null),
     ]);
-    if (!data.success) throw new Error();
 
-    // Banner capital + P&L
+    // Render partial data immediately
     const td = tradeStatus?.data || {};
     const perf = perfData?.data || {};
     const setEl = (id, val, positive) => {
@@ -818,6 +847,27 @@ async function loadPortfolio() {
     setEl('ptf-pnl-1h',   fmtMoney(perf.pnl_today_1h || 0), (perf.pnl_today_1h || 0) >= 0);
     setEl('ptf-pnl-1d',   fmtMoney(perf.pnl_today_1d || 0), (perf.pnl_today_1d || 0) >= 0);
     setEl('ptf-pnl-total', fmtMoney(perf.total_pnl || td.total_pnl || 0), (perf.total_pnl || 0) >= 0);
+
+    // Quick summary from trade data
+    const capital = td.capital || 2000;
+    const totalPnl = perf.total_pnl || td.total_pnl || 0;
+    const tradePositions = td.positions || {};
+    const posCount = Object.keys(tradePositions).length;
+    summaryEl.innerHTML = `
+      <div class="config-item"><span class="config-key">Capital do Bot</span><span class="config-value">${fmtMoney(capital)}</span></div>
+      <div class="config-item"><span class="config-key">P&L Total</span><span class="config-value ${totalPnl >= 0 ? 'text-green' : 'text-red'}">${fmtMoney(totalPnl)}</span></div>
+      <div class="config-item"><span class="config-key">Posições Ativas</span><span class="config-value">${posCount}</span></div>
+      <div class="config-item"><span class="config-key">Ciclos Hoje</span><span class="config-value">${perf.today_cycles || 0}</span></div>
+    `;
+
+    // 2) Heavy analysis in background (90s timeout)
+    const data = await api('/analyze/full', { method: 'POST' }, 90000).catch(() => null);
+    if (data && data.success) {
+
+    // Banner capital + P&L (update with full data)
+    const allocs = data.data.allocations || {};
+    const mom = data.data.momentum_analysis || {};
+    const irq = data.data.risk_analysis?.irq_score || 0;
 
     // Usar posições reais do trade quando existirem
     const tradePositions = td.positions || {};
@@ -917,6 +967,9 @@ async function loadPortfolio() {
       }
     }
     tbodyEl.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Sem posições — execute um ciclo no Trade</td></tr>';
+
+    } // end if (data && data.success)
+
     timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
 
   } catch (e) {
@@ -936,7 +989,7 @@ async function loadRiskPage() {
     const [riskStatus, canTradeData, analysisData, tradeData] = await Promise.all([
       api('/risk/status'),
       api('/risk/can-trade'),
-      api('/analyze/full', { method: 'POST' }).catch(() => null),
+      api('/analyze/full', { method: 'POST' }, 90000).catch(() => null),
       api('/trade/status').catch(() => null),
     ]);
 
@@ -1040,7 +1093,7 @@ async function loadRiskPage() {
 }
 
 // =============================================
-// PAGE: HISTÃ“RICO
+// PAGE: HISTÓRICO
 // =============================================
 
 async function loadHistoryPage() {
@@ -1055,10 +1108,10 @@ async function loadHistoryAnalysis() {
     const data = await api('/db/analysis-history');
     const items = data.data || [];
     if (!items.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">ðŸ“Š</div><p>Nenhuma anÃ¡lise registrada ainda.<br>Execute uma anÃ¡lise para comeÃ§ar o histÃ³rico.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>Nenhuma análise registrada ainda.<br>Execute uma análise para começar o histórico.</p></div>';
       return;
     }
-    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>IRQ</th><th>NÃ­vel</th><th>Melhor Ativo</th><th>Score</th></tr></thead><tbody>';
+    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>IRQ</th><th>Nível</th><th>Melhor Ativo</th><th>Score</th></tr></thead><tbody>';
     for (const row of items) {
       html += `<tr>
         <td>${row.timestamp ? new Date(row.timestamp).toLocaleString('pt-BR') : '--'}</td>
@@ -1071,7 +1124,7 @@ async function loadHistoryAnalysis() {
     html += '</tbody></table></div>';
     el.innerHTML = html;
   } catch (e) {
-    el.innerHTML = '<div class="empty-state"><p>Erro ao carregar histÃ³rico</p></div>';
+    el.innerHTML = '<div class="empty-state"><p>Erro ao carregar histórico</p></div>';
   }
 }
 
@@ -1082,10 +1135,10 @@ async function loadHistoryTrades() {
     const data = await api('/db/trades');
     const items = data.data || [];
     if (!items.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-icon">ðŸ“š</div><p>Nenhum trade registrado ainda.</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📚</div><p>Nenhum trade registrado ainda.</p></div>';
       return;
     }
-    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>Ativo</th><th>Tipo</th><th>Quantidade</th><th>PreÃ§o</th><th>P&L</th></tr></thead><tbody>';
+    let html = '<div class="table-wrap"><table><thead><tr><th>Data/Hora</th><th>Ativo</th><th>Tipo</th><th>Quantidade</th><th>Preço</th><th>P&L</th></tr></thead><tbody>';
     for (const row of items) {
       html += `<tr>
         <td>${row.timestamp ? new Date(row.timestamp).toLocaleString('pt-BR') : '--'}</td>
@@ -1108,14 +1161,14 @@ async function loadDbStats() {
   try {
     const data = await api('/db/stats');
     const stats = data.data || {};
-    const icons = { portfolios: 'ðŸ’¼', positions: 'ðŸ“Š', trades: 'ðŸ”„', analysis_history: 'ðŸ“ˆ', market_snapshots: 'ðŸ“¸' };
-    const labels = { portfolios: 'PortfÃ³lios', positions: 'PosiÃ§Ãµes', trades: 'Trades', analysis_history: 'AnÃ¡lises', market_snapshots: 'Snapshots' };
+    const icons = { portfolios: '💼', positions: '📊', trades: '🔄', analysis_history: '📈', market_snapshots: '📸' };
+    const labels = { portfolios: 'Portfólios', positions: 'Posições', trades: 'Trades', analysis_history: 'Análises', market_snapshots: 'Snapshots' };
     let html = '';
     for (const [key, val] of Object.entries(stats)) {
       html += `<div class="card">
         <div class="card-header">
           <span class="card-title">${labels[key] || key}</span>
-          <div class="card-icon blue">${icons[key] || 'ðŸ“Š'}</div>
+          <div class="card-icon blue">${icons[key] || '📊'}</div>
         </div>
         <div class="kpi-value">${val}</div>
         <div class="kpi-label">registros</div>
@@ -1123,7 +1176,7 @@ async function loadDbStats() {
     }
     el.innerHTML = html || '<div class="empty-state" style="grid-column:1/-1"><p>Sem dados</p></div>';
   } catch (e) {
-    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Erro ao carregar estatÃ­sticas</p></div>';
+    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Erro ao carregar estatísticas</p></div>';
   }
 }
 
@@ -1200,12 +1253,12 @@ async function loadTradePage() {
     const isActive = d.auto_trading;
     const badge = document.getElementById('trade-bot-badge');
     if (badge) {
-      badge.textContent = isActive ? 'ðŸŸ¢ ATIVO' : 'â¸ PARADO';
+      badge.textContent = isActive ? '🟢 ATIVO' : '⏸ PARADO';
       badge.className = `badge ${isActive ? 'badge-green' : 'badge-gray'}`;
     }
     const toggleBtn = document.getElementById('trade-toggle-btn');
     if (toggleBtn) {
-      toggleBtn.textContent = isActive ? 'â¸ Pausar Bot' : 'â–¶ Iniciar Bot';
+      toggleBtn.textContent = isActive ? '⏸ Pausar Bot' : 'â–¶ Iniciar Bot';
       toggleBtn.className = `btn ${isActive ? 'btn-secondary' : 'btn-primary'}`;
     }
     const capitalBadge = document.getElementById('trade-capital-badge');
@@ -1223,7 +1276,7 @@ async function loadTradePage() {
     if (lastCycle) {
       lastCycle.textContent = d.last_cycle
         ? new Date(d.last_cycle).toLocaleString('pt-BR')
-        : 'â€”';
+        : '—';
     }
 
     // Capital card
@@ -1250,7 +1303,7 @@ async function loadTradePage() {
     const miniEl = document.getElementById('trade-positions-mini');
     if (miniEl) {
       if (!posEntries.length) {
-        miniEl.innerHTML = '<div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posiÃ§Ãµes</p></div>';
+        miniEl.innerHTML = '<div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posições</p></div>';
       } else {
         miniEl.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
@@ -1268,7 +1321,7 @@ async function loadTradePage() {
     const tbody = document.getElementById('trade-positions-tbody');
     if (tbody) {
       if (!posEntries.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Execute um ciclo para ver as posiÃ§Ãµes</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Execute um ciclo para ver as posições</td></tr>';
       } else {
         tbody.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
@@ -1284,7 +1337,7 @@ async function loadTradePage() {
                 <span style="font-size:12px;color:var(--text-muted)">${p.pct}%</span>
               </div>
             </td>
-            <td class="${(p.change_pct || 0) >= 0 ? 'text-green' : 'text-red'}">${p.change_pct != null ? (p.change_pct >= 0 ? '+' : '') + p.change_pct.toFixed(1) + '%' : 'â€”'}</td>
+            <td class="${(p.change_pct || 0) >= 0 ? 'text-green' : 'text-red'}">${p.change_pct != null ? (p.change_pct >= 0 ? '+' : '') + p.change_pct.toFixed(1) + '%' : '—'}</td>
             <td>${actionBadge(p.action)}</td>
           </tr>`).join('');
       }
@@ -1339,26 +1392,26 @@ function renderTradeLog(entries) {
   }
 
   const typeStyles = {
-    'COMPRA':    { cls: 'badge-green',  icon: 'ðŸ“ˆ' },
-    'VENDA':     { cls: 'badge-red',    icon: 'ðŸ“‰' },
-    'HOLD':      { cls: 'badge-gray',   icon: 'â¸' },
-    'DEPÃ“SITO':  { cls: 'badge-blue',   icon: 'ðŸ’°' },
-    'RETIRADA':  { cls: 'badge-yellow', icon: 'ðŸ’¸' },
-    'CICLO':     { cls: 'badge-blue',   icon: 'ðŸ”„' },
-    'SISTEMA':   { cls: 'badge-gray',   icon: 'âš™ï¸' },
-    'ERRO':      { cls: 'badge-red',    icon: 'âŒ' },
+    'COMPRA':    { cls: 'badge-green',  icon: '📈' },
+    'VENDA':     { cls: 'badge-red',    icon: '📉' },
+    'HOLD':      { cls: 'badge-gray',   icon: '⏸' },
+    'DEPÓSITO':  { cls: 'badge-blue',   icon: '💰' },
+    'RETIRADA':  { cls: 'badge-yellow', icon: '💸' },
+    'CICLO':     { cls: 'badge-blue',   icon: '🔄' },
+    'SISTEMA':   { cls: 'badge-gray',   icon: 'âš™️' },
+    'ERRO':      { cls: 'badge-red',    icon: '❌' },
   };
 
   tbody.innerHTML = entries.map(ev => {
-    const style = typeStyles[ev.type] || { cls: 'badge-gray', icon: 'â€¢' };
-    const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleString('pt-BR') : 'â€”';
-    const amtHtml = ev.amount > 0 ? `<span style="font-weight:700">${fmtMoney(ev.amount)}</span>` : '<span style="color:var(--text-muted)">â€”</span>';
+    const style = typeStyles[ev.type] || { cls: 'badge-gray', icon: '•' };
+    const ts = ev.timestamp ? new Date(ev.timestamp).toLocaleString('pt-BR') : '—';
+    const amtHtml = ev.amount > 0 ? `<span style="font-weight:700">${fmtMoney(ev.amount)}</span>` : '<span style="color:var(--text-muted)">—</span>';
     return `<tr>
       <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${ts}</td>
       <td><span class="badge ${style.cls}">${style.icon} ${ev.type}</span></td>
-      <td><strong>${ev.asset || 'â€”'}</strong></td>
+      <td><strong>${ev.asset || '—'}</strong></td>
       <td>${amtHtml}</td>
-      <td style="font-size:12px;color:var(--text-muted)">${ev.note || 'â€”'}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${ev.note || '—'}</td>
     </tr>`;
   }).join('');
 }
@@ -1374,14 +1427,14 @@ function filterTradeLog() {
 async function depositCapital() {
   const inp = document.getElementById('trade-capital-input');
   const val = parseFloat(inp?.value);
-  if (!val || val <= 0) { toast('Digite um valor vÃ¡lido', 'warning'); return; }
+  if (!val || val <= 0) { toast('Digite um valor válido', 'warning'); return; }
   try {
     const res = await api('/trade/capital', {
       method: 'POST',
       body: JSON.stringify({ amount: val }),
     });
     if (res.success) {
-      toast(`ðŸ’° Capital atualizado para ${fmtMoney(res.capital)}`, 'success');
+      toast(`💰 Capital atualizado para ${fmtMoney(res.capital)}`, 'success');
       if (inp) inp.value = '';
       await loadTradePage();
     }
@@ -1397,7 +1450,7 @@ async function toggleTrading() {
     const endpoint = isActive ? '/trade/stop' : '/trade/start';
     const res = await api(endpoint, { method: 'POST' });
     if (res.success) {
-      toast(res.auto_trading ? 'âœ… Bot iniciado' : 'â¸ Bot pausado', 'success');
+      toast(res.auto_trading ? '✅ Bot iniciado' : '⏸ Bot pausado', 'success');
       await loadTradePage();
     }
   } catch (e) {
@@ -1407,11 +1460,11 @@ async function toggleTrading() {
 
 async function runTradeCycle() {
   const btn = document.querySelector('[onclick="runTradeCycle()"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'â³ Processando...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Processando...'; }
   try {
     const res = await api('/trade/cycle', { method: 'POST' });
     if (res.success) {
-      toast(`ðŸ”„ Ciclo executado â€” ${res.data?.assets_analyzed || 0} ativos analisados`, 'success');
+      toast(`🔄 Ciclo executado — ${res.data?.assets_analyzed || 0} ativos analisados`, 'success');
       await loadTradePage();
     } else {
       toast('Sem dados de mercado para ciclo', 'warning');
@@ -1419,22 +1472,22 @@ async function runTradeCycle() {
   } catch (e) {
     toast('Erro ao executar ciclo', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'ðŸ”„ Executar Ciclo'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Executar Ciclo'; }
   }
 }
 
 async function clearTradeLog() {
-  if (!confirm('Limpar todo o histÃ³rico de atividade?')) return;
+  if (!confirm('Limpar todo o histórico de atividade?')) return;
   try {
     // Clear via local state (server keeps its own)
     _tradeLogCache = [];
     renderTradeLog([]);
-    toast('HistÃ³rico limpo', 'info');
+    toast('Histórico limpo', 'info');
   } catch (e) { /* silent */ }
 }
 
 // =============================================
-// PAGE: CONFIGURAÃ‡Ã•ES
+// PAGE: CONFIGURAÇÕES
 // =============================================
 
 async function loadSettings() {
@@ -1452,7 +1505,7 @@ async function loadSettings() {
       const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       html += `<div class="config-item">
         <span class="config-key">${label}</span>
-        <span class="badge ${val ? 'badge-green' : 'badge-red'}">${val ? 'âœ… Online' : 'âŒ Offline'}</span>
+        <span class="badge ${val ? 'badge-green' : 'badge-red'}">${val ? '✅ Online' : '❌ Offline'}</span>
       </div>`;
     }
     enginesEl.innerHTML = html;
@@ -1463,9 +1516,9 @@ async function loadSettings() {
       initial_capital: 'Capital Inicial',
       stop_loss: 'Stop Loss',
       take_profit: 'Take Profit',
-      max_daily_loss: 'Perda MÃ¡x. DiÃ¡ria',
-      max_trades_hour: 'Trades/Hora (mÃ¡x)',
-      max_trades_day: 'Trades/Dia (mÃ¡x)',
+      max_daily_loss: 'Perda Máx. Diária',
+      max_trades_hour: 'Trades/Hora (máx)',
+      max_trades_day: 'Trades/Dia (máx)',
     };
     for (const [k, v] of Object.entries(cfg)) {
       if (k === 'allowed_assets') continue;
@@ -1483,7 +1536,7 @@ async function loadSettings() {
     configEl.innerHTML = cfgHtml;
 
   } catch (e) {
-    toast('Erro ao carregar configuraÃ§Ãµes', 'error');
+    toast('Erro ao carregar configurações', 'error');
   }
 }
 
