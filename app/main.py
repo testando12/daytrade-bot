@@ -1461,6 +1461,8 @@ _DEFAULT_PERF: dict = {
     "best_day_pnl": 0.0,
     "worst_day_pnl": 0.0,
     "last_backtest": None,
+    "total_gain": 0.0,     # soma acumulada de todos os ciclos positivos
+    "total_loss": 0.0,     # soma acumulada do absoluto de ciclos negativos
 }
 _perf_state: dict = _load_json(_PERF_FILE, dict(_DEFAULT_PERF))
 
@@ -1503,10 +1505,12 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
         _perf_state["win_count"] = _perf_state.get("win_count", 0) + 1
         if pnl > _perf_state.get("best_day_pnl", 0.0):
             _perf_state["best_day_pnl"] = round(pnl, 4)
+        _perf_state["total_gain"] = round(_perf_state.get("total_gain", 0.0) + pnl, 4)
     elif pnl < 0:
         _perf_state["loss_count"] = _perf_state.get("loss_count", 0) + 1
         if pnl < _perf_state.get("worst_day_pnl", 0.0):
             _perf_state["worst_day_pnl"] = round(pnl, 4)
+        _perf_state["total_loss"] = round(_perf_state.get("total_loss", 0.0) + abs(pnl), 4)
 
     _save_json(_PERF_FILE, _perf_state)
 
@@ -1865,16 +1869,23 @@ async def get_performance():
             dd = (v - peak) / peak * 100 if peak > 0 else 0
             max_dd = min(max_dd, dd)
 
-    # P&L por timeframe — hoje e total
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    # P&L por timeframe — hoje e total (horário BRT UTC-3)
+    from datetime import timezone as _tz, timedelta as _td
+    _brt = _tz(_td(hours=-3))
+    today_str = datetime.now(_brt).strftime("%Y-%m-%d")
     today_cycles = [c for c in cycles if c.get("timestamp", "").startswith(today_str)]
     pnl_today_5m  = round(sum(c.get("pnl_5m", 0) for c in today_cycles), 2)
     pnl_today_1h  = round(sum(c.get("pnl_1h", 0) for c in today_cycles), 2)
     pnl_today_1d  = round(sum(c.get("pnl_1d", 0) for c in today_cycles), 2)
     pnl_today     = round(pnl_today_5m + pnl_today_1h + pnl_today_1d, 2)
+    today_gain    = round(sum(c.get("pnl", 0) for c in today_cycles if c.get("pnl", 0) > 0), 2)
+    today_loss    = round(sum(abs(c.get("pnl", 0)) for c in today_cycles if c.get("pnl", 0) < 0), 2)
     pnl_total_5m  = round(sum(c.get("pnl_5m", 0) for c in cycles), 2)
     pnl_total_1h  = round(sum(c.get("pnl_1h", 0) for c in cycles), 2)
     pnl_total_1d  = round(sum(c.get("pnl_1d", 0) for c in cycles), 2)
+    # totais acumulados (da memória persistida, com fallback do cálculo instantâneo)
+    total_gain_acc = _perf_state.get("total_gain") or round(sum(c.get("pnl", 0) for c in cycles if c.get("pnl", 0) > 0), 2)
+    total_loss_acc = _perf_state.get("total_loss") or round(sum(abs(c.get("pnl", 0)) for c in cycles if c.get("pnl", 0) < 0), 2)
 
     return {
         "success": True,
@@ -1899,6 +1910,12 @@ async def get_performance():
             "pnl_today_1h":      pnl_today_1h,
             "pnl_today_1d":      pnl_today_1d,
             "today_cycles":      len(today_cycles),
+            # Ganho e perda separados — hoje
+            "today_gain":        today_gain,
+            "today_loss":        today_loss,
+            # Ganho e perda separados — acumulado total
+            "total_gain":        round(total_gain_acc, 2),
+            "total_loss":        round(total_loss_acc, 2),
             # P&L por timeframe — histórico total
             "pnl_total_5m":      pnl_total_5m,
             "pnl_total_1h":      pnl_total_1h,

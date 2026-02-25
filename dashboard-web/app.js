@@ -1229,19 +1229,41 @@ async function loadTradePage() {
       gain1dEl.textContent = fmtMoney(v);
       gain1dEl.style.color = v >= 0 ? 'var(--green)' : 'var(--red)';
     }
-    // Ganho Hoje
+    // Ganho Hoje + Perda Hoje
     const gainTodayEl = document.getElementById('trade-gain-today');
+    const lossTodayEl = document.getElementById('trade-loss-today');
+    const todayGainVal = perf.today_gain ?? Math.max(0, todayPnl);
+    const todayLossVal = perf.today_loss ?? 0;
     if (gainTodayEl) {
-      gainTodayEl.textContent = fmtMoney(todayPnl);
-      gainTodayEl.style.color = todayPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      gainTodayEl.textContent = fmtMoney(todayGainVal);
+      gainTodayEl.style.color = 'var(--green)';
+    }
+    if (lossTodayEl) {
+      if (todayLossVal > 0) {
+        lossTodayEl.style.display = 'block';
+        lossTodayEl.textContent = '-' + fmtMoney(todayLossVal);
+      } else {
+        lossTodayEl.style.display = 'none';
+      }
     }
     const gainTodayCyclesEl = document.getElementById('trade-gain-today-cycles');
     if (gainTodayCyclesEl) gainTodayCyclesEl.textContent = `${perf.today_cycles ?? todayCycles.length} ciclo${(perf.today_cycles ?? todayCycles.length) !== 1 ? 's' : ''} hoje`;
-    // Ganho Total
+    // Ganho Total + Perda Total
     const gainTotalEl = document.getElementById('trade-gain-total');
+    const lossTotalEl = document.getElementById('trade-loss-total');
+    const totalGainVal = perf.total_gain ?? Math.max(0, totalPnl);
+    const totalLossVal = perf.total_loss ?? 0;
     if (gainTotalEl) {
-      gainTotalEl.textContent = fmtMoney(totalPnl);
-      gainTotalEl.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+      gainTotalEl.textContent = fmtMoney(totalGainVal);
+      gainTotalEl.style.color = 'var(--green)';
+    }
+    if (lossTotalEl) {
+      if (totalLossVal > 0) {
+        lossTotalEl.style.display = 'block';
+        lossTotalEl.textContent = '-' + fmtMoney(totalLossVal);
+      } else {
+        lossTotalEl.style.display = 'none';
+      }
     }
     const gainTotalCyclesEl = document.getElementById('trade-gain-total-cycles');
     if (gainTotalCyclesEl) gainTotalCyclesEl.textContent = `${totalCycles} ciclo${totalCycles !== 1 ? 's' : ''} no total`;
