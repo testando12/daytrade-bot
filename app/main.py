@@ -343,14 +343,22 @@ test_assets_data = {
 }
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
-    """Endpoint raiz"""
+    """Redireciona para o dashboard web"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/ui/")
+
+
+@app.get("/api", tags=["Status"])
+async def api_status():
+    """Status da API"""
     return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "status": "running",
         "message": "Bot de Day Trade Automatizado",
+        "dashboard": "/ui/",
     }
 
 
