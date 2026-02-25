@@ -105,19 +105,19 @@ def _current_session() -> tuple:
 
     if b3_open:
         total = len(settings.ALL_ASSETS)
-        return settings.ALL_ASSETS, f"🇧🇷 B3 + 🇺🇸 US + 🌍 Crypto ({total} ativos)"
+        return settings.ALL_ASSETS, f"[BR] B3 + [US] US + [CRYPTO] ({total} ativos)"
     elif nyse_open:
         us_crypto = settings.US_STOCKS + settings.CRYPTO_ASSETS
-        return us_crypto, f"🇺🇸 NYSE + 🌍 Crypto ({len(us_crypto)} ativos)"
+        return us_crypto, f"[US] NYSE + [CRYPTO] ({len(us_crypto)} ativos)"
     else:
-        return settings.CRYPTO_ASSETS, f"🌍 Crypto 24/7 ({len(settings.CRYPTO_ASSETS)} ativos)"
+        return settings.CRYPTO_ASSETS, f"[CRYPTO] 24/7 ({len(settings.CRYPTO_ASSETS)} ativos)"
 
 
 async def _auto_cycle_loop():
     """Loop interno do scheduler: executa ciclos de trading automaticamente."""
     global _last_reinvestment_date
     _scheduler_state["running"] = True
-    print("[scheduler] Iniciado — intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
+    print("[scheduler] Iniciado - intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
     # Aguarda o servidor subir completamente antes do primeiro ciclo
     await asyncio.sleep(20)
     while _scheduler_state["running"]:
@@ -136,7 +136,7 @@ async def _auto_cycle_loop():
                     sinal = "⬆ Lucro" if today_pnl > 0 else "⬇ Prejuízo"
                     _trade_log("REINVESTIMENTO", "—", today_pnl,
                         f"💰 {sinal} do dia R$ {today_pnl:+.2f} reinvestido. Novo capital: R$ {_trade_state['capital']:.2f}")
-                    print(f"[scheduler] Reinvestimento: R$ {today_pnl:+.2f} → capital agora R$ {_trade_state['capital']:.2f}", flush=True)
+                    print(f"[scheduler] Reinvestimento: R$ {today_pnl:+.2f} -> capital agora R$ {_trade_state['capital']:.2f}", flush=True)
                 _last_reinvestment_date = today_str
             except Exception as e:
                 print(f"[scheduler] Erro no reinvestimento: {e}", flush=True)

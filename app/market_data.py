@@ -93,7 +93,7 @@ class BrapiMarketData:
         global _US_STOCK_SYMBOLS
         _US_STOCK_SYMBOLS = {s.upper() for s in getattr(settings, "US_STOCKS", [])}
         brapi_src = "BRAPI+token" if self.token else "BRAPI free (4 ativos)"
-        print(f"[market] Crypto=Binance(RT) | B3={brapi_src}→Yahoo | US=Yahoo", flush=True)
+        print(f"[market] Crypto=Binance(RT) | B3={brapi_src}>Yahoo | US=Yahoo", flush=True)
         print(f"[market] US stocks carregadas: {len(_US_STOCK_SYMBOLS)}", flush=True)
 
     # ── helpers de símbolo ────────────────────────────────────────────────────
