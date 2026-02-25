@@ -1350,6 +1350,10 @@ _DEFAULT_TRADE_STATE: dict = {
     "last_cycle": None,
 }
 _trade_state: dict = _load_json(_STATE_FILE, dict(_DEFAULT_TRADE_STATE))
+# Corrige valores corrompidos do bug antigo de P&L
+if _trade_state.get("total_pnl", 0.0) < -5:
+    _trade_state["total_pnl"] = 0.0
+    _save_json(_STATE_FILE, _trade_state)
 # garantir que o capital do settings bata com o persisted
 settings.INITIAL_CAPITAL = _trade_state.get("capital", settings.INITIAL_CAPITAL)
 
@@ -1453,6 +1457,23 @@ async def stop_auto_trading():
     _trade_state["auto_trading"] = False
     _trade_log("SISTEMA", "—", 0, "⏸ Trading automático PAUSADO")
     return {"success": True, "auto_trading": False}
+
+
+@app.get("/trade/reset")
+@app.post("/trade/reset")
+async def reset_trade_state():
+    """Zera o histórico de P&L e ciclos (mantém capital e posições)."""
+    _trade_state["total_pnl"] = 0.0
+    _trade_state["log"] = []
+    _save_json(_STATE_FILE, _trade_state)
+    _perf_state["cycles"] = []
+    _perf_state["total_pnl_history"] = []
+    _perf_state["win_count"] = 0
+    _perf_state["loss_count"] = 0
+    _perf_state["best_day_pnl"] = 0.0
+    _perf_state["worst_day_pnl"] = 0.0
+    _save_json(_PERF_FILE, _perf_state)
+    return {"success": True, "message": "Histórico zerado com sucesso"}
 
 
 @app.post("/trade/cycle")
