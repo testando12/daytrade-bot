@@ -1,4 +1,4 @@
-/* =============================================
+﻿/* =============================================
    DAY TRADE BOT â€” App JavaScript
    SPA com roteamento, fetch API e Chart.js
    ============================================= */
@@ -69,7 +69,7 @@ function navigate(page) {
 function loadPage(page) {
   switch (page) {
     case 'dashboard': loadDashboard(); break;
-    case 'live':      /* triggered manually */ break;
+    case 'live':      loadLiveAnalysis(); break;
     case 'market':    loadMarketPage(); break;
     case 'trade':     loadTradePage(); break;
     case 'portfolio': loadPortfolio(); break;
@@ -99,7 +99,7 @@ function toggleSidebar() {
 // API HELPER
 // =============================================
 
-async function api(path, options = {}, timeoutMs = 12000) {
+async function api(path, options = {}, timeoutMs = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -819,30 +819,42 @@ async function loadPortfolio() {
     setEl('ptf-pnl-1d',   fmtMoney(perf.pnl_today_1d || 0), (perf.pnl_today_1d || 0) >= 0);
     setEl('ptf-pnl-total', fmtMoney(perf.total_pnl || td.total_pnl || 0), (perf.total_pnl || 0) >= 0);
 
+    // Usar posições reais do trade quando existirem
+    const tradePositions = td.positions || {};
+    const hasTradePos = Object.keys(tradePositions).length > 0;
     const allocs = data.data.allocations || {};
     const mom = data.data.momentum_analysis || {};
     const irq = data.data.risk_analysis?.irq_score || 0;
 
     let total = 0;
-    const entries = Object.entries(allocs);
-    for (const [, d] of entries) total += d.recommended_amount || 0;
+    let entries;
+
+    if (hasTradePos) {
+      entries = Object.entries(tradePositions);
+      for (const [, d] of entries) total += d.amount || 0;
+    } else {
+      entries = Object.entries(allocs);
+      for (const [, d] of entries) total += d.recommended_amount || 0;
+    }
 
     totalEl.textContent = `Total: ${fmtMoney(total)}`;
 
     // Pie chart
     destroyChart('portfolio-pie');
     const pieCtx = document.getElementById('chart-portfolio-pie');
-    const nonZero = entries.filter(([, d]) => d.recommended_amount > 0);
-    const pieColors = ['#388bfd','#3fb950','#d29922','#f85149','#db6d28','#8b949e','#a5d6ff','#7ee787'];
+    const pieEntries = hasTradePos
+      ? entries.filter(([, d]) => (d.amount || 0) > 0)
+      : entries.filter(([, d]) => (d.recommended_amount || 0) > 0);
+    const pieColors = ['#388bfd','#3fb950','#d29922','#f85149','#db6d28','#8b949e','#a5d6ff','#7ee787','#c9d1d9','#f778ba','#56d4dd','#d2a8ff'];
 
-    if (nonZero.length > 0 && pieCtx) {
+    if (pieEntries.length > 0 && pieCtx) {
       charts['portfolio-pie'] = new Chart(pieCtx, {
         type: 'doughnut',
         data: {
-          labels: nonZero.map(([a]) => a),
+          labels: pieEntries.map(([a]) => a),
           datasets: [{
-            data: nonZero.map(([, d]) => d.recommended_amount),
-            backgroundColor: pieColors.slice(0, nonZero.length),
+            data: pieEntries.map(([, d]) => hasTradePos ? d.amount : d.recommended_amount),
+            backgroundColor: pieColors.slice(0, pieEntries.length),
             borderWidth: 2,
             borderColor: '#1c2128',
           }]
@@ -860,42 +872,56 @@ async function loadPortfolio() {
         }
       });
     } else if (pieCtx) {
-      pieCtx.parentElement.innerHTML = '<div class="empty-state"><div class="empty-icon">ðŸ’¼</div><p>Sem alocaÃ§Ãµes positivas no momento</p></div>';
+      pieCtx.parentElement.innerHTML = '<div class="empty-state"><div class="empty-icon">💼</div><p>Sem posições — execute um ciclo no Trade</p></div>';
     }
 
-    // Summary
-    let summaryHtml = '';
-    const holdCount = entries.filter(([, d]) => d.action === 'HOLD').length;
-    const buyCount = entries.filter(([, d]) => d.action === 'BUY').length;
-    const sellCount = entries.filter(([, d]) => d.action === 'SELL').length;
-    summaryHtml += `
-      <div class="config-item"><span class="config-key">Capital Total Alocado</span><span class="config-value">${fmtMoney(total)}</span></div>
-      <div class="config-item"><span class="config-key">IRQ Score Atual</span><span class="config-value text-${irq < 0.6 ? 'green' : 'red'}">${(irq*100).toFixed(1)}%</span></div>
-      <div class="config-item"><span class="config-key">Ativos em HOLD</span><span class="config-value">${holdCount}</span></div>
-      <div class="config-item"><span class="config-key">Ativos em BUY</span><span class="config-value text-green">${buyCount}</span></div>
-      <div class="config-item"><span class="config-key">Ativos em SELL</span><span class="config-value text-red">${sellCount}</span></div>
+    // Summary — sincronizado com trade
+    const capital = td.capital || 2000;
+    const totalPnl = perf.total_pnl || td.total_pnl || 0;
+    const posCount = Object.keys(tradePositions).length;
+    summaryEl.innerHTML = `
+      <div class="config-item"><span class="config-key">Capital do Bot</span><span class="config-value">${fmtMoney(capital)}</span></div>
+      <div class="config-item"><span class="config-key">Total Alocado</span><span class="config-value">${fmtMoney(total)}</span></div>
+      <div class="config-item"><span class="config-key">P&L Total</span><span class="config-value ${totalPnl >= 0 ? 'text-green' : 'text-red'}">${fmtMoney(totalPnl)}</span></div>
+      <div class="config-item"><span class="config-key">IRQ Score</span><span class="config-value text-${irq < 0.6 ? 'green' : 'red'}">${(irq*100).toFixed(1)}%</span></div>
+      <div class="config-item"><span class="config-key">Posições Ativas</span><span class="config-value">${posCount}</span></div>
+      <div class="config-item"><span class="config-key">Ciclos Hoje</span><span class="config-value">${perf.today_cycles || 0}</span></div>
     `;
-    summaryEl.innerHTML = summaryHtml;
 
-    // Table
+    // Table — posições reais ou alocação teórica
     let rows = '';
-    for (const [asset, d] of entries) {
-      const m = mom[asset];
-      rows += `<tr>
-        <td><strong>${asset}</strong></td>
-        <td>${m ? classifBadge(m.classification) : '--'}</td>
-        <td>${fmtMoney(d.current_amount)}</td>
-        <td>${fmtMoney(d.recommended_amount)}</td>
-        <td class="${d.change_percentage >= 0 ? 'text-green' : 'text-red'}">${d.change_percentage != null ? d.change_percentage.toFixed(1) + '%' : '--'}</td>
-        <td>${actionBadge(d.action)}</td>
-      </tr>`;
+    if (hasTradePos) {
+      for (const [asset, d] of entries) {
+        const m = mom[asset];
+        const chg = d.change_pct || d.ret_pct || 0;
+        rows += `<tr>
+          <td><strong>${asset}</strong></td>
+          <td>${m ? classifBadge(m.classification) : `<span class="badge badge-blue">${d.tf || '--'}</span>`}</td>
+          <td>${fmtMoney(d.amount)}</td>
+          <td>${d.pct ? d.pct.toFixed(1) + '%' : '--'}</td>
+          <td class="${chg >= 0 ? 'text-green' : 'text-red'}">${chg.toFixed(3)}%</td>
+          <td>${actionBadge(d.action || 'HOLD')}</td>
+        </tr>`;
+      }
+    } else {
+      for (const [asset, d] of entries) {
+        const m = mom[asset];
+        rows += `<tr>
+          <td><strong>${asset}</strong></td>
+          <td>${m ? classifBadge(m.classification) : '--'}</td>
+          <td>${fmtMoney(d.current_amount)}</td>
+          <td>${fmtMoney(d.recommended_amount)}</td>
+          <td class="${d.change_percentage >= 0 ? 'text-green' : 'text-red'}">${d.change_percentage != null ? d.change_percentage.toFixed(1) + '%' : '--'}</td>
+          <td>${actionBadge(d.action)}</td>
+        </tr>`;
+      }
     }
-    tbodyEl.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Sem dados</td></tr>';
+    tbodyEl.innerHTML = rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Sem posições — execute um ciclo no Trade</td></tr>';
     timeEl.textContent = `Atualizado: ${new Date().toLocaleTimeString('pt-BR')}`;
 
   } catch (e) {
-    summaryEl.innerHTML = '<div class="empty-state"><p>Erro ao carregar portfÃ³lio</p></div>';
-    toast('Erro ao carregar portfÃ³lio', 'error');
+    summaryEl.innerHTML = '<div class="empty-state"><p>Erro ao carregar portfólio</p></div>';
+    toast('Erro ao carregar portfólio', 'error');
   }
 }
 
@@ -907,48 +933,56 @@ async function loadRiskPage() {
   const timeEl = document.getElementById('risk-update-time');
 
   try {
-    const [riskStatus, canTradeData, analysisData] = await Promise.all([
+    const [riskStatus, canTradeData, analysisData, tradeData] = await Promise.all([
       api('/risk/status'),
       api('/risk/can-trade'),
       api('/analyze/full', { method: 'POST' }).catch(() => null),
+      api('/trade/status').catch(() => null),
     ]);
 
     const rs = riskStatus.data;
     const ct = canTradeData.data;
     const irq = analysisData?.data?.risk_analysis;
+    const td = tradeData?.data || {};
 
-    // KPIs
+    // KPIs - sincronizado com trade
     const canTrade = ct.allowed;
     const kpiCanEl = document.getElementById('risk-can-trade');
-    kpiCanEl.textContent = canTrade ? 'âœ… SIM' : 'ðŸ”’ NÃƒO';
+    kpiCanEl.textContent = canTrade ? '\u2705 SIM' : '\uD83D\uDD12 N\u00C3O';
     kpiCanEl.style.fontSize = '20px';
     document.getElementById('risk-can-trade-reason').textContent = ct.reason || '--';
 
-    const pnl = rs.daily_pnl || 0;
+    // P&L do trade real (synced) ou do risk_manager
+    const tradePnl = rs.trade_total_pnl || td.total_pnl || 0;
+    const dailyPnl = rs.daily_pnl || 0;
     const pnlEl = document.getElementById('risk-daily-pnl');
-    pnlEl.textContent = fmtMoney(pnl);
-    pnlEl.className = `kpi-value ${pnl >= 0 ? 'text-green' : 'text-red'}`;
-    document.getElementById('risk-daily-pnl-label').textContent = `Perda mÃ¡x: ${fmtMoney(rs.daily_loss_limit?.max_loss)}`;
+    pnlEl.textContent = fmtMoney(dailyPnl);
+    pnlEl.className = `kpi-value ${dailyPnl >= 0 ? 'text-green' : 'text-red'}`;
+    document.getElementById('risk-daily-pnl-label').textContent = `P&L Total: ${fmtMoney(tradePnl)} | M\u00E1x: ${fmtMoney(rs.daily_loss_limit?.max_loss)}`;
 
     document.getElementById('risk-trades-hour').textContent =
       `${rs.trade_limits?.trades_last_hour || 0} / ${ct.trade_limits?.remaining_hour != null ? (ct.trade_limits.remaining_hour + (rs.trade_limits?.trades_last_hour||0)) : 20}`;
     document.getElementById('risk-trades-day').textContent =
       `${rs.trade_limits?.trades_today || 0} / ${ct.trade_limits?.remaining_day != null ? (ct.trade_limits.remaining_day + (rs.trade_limits?.trades_today||0)) : 100}`;
 
-    // Config items
+    // Config items - com dados do trade
+    const tradeCapital = rs.trade_capital || td.capital || 2000;
+    const tradePos = rs.trade_positions_count || Object.keys(td.positions || {}).length;
     const configEl = document.getElementById('risk-config-items');
     configEl.innerHTML = `
+      <div class="config-item"><span class="config-key">Capital Atual</span><span class="config-value">${fmtMoney(tradeCapital)}</span></div>
+      <div class="config-item"><span class="config-key">P&L Total</span><span class="config-value ${tradePnl >= 0 ? 'text-green' : 'text-red'}">${fmtMoney(tradePnl)}</span></div>
       <div class="config-item"><span class="config-key">Stop Loss</span><span class="config-value text-red">${rs.stop_loss_pct || 5}%</span></div>
       <div class="config-item"><span class="config-key">Take Profit</span><span class="config-value text-green">${rs.take_profit_pct || 10}%</span></div>
-      <div class="config-item"><span class="config-key">Limite DiÃ¡rio de Perda</span><span class="config-value">${fmtMoney(rs.daily_loss_limit?.max_loss)}</span></div>
-      <div class="config-item"><span class="config-key">Trades Ãšltimas 1h</span><span class="config-value">${rs.trade_limits?.trades_last_hour || 0}</span></div>
+      <div class="config-item"><span class="config-key">Limite Di\u00E1rio de Perda</span><span class="config-value">${fmtMoney(rs.daily_loss_limit?.max_loss)}</span></div>
+      <div class="config-item"><span class="config-key">Trades \u00DAltimas 1h</span><span class="config-value">${rs.trade_limits?.trades_last_hour || 0}</span></div>
       <div class="config-item"><span class="config-key">Trades Hoje</span><span class="config-value">${rs.trade_limits?.trades_today || 0}</span></div>
-      <div class="config-item"><span class="config-key">PosiÃ§Ãµes Abertas</span><span class="config-value">${rs.open_positions || 0}</span></div>
+      <div class="config-item"><span class="config-key">Posi\u00E7\u00F5es Abertas</span><span class="config-value">${tradePos}</span></div>
     `;
 
     // IRQ Signals
     const lockBadge = document.getElementById('risk-lock-badge');
-    lockBadge.textContent = rs.is_locked ? 'ðŸ”’ BLOQUEADO' : 'ðŸŸ¢ OK';
+    lockBadge.textContent = rs.is_locked ? '\uD83D\uDD12 BLOQUEADO' : '\uD83D\uDFE2 OK';
     lockBadge.className = `badge ${rs.is_locked ? 'badge-red' : 'badge-green'}`;
 
     const irqBadgeEl = document.getElementById('risk-irq-badge-page');
@@ -958,21 +992,21 @@ async function loadRiskPage() {
       irqBadgeEl.className = `badge ${irqBadgeClass(level)}`;
       document.getElementById('risk-signals-list').innerHTML = renderSignalsInline(irq);
     } else {
-      document.getElementById('risk-signals-list').innerHTML = '<div class="loading-overlay">AnÃ¡lise nÃ£o disponÃ­vel</div>';
+      document.getElementById('risk-signals-list').innerHTML = '<div class="loading-overlay">An\u00E1lise n\u00E3o dispon\u00EDvel</div>';
     }
 
-    // Limits progress
+    // Limits progress - usando dados reais do trade
     const limits = rs.daily_loss_limit;
     const trades = rs.trade_limits;
-    const dailyUsed = limits ? Math.abs(limits.daily_pnl / limits.max_loss) * 100 : 0;
+    const dailyUsed = limits ? Math.abs(dailyPnl / limits.max_loss) * 100 : 0;
     const tradeHourUsed = trades ? (trades.trades_last_hour / 20) * 100 : 0;
     const tradeDayUsed = trades ? (trades.trades_today / 100) * 100 : 0;
 
     document.getElementById('risk-limits-section').innerHTML = `
       <div style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
-          <span class="text-muted">Perda DiÃ¡ria Usada</span>
-          <span>${fmtMoney(pnl)} / ${fmtMoney(limits?.max_loss)}</span>
+          <span class="text-muted">Perda Di\u00E1ria Usada</span>
+          <span>${fmtMoney(dailyPnl)} / ${fmtMoney(limits?.max_loss)}</span>
         </div>
         <div class="progress-bar" style="height:10px">
           <div class="progress-fill ${dailyUsed > 80 ? 'red' : dailyUsed > 50 ? 'yellow' : 'green'}" style="width:${Math.min(dailyUsed,100)}%"></div>
@@ -980,7 +1014,7 @@ async function loadRiskPage() {
       </div>
       <div style="margin-bottom:16px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
-          <span class="text-muted">Trades Ãšltimas 1h</span>
+          <span class="text-muted">Trades \u00DAltimas 1h</span>
           <span>${trades?.trades_last_hour || 0} / 20</span>
         </div>
         <div class="progress-bar" style="height:10px">

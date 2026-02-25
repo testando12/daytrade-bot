@@ -400,23 +400,35 @@ async def analyze_risk():
 
 @app.post("/analyze/full")
 async def full_analysis():
-    """Análise completa: Momentum + Risco + Alocação"""
+    """Análise completa: Momentum + Risco + Alocação (dados REAIS quando disponíveis)"""
     try:
+        # Tentar dados reais primeiro, fallback para test
+        live_data = None
+        if MARKET_DATA_AVAILABLE and market_data_service:
+            try:
+                live_data = await market_data_service.get_all_klines(
+                    settings.ALL_ASSETS, "5m", 25
+                )
+            except Exception:
+                pass
+        source_data = live_data if live_data and len(live_data) > 0 else test_assets_data
+
         # 1. Analisar Momentum
-        momentum_results = MomentumAnalyzer.calculate_multiple_assets(test_assets_data)
+        momentum_results = MomentumAnalyzer.calculate_multiple_assets(source_data)
         momentum_scores = {asset: data["momentum_score"] for asset, data in momentum_results.items()}
 
-        # 2. Analisar Risco Global
-        btc_data = test_assets_data["BTC"]
+        # 2. Analisar Risco Global (BTC como ref, fallback para primeiro ativo)
+        ref_asset = "BTC" if "BTC" in source_data else list(source_data.keys())[0]
+        ref_data = source_data[ref_asset]
         risk_analysis = RiskAnalyzer.calculate_irq(
-            btc_data["prices"],
-            btc_data["volumes"],
+            ref_data.get("prices", ref_data) if isinstance(ref_data, dict) else ref_data,
+            ref_data.get("volumes", []) if isinstance(ref_data, dict) else [],
         )
         irq_score = risk_analysis["irq_score"]
         protection = RiskAnalyzer.get_protection_level(irq_score)
 
-        # 3. Calcular Alocação
-        initial_capital = settings.INITIAL_CAPITAL
+        # 3. Calcular Alocação — usa capital real do trade se disponível
+        initial_capital = _trade_state.get("capital", settings.INITIAL_CAPITAL)
         allocation = PortfolioManager.calculate_portfolio_allocation(
             momentum_scores,
             irq_score,
@@ -1223,8 +1235,10 @@ async def analyze_live_market(interval: str = "5m", limit: int = 25):
                 },
                 "risk_analysis": {
                     "irq_score": irq_score,
+                    "level": protection["level"],
                     "protection_level": protection["level"],
                     "color": protection["color"],
+                    "reduction_percentage": protection["reduction_percentage"],
                     "signal_scores": {
                         "S1": risk_analysis["s1_trend_loss"],
                         "S2": risk_analysis["s2_selling_pressure"],
@@ -1234,6 +1248,7 @@ async def analyze_live_market(interval: str = "5m", limit: int = 25):
                     },
                     "rsi": risk_analysis["rsi"],
                 },
+                "allocations": rebalancing,
                 "portfolio_allocation": {
                     "allocation": {
                         asset: data["recommended_amount"]
@@ -1255,11 +1270,16 @@ async def analyze_live_market(interval: str = "5m", limit: int = 25):
 
 @app.get("/risk/status")
 async def risk_status():
-    """Status do gerenciador de risco (stop loss, limites, P&L diário)"""
+    """Status do gerenciador de risco (stop loss, limites, P&L diário) — sincronizado com trade"""
+    status = risk_manager.get_status()
+    # Enriquecer com dados do trade state
+    status["trade_total_pnl"] = _trade_state.get("total_pnl", 0.0)
+    status["trade_capital"] = _trade_state.get("capital", settings.INITIAL_CAPITAL)
+    status["trade_positions_count"] = len(_trade_state.get("positions", {}))
     return {
         "success": True,
         "message": "Status de risco operacional",
-        "data": risk_manager.get_status(),
+        "data": status,
     }
 
 
@@ -1654,6 +1674,21 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     _trade_state["positions"] = new_positions
     _trade_state["last_cycle"] = datetime.now().isoformat()
     _trade_state["total_pnl"] = round(_trade_state.get("total_pnl", 0.0) + cycle_pnl, 4)
+
+    # ── 5b. Sincronizar risk_manager com dados do ciclo ──────────────────
+    try:
+        risk_manager.daily_pnl = round(risk_manager.daily_pnl + cycle_pnl, 4)
+        # Registrar posições no risk_manager para stop loss/take profit
+        risk_manager.positions.clear()
+        for asset, info in new_positions.items():
+            prices = klines_by_tf.get("5m", {}).get(asset, {}).get("prices", [])
+            entry_price = prices[-1] if prices else 0
+            if entry_price > 0:
+                risk_manager.register_position(asset, entry_price, info["amount"])
+        # Registrar trade para controle de limites
+        risk_manager.record_trade("CYCLE", "BUY", capital, cycle_pnl)
+    except Exception as e:
+        print(f"[trade] Erro sync risk_manager: {e}", flush=True)
 
     # ── 6. Log e histórico ───────────────────────────────────────────────
     _trade_log("CICLO", "—", capital,

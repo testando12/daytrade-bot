@@ -86,7 +86,8 @@ class BrapiMarketData:
     def __init__(self):
         if not HTTPX_AVAILABLE:
             raise ImportError("httpx nao instalado. Execute: pip install httpx")
-        self.timeout = getattr(settings, "MARKET_API_TIMEOUT", 15)
+        self.timeout = getattr(settings, "MARKET_API_TIMEOUT", 8)
+        self._semaphore = asyncio.Semaphore(15)  # max 15 concurrent requests
         self.token   = getattr(settings, "BRAPI_TOKEN", "").strip()
         # Populate US stock set from settings
         global _US_STOCK_SYMBOLS
@@ -208,14 +209,15 @@ class BrapiMarketData:
                 return None
 
             hist = hist[-limit:]
-            prices  = [float(h["close"])  for h in hist if h.get("close")  is not None]
-            volumes = [float(h.get("volume", 0) or 0) for h in hist]
-            highs   = [float(h.get("high",  prices[i]) or prices[i]) for i, h in enumerate(hist) if h.get("close") is not None]
-            lows    = [float(h.get("low",   prices[i]) or prices[i]) for i, h in enumerate(hist) if h.get("close") is not None]
-            ts      = [int(h.get("date", 0)) for h in hist if h.get("close") is not None]
-
-            if not prices:
+            # Filtrar entradas válidas primeiro
+            valid_hist = [h for h in hist if h.get("close") is not None]
+            if not valid_hist:
                 return None
+            prices  = [float(h["close"]) for h in valid_hist]
+            volumes = [float(h.get("volume", 0) or 0) for h in valid_hist]
+            highs   = [float(h.get("high",  h["close"]) or h["close"]) for h in valid_hist]
+            lows    = [float(h.get("low",   h["close"]) or h["close"]) for h in valid_hist]
+            ts      = [int(h.get("date", 0)) for h in valid_hist]
 
             return {
                 "asset": ticker, "symbol": ticker, "interval": interval,
@@ -232,8 +234,10 @@ class BrapiMarketData:
     def _binance_symbol(self, asset: str) -> str:
         """Converte BTC → BTCUSDT para a Binance."""
         s = asset.upper()
-        if s.endswith("USDT") or s.endswith("BTC"):
+        if s.endswith("USDT"):
             return s
+        if s.endswith("BTC") and len(s) > 3:
+            return s  # BTC pair like ETHBTC
         return f"{s}USDT"
 
     async def _binance_get_prices(self, client: httpx.AsyncClient, assets: List[str]) -> Dict[str, float]:
@@ -444,15 +448,16 @@ class BrapiMarketData:
         ticker = asset.upper()
         if interval not in self.VALID_INTERVALS:
             interval = "5m"
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            result = None
-            if self._is_crypto(ticker):
-                result = await self._binance_get_klines(client, ticker, interval, limit)
-            elif self._brapi_supported(ticker):
-                result = await self._brapi_get_klines(client, ticker, interval, limit)
-            if result is None:
-                result = await self._yf_get_klines(client, ticker, interval, limit)
-            return result
+        async with self._semaphore:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                result = None
+                if self._is_crypto(ticker):
+                    result = await self._binance_get_klines(client, ticker, interval, limit)
+                elif self._brapi_supported(ticker):
+                    result = await self._brapi_get_klines(client, ticker, interval, limit)
+                if result is None:
+                    result = await self._yf_get_klines(client, ticker, interval, limit)
+                return result
 
     async def get_all_klines(
         self,
@@ -460,12 +465,19 @@ class BrapiMarketData:
         interval: str = "5m",
         limit: int = 25,
     ) -> Dict[str, Dict]:
-        """Klines de múltiplos ativos (BRAPI + Yahoo fallback)."""
+        """Klines de múltiplos ativos (BRAPI + Yahoo fallback). Timeout global de 25s."""
         if assets is None:
             assets = settings.ALLOWED_ASSETS
 
         tasks   = [self.get_klines(a, interval, limit) for a in assets]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=25.0
+            )
+        except asyncio.TimeoutError:
+            print(f"[market] get_all_klines timeout global (25s) para {len(assets)} ativos", flush=True)
+            results = []
 
         market_data: Dict[str, Dict] = {}
         for asset, klines in zip(assets, results):
