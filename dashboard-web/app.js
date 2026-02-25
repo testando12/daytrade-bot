@@ -1068,22 +1068,48 @@ async function loadTradePage() {
     if (!res.success) return;
     const d = res.data;
 
-    // Valor Total card
+    // Valor Total card — 3 timeframes + hoje + total
     const perf = perfRes?.data || {};
     const today = new Date().toISOString().slice(0, 10);
     const todayCycles = (perf.recent_cycles || []).filter(c => (c.timestamp || '').startsWith(today));
-    const todayPnl = todayCycles.reduce((s, c) => s + (c.pnl || 0), 0);
-    const totalPnl = perf.total_pnl || d.total_pnl || 0;
+    const todayPnl  = perf.pnl_today   != null ? perf.pnl_today   : todayCycles.reduce((s, c) => s + (c.pnl || 0), 0);
+    const totalPnl  = perf.total_pnl   || d.total_pnl || 0;
     const totalCycles = perf.total_cycles || 0;
 
+    // Capital display (badge no header do card)
+    const capDisplayEl = document.getElementById('trade-capital-display');
+    if (capDisplayEl) capDisplayEl.textContent = fmtMoney(d.capital);
+
+    // ⚡ 5min
+    const gain5mEl = document.getElementById('trade-gain-5m');
+    if (gain5mEl) {
+      const v = perf.pnl_today_5m || 0;
+      gain5mEl.textContent = fmtMoney(v);
+      gain5mEl.style.color = v >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    // 🕐 1h
+    const gain1hEl = document.getElementById('trade-gain-1h');
+    if (gain1hEl) {
+      const v = perf.pnl_today_1h || 0;
+      gain1hEl.textContent = fmtMoney(v);
+      gain1hEl.style.color = v >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    // 📅 1d
+    const gain1dEl = document.getElementById('trade-gain-1d');
+    if (gain1dEl) {
+      const v = perf.pnl_today_1d || 0;
+      gain1dEl.textContent = fmtMoney(v);
+      gain1dEl.style.color = v >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    // Ganho Hoje
     const gainTodayEl = document.getElementById('trade-gain-today');
     if (gainTodayEl) {
       gainTodayEl.textContent = fmtMoney(todayPnl);
       gainTodayEl.style.color = todayPnl >= 0 ? 'var(--green)' : 'var(--red)';
     }
     const gainTodayCyclesEl = document.getElementById('trade-gain-today-cycles');
-    if (gainTodayCyclesEl) gainTodayCyclesEl.textContent = `${todayCycles.length} ciclo${todayCycles.length !== 1 ? 's' : ''} hoje`;
-
+    if (gainTodayCyclesEl) gainTodayCyclesEl.textContent = `${perf.today_cycles ?? todayCycles.length} ciclo${(perf.today_cycles ?? todayCycles.length) !== 1 ? 's' : ''} hoje`;
+    // Ganho Total
     const gainTotalEl = document.getElementById('trade-gain-total');
     if (gainTotalEl) {
       gainTotalEl.textContent = fmtMoney(totalPnl);
@@ -1091,6 +1117,10 @@ async function loadTradePage() {
     }
     const gainTotalCyclesEl = document.getElementById('trade-gain-total-cycles');
     if (gainTotalCyclesEl) gainTotalCyclesEl.textContent = `${totalCycles} ciclo${totalCycles !== 1 ? 's' : ''} no total`;
+    // Banner reinvestimento
+    const reinvestBanner = document.getElementById('trade-reinvest-info');
+    if (reinvestBanner) reinvestBanner.style.display = 'block';
+
 
     // Status bar
     const isActive = d.auto_trading;

@@ -604,21 +604,44 @@
         <!-- Row 1.5: Valor Total -->
         <div class="card mb-16">
           <div class="card-header">
-            <span class="card-title">💰 Valor Total</span>
-            <span class="badge badge-blue">Desempenho</span>
+            <span class="card-title">💰 Desempenho por Timeframe</span>
+            <span class="badge badge-blue">Capital: <span id="trade-capital-display">R$ --</span></span>
           </div>
-          <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:space-around;padding:8px 0">
-            <div style="text-align:center;min-width:140px">
-              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ganho Hoje</div>
-              <div id="trade-gain-today" style="font-size:26px;font-weight:800;color:var(--text-primary)">R$ --</div>
-              <div id="trade-gain-today-cycles" style="font-size:11px;color:var(--text-muted);margin-top:4px">— ciclos hoje</div>
+          <!-- Linha 1: P&L por timeframe -->
+          <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:space-around;padding:12px 4px 8px">
+            <div style="text-align:center;min-width:100px;flex:1">
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">⚡ 5 MIN</div>
+              <div id="trade-gain-5m" style="font-size:22px;font-weight:800;color:var(--text-primary)">R$ --</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:2px">20% capital</div>
             </div>
             <div style="width:1px;background:var(--border);align-self:stretch"></div>
-            <div style="text-align:center;min-width:140px">
-              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Ganho Total</div>
-              <div id="trade-gain-total" style="font-size:26px;font-weight:800;color:var(--text-primary)">R$ --</div>
-              <div id="trade-gain-total-cycles" style="font-size:11px;color:var(--text-muted);margin-top:4px">— ciclos totais</div>
+            <div style="text-align:center;min-width:100px;flex:1">
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🕐 1 HORA</div>
+              <div id="trade-gain-1h" style="font-size:22px;font-weight:800;color:var(--text-primary)">R$ --</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:2px">35% capital</div>
             </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="text-align:center;min-width:100px;flex:1">
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📅 1 DIA</div>
+              <div id="trade-gain-1d" style="font-size:22px;font-weight:800;color:var(--text-primary)">R$ --</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:2px">45% capital</div>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="text-align:center;min-width:100px;flex:1">
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Ganho Hoje</div>
+              <div id="trade-gain-today" style="font-size:22px;font-weight:800;color:var(--text-primary)">R$ --</div>
+              <div id="trade-gain-today-cycles" style="font-size:10px;color:var(--text-muted);margin-top:2px">— ciclos hoje</div>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="text-align:center;min-width:100px;flex:1">
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Ganho Total</div>
+              <div id="trade-gain-total" style="font-size:22px;font-weight:800;color:var(--text-primary)">R$ --</div>
+              <div id="trade-gain-total-cycles" style="font-size:10px;color:var(--text-muted);margin-top:2px">— ciclos totais</div>
+            </div>
+          </div>
+          <!-- Reinvestimento info -->
+          <div id="trade-reinvest-info" style="display:none;text-align:center;padding:6px 12px;background:var(--bg-secondary);border-radius:6px;margin:8px;font-size:11px;color:var(--text-muted)">
+            💰 Reinvestimento automático ativo — lucros reinvestidos ao final de cada dia às 17h BRT
           </div>
         </div>
 

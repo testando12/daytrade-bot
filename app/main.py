@@ -67,6 +67,13 @@ _scheduler_state = {
     "task": None,
 }
 
+# Controle de reinvestimento diário
+_last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
+
+# Alocação por timeframe: SHORT 20%, MEDIUM 35%, LONG 45%
+_TIMEFRAME_ALLOC = {"5m": 0.20, "1h": 0.35, "1d": 0.45}
+_TIMEFRAME_N_ASSETS = {"5m": 5, "1h": 7, "1d": 9}  # top N ativos por bucket
+
 def _is_market_open() -> bool:
     """Verifica se o mercado B3 está aberto (seg-sex 10:00-17:00 BRT = UTC-3)."""
     from datetime import timezone, timedelta
@@ -79,11 +86,32 @@ def _is_market_open() -> bool:
 
 async def _auto_cycle_loop():
     """Loop interno do scheduler: executa ciclos de trading automaticamente."""
+    global _last_reinvestment_date
     _scheduler_state["running"] = True
     print("[scheduler] Iniciado — intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
     # Aguarda o servidor subir completamente antes do primeiro ciclo
     await asyncio.sleep(20)
     while _scheduler_state["running"]:
+        from datetime import timezone, timedelta
+        brt = timezone(timedelta(hours=-3))
+        now_brt = datetime.now(brt)
+        today_str = now_brt.strftime("%Y-%m-%d")
+
+        # ✨ Reinvestimento automático: após 17h BRT, reinveste lucro do dia
+        if now_brt.weekday() < 5 and now_brt.hour == 17 and _last_reinvestment_date != today_str:
+            try:
+                today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str)]
+                today_pnl = round(sum(c.get("pnl", 0) for c in today_cycles), 2)
+                if today_pnl != 0:
+                    _trade_state["capital"] = round(_trade_state["capital"] + today_pnl, 2)
+                    sinal = "⬆ Lucro" if today_pnl > 0 else "⬇ Prejuízo"
+                    _trade_log("REINVESTIMENTO", "—", today_pnl,
+                        f"💰 {sinal} do dia R$ {today_pnl:+.2f} reinvestido. Novo capital: R$ {_trade_state['capital']:.2f}")
+                    print(f"[scheduler] Reinvestimento: R$ {today_pnl:+.2f} → capital agora R$ {_trade_state['capital']:.2f}", flush=True)
+                _last_reinvestment_date = today_str
+            except Exception as e:
+                print(f"[scheduler] Erro no reinvestimento: {e}", flush=True)
+
         interval_sec = _scheduler_state["interval_minutes"] * 60
         _scheduler_state["next_run"] = datetime.now().isoformat()
 
@@ -98,7 +126,8 @@ async def _auto_cycle_loop():
                 irq = result.get("irq", 0)
                 print(
                     f"[scheduler] Ciclo #{_scheduler_state['total_auto_cycles']} "
-                    f"| P&L estimado: R$ {pnl:.4f} | IRQ: {irq:.3f}",
+                    f"| P&L: R$ {pnl:.4f} (5m:{result.get('pnl_5m',0):.2f} 1h:{result.get('pnl_1h',0):.2f} 1d:{result.get('pnl_1d',0):.2f})"
+                    f" | IRQ: {irq:.3f}",
                     flush=True,
                 )
             except Exception as e:
@@ -1384,11 +1413,15 @@ def _trade_log(event_type: str, asset: str, amount: float, note: str):
     _save_json(_STATE_FILE, _trade_state)
 
 
-def _record_cycle_performance(pnl: float, capital: float, irq: float):
+def _record_cycle_performance(pnl: float, capital: float, irq: float,
+                               pnl_5m: float = 0.0, pnl_1h: float = 0.0, pnl_1d: float = 0.0):
     """Registra o P&L de um ciclo no histórico de performance."""
     _perf_state["cycles"].append({
         "timestamp": datetime.now().isoformat(),
         "pnl":       round(pnl, 4),
+        "pnl_5m":    round(pnl_5m, 4),
+        "pnl_1h":    round(pnl_1h, 4),
+        "pnl_1d":    round(pnl_1d, 4),
         "capital":   round(capital, 2),
         "irq":       round(irq, 4),
     })
@@ -1490,139 +1523,120 @@ async def run_trade_cycle():
 
 
 async def _run_trade_cycle_internal() -> dict:
-    """Lógica interna de um ciclo de trading. Chamada pelo endpoint e pelo scheduler."""
+    """Lógica interna de um ciclo de trading com alocação em 3 timeframes (20/35/45%)."""
     capital = _trade_state["capital"]
-
-    # ── 1. Obter dados de mercado — B3 + Crypto ─────────────────────
-    all_assets = settings.ALL_ASSETS  # B3 + crypto
-    market_data = None
+    all_assets = settings.ALL_ASSETS
     data_source = "test"
 
+    # ── 1. Buscar dados para os 3 timeframes ─────────────────────────────
+    klines_by_tf: dict = {"5m": None, "1h": None, "1d": None}
     if MARKET_DATA_AVAILABLE and market_data_service:
-        try:
-            klines = await market_data_service.get_all_klines(
-                all_assets, "5m", 25
-            )
-            if klines:
-                market_data = klines
-                data_source = "yahoo.finance"
-        except Exception as e:
-            _trade_log("ERRO", "—", 0, f"Falha ao buscar dados ao vivo: {e}. Usando dados de teste.")
+        for tf in ("5m", "1h", "1d"):
+            try:
+                k = await market_data_service.get_all_klines(all_assets, tf, 25)
+                if k:
+                    klines_by_tf[tf] = k
+                    data_source = "brapi/yahoo"
+            except Exception:
+                pass
+    # Fallback para dados de teste
+    for tf in ("5m", "1h", "1d"):
+        if not klines_by_tf[tf]:
+            klines_by_tf[tf] = test_assets_data
 
-    if not market_data:
-        # Fallback: test data (B3 + Crypto)
-        market_data = test_assets_data
-        data_source = "test"
+    # ── 2. Top N ativos por momentum em cada timeframe ───────────────────
+    def _top_assets(klines, n):
+        mom = MomentumAnalyzer.calculate_multiple_assets(klines)
+        sorted_assets = sorted(mom.items(), key=lambda x: x[1].get("momentum_score", 0), reverse=True)
+        return [a for a, _ in sorted_assets[:n]], mom
 
-    # ── 2. Análise de Momentum ────────────────────────────────────────────
-    momentum_results = MomentumAnalyzer.calculate_multiple_assets(market_data)
-    if not momentum_results:
-        _trade_log("ERRO", "—", 0, "Momentum analyzer retornou vazio")
-        return {"success": False, "message": "Sem dados de mercado"}
+    capital_5m = round(capital * _TIMEFRAME_ALLOC["5m"], 2)
+    capital_1h = round(capital * _TIMEFRAME_ALLOC["1h"], 2)
+    capital_1d = round(capital * _TIMEFRAME_ALLOC["1d"], 2)
 
-    momentum_scores = {asset: data["momentum_score"] for asset, data in momentum_results.items()}
+    top_5m, mom_5m = _top_assets(klines_by_tf["5m"], _TIMEFRAME_N_ASSETS["5m"])
+    top_1h, mom_1h = _top_assets(klines_by_tf["1h"], _TIMEFRAME_N_ASSETS["1h"])
+    top_1d, mom_1d = _top_assets(klines_by_tf["1d"], _TIMEFRAME_N_ASSETS["1d"])
 
-    # ── 3. Análise de Risco ───────────────────────────────────────────────
-    # Use first available asset for risk reference
-    ref_asset = list(market_data.keys())[0]
-    ref_data = market_data[ref_asset]
-    risk_analysis = RiskAnalyzer.calculate_irq(
-        ref_data.get("prices", []),
-        ref_data.get("volumes", []),
-    )
-    irq_score = risk_analysis["irq_score"]
+    # ── 3. Risco (referência via 5m) ─────────────────────────────────────
+    ref_asset = top_5m[0] if top_5m else list(klines_by_tf["5m"].keys())[0]
+    ref_data  = klines_by_tf["5m"].get(ref_asset, {})
+    risk_analysis = RiskAnalyzer.calculate_irq(ref_data.get("prices", []), ref_data.get("volumes", []))
+    irq_score  = risk_analysis["irq_score"]
     protection = RiskAnalyzer.get_protection_level(irq_score)
 
-    # ── 4. Alocação de portfólio ──────────────────────────────────────────
-    allocation = PortfolioManager.calculate_portfolio_allocation(
-        momentum_scores, irq_score, capital
-    )
-    rebalancing = PortfolioManager.apply_rebalancing_rules(
-        allocation, momentum_results, capital, irq_score
-    )
+    # ── 4. P&L por bucket ────────────────────────────────────────────────
+    def _calc_pnl_bucket(top_list, klines, bucket_capital):
+        if not top_list:
+            return 0.0, {}
+        per_asset = round(bucket_capital / len(top_list), 2)
+        pnl = 0.0
+        positions = {}
+        for asset in top_list:
+            prices = klines.get(asset, {}).get("prices", []) if klines else []
+            if len(prices) >= 2 and prices[-2] != 0:
+                ret = (prices[-1] - prices[-2]) / prices[-2]
+            else:
+                ret = 0.0
+            pnl += per_asset * ret
+            positions[asset] = {"amount": per_asset, "ret_pct": round(ret * 100, 3)}
+        return round(pnl, 4), positions
 
+    pnl_5m, pos_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m)
+    pnl_1h, pos_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h)
+    pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d)
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d, 4)
+
+    # ── 5. Montar posições unificadas ────────────────────────────────────
     new_positions = {}
-    cycle_events = []
-
-    for asset, alloc in rebalancing.items():
-        action      = alloc.get("action", "HOLD")
-        rec_amount  = alloc.get("recommended_amount", 0)
-        cur_amount  = alloc.get("current_amount", 0)
-        change_pct  = alloc.get("change_percentage", 0)
-        classif     = alloc.get("classification", "—")
-
-        new_positions[asset] = {
-            "amount":         round(rec_amount, 2),
-            "action":         action,
-            "pct":            round(rec_amount / capital * 100, 1) if capital > 0 else 0,
-            "classification": classif,
-            "change_pct":     round(change_pct, 2),
-        }
-
-        if action == "BUY" and rec_amount > cur_amount:
-            buy_val = rec_amount - cur_amount
-            cycle_events.append(("COMPRA", asset, buy_val,
-                f"BUY {asset} • {classif} • Alocando R$ {buy_val:.2f} (IRQ: {irq_score:.3f})"))
-        elif action == "SELL" and cur_amount > rec_amount:
-            sell_val = cur_amount - rec_amount
-            cycle_events.append(("VENDA", asset, sell_val,
-                f"SELL {asset} • {classif} • Reduzindo R$ {sell_val:.2f} (IRQ: {irq_score:.3f})"))
+    for asset, info in pos_5m.items():
+        new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "5m",
+            "pct": round(info["amount"]/capital*100, 1), "classification": "SHORT", "change_pct": info["ret_pct"]}
+    for asset, info in pos_1h.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+1h"
         else:
-            cycle_events.append(("HOLD", asset, rec_amount,
-                f"HOLD {asset} • {classif} • Mantendo R$ {rec_amount:.2f}"))
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "1h",
+                "pct": round(info["amount"]/capital*100, 1), "classification": "MEDIUM", "change_pct": info["ret_pct"]}
+    for asset, info in pos_1d.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+1d"
+        else:
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "1d",
+                "pct": round(info["amount"]/capital*100, 1), "classification": "LONG", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
     _trade_state["last_cycle"] = datetime.now().isoformat()
+    _trade_state["total_pnl"] = round(_trade_state.get("total_pnl", 0.0) + cycle_pnl, 4)
 
-    # Calcular P&L do ciclo com base na variação real de preço de cada posição
-    # P&L = Σ (valor_alocado × retorno_do_último_candle)
-    cycle_pnl = 0.0
-    for asset, pos in new_positions.items():
-        allocated = pos.get("amount", 0.0)
-        if allocated <= 0:
-            continue
-        prices = []
-        if market_data and asset in market_data:
-            prices = market_data[asset].get("prices", [])
-        if len(prices) >= 2:
-            last_ret = (prices[-1] - prices[-2]) / prices[-2] if prices[-2] != 0 else 0.0
-            cycle_pnl += allocated * last_ret
-    cycle_pnl = round(cycle_pnl, 4)
-
-    # Acumular total_pnl
-    _trade_state["total_pnl"] = round(
-        _trade_state.get("total_pnl", 0.0) + cycle_pnl, 4
-    )
-
-    # Log do ciclo
+    # ── 6. Log e histórico ───────────────────────────────────────────────
     _trade_log("CICLO", "—", capital,
-        f"🔄 Ciclo executado via {data_source} — {len(rebalancing)} ativos • IRQ: {irq_score:.3f} • Nível: {protection['level']}")
-    for ev in cycle_events:
-        _trade_log(*ev)
+        f"🔄 {data_source} | 5m(20%): R${pnl_5m:+.2f} | 1h(35%): R${pnl_1h:+.2f} | 1d(45%): R${pnl_1d:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f}")
 
-    # Registrar performance para histórico
-    _record_cycle_performance(cycle_pnl, _trade_state["capital"], irq_score)
+    _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d)
 
-    # Salvar no banco se disponível
     if DB_AVAILABLE:
         try:
-            db.save_analysis("trade_cycle", {
-                "momentum": momentum_scores,
-                "irq": irq_score,
-                "capital": capital,
-                "positions": new_positions,
-            }, irq_score)
+            db.save_analysis("trade_cycle", {"irq": irq_score, "capital": capital, "cycle_pnl": cycle_pnl}, irq_score)
         except Exception:
             pass
 
     return {
-        "positions":       new_positions,
-        "irq":             round(irq_score, 4),
-        "irq_level":       protection["level"],
-        "assets_analyzed": len(rebalancing),
-        "last_cycle":      _trade_state["last_cycle"],
-        "data_source":     data_source,
-        "cycle_pnl":       round(cycle_pnl, 4),
+        "positions":   new_positions,
+        "irq":         round(irq_score, 4),
+        "irq_level":   protection["level"],
+        "assets_analyzed": len(new_positions),
+        "last_cycle":  _trade_state["last_cycle"],
+        "data_source": data_source,
+        "cycle_pnl":   cycle_pnl,
+        "pnl_5m":      pnl_5m,
+        "pnl_1h":      pnl_1h,
+        "pnl_1d":      pnl_1d,
+        "capital_5m":  capital_5m,
+        "capital_1h":  capital_1h,
+        "capital_1d":  capital_1d,
     }
 
 
@@ -1758,23 +1772,48 @@ async def get_performance():
             dd = (v - peak) / peak * 100 if peak > 0 else 0
             max_dd = min(max_dd, dd)
 
+    # P&L por timeframe — hoje e total
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_cycles = [c for c in cycles if c.get("timestamp", "").startswith(today_str)]
+    pnl_today_5m  = round(sum(c.get("pnl_5m", 0) for c in today_cycles), 2)
+    pnl_today_1h  = round(sum(c.get("pnl_1h", 0) for c in today_cycles), 2)
+    pnl_today_1d  = round(sum(c.get("pnl_1d", 0) for c in today_cycles), 2)
+    pnl_today     = round(pnl_today_5m + pnl_today_1h + pnl_today_1d, 2)
+    pnl_total_5m  = round(sum(c.get("pnl_5m", 0) for c in cycles), 2)
+    pnl_total_1h  = round(sum(c.get("pnl_1h", 0) for c in cycles), 2)
+    pnl_total_1d  = round(sum(c.get("pnl_1d", 0) for c in cycles), 2)
+
     return {
         "success": True,
         "data": {
-            "total_cycles":     len(cycles),
-            "win_count":        wins,
-            "loss_count":       losses,
-            "win_rate_pct":     round(wins / total * 100, 2) if total > 0 else 0.0,
-            "total_pnl":        round(total_pnl, 2),
-            "avg_pnl_per_cycle":round(avg_daily, 2),
-            "best_cycle_pnl":   _perf_state.get("best_day_pnl", 0.0),
-            "worst_cycle_pnl":  _perf_state.get("worst_day_pnl", 0.0),
-            "max_drawdown_pct": round(max_dd, 4),
-            "sharpe_ratio":     round(sharpe, 4),
-            "equity_curve":     equity[-100:],   # últimos 100 pontos
-            "recent_cycles":    cycles[-20:],    # últimos 20 ciclos
-            "last_backtest":    _perf_state.get("last_backtest"),
-            "current_capital":  _trade_state.get("capital"),
+            "total_cycles":      len(cycles),
+            "win_count":         wins,
+            "loss_count":        losses,
+            "win_rate_pct":      round(wins / total * 100, 2) if total > 0 else 0.0,
+            "total_pnl":         round(total_pnl, 2),
+            "avg_pnl_per_cycle": round(avg_daily, 2),
+            "best_cycle_pnl":    _perf_state.get("best_day_pnl", 0.0),
+            "worst_cycle_pnl":   _perf_state.get("worst_day_pnl", 0.0),
+            "max_drawdown_pct":  round(max_dd, 4),
+            "sharpe_ratio":      round(sharpe, 4),
+            "equity_curve":      equity[-100:],
+            "recent_cycles":     cycles[-20:],
+            "last_backtest":     _perf_state.get("last_backtest"),
+            "current_capital":   _trade_state.get("capital"),
+            # P&L por timeframe — hoje
+            "pnl_today":         pnl_today,
+            "pnl_today_5m":      pnl_today_5m,
+            "pnl_today_1h":      pnl_today_1h,
+            "pnl_today_1d":      pnl_today_1d,
+            "today_cycles":      len(today_cycles),
+            # P&L por timeframe — histórico total
+            "pnl_total_5m":      pnl_total_5m,
+            "pnl_total_1h":      pnl_total_1h,
+            "pnl_total_1d":      pnl_total_1d,
+            # Alocação vigente
+            "alloc_5m_pct":      int(_TIMEFRAME_ALLOC["5m"] * 100),
+            "alloc_1h_pct":      int(_TIMEFRAME_ALLOC["1h"] * 100),
+            "alloc_1d_pct":      int(_TIMEFRAME_ALLOC["1d"] * 100),
         },
     }
 
