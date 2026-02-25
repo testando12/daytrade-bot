@@ -60,11 +60,12 @@ except ImportError:
 
 _scheduler_state = {
     "running": False,
-    "interval_minutes": 30,   # ciclo a cada 30 minutos
-    "only_market_hours": True, # B3: seg-sex 10h-17h BRT; crypto ignora isso
+    "interval_minutes": 30,   # ciclo a cada 30 minutos (B3); mín 60min fora do B3
+    "only_market_hours": True, # mantido por compatibilidade; crypto sempre roda
     "next_run": None,
     "total_auto_cycles": 0,
     "task": None,
+    "session": "",             # sessão atual: "B3+Crypto" ou "Crypto24/7"
 }
 
 # Controle de reinvestimento diário
@@ -82,6 +83,21 @@ def _is_market_open() -> bool:
     if now.weekday() >= 5:   # sábado=5, domingo=6
         return False
     return 10 <= now.hour < 17
+
+
+def _current_session() -> tuple:
+    """
+    Retorna (assets, session_label) de acordo com o horário:
+    - B3 aberta (seg-sex 10-17h BRT) → B3 + Crypto (30 ativos)
+    - B3 fechada                      → somente Crypto 24/7 (10 ativos)
+    """
+    from datetime import timezone, timedelta
+    brt = timezone(timedelta(hours=-3))
+    now = datetime.now(brt)
+    if now.weekday() < 5 and 10 <= now.hour < 17:
+        return settings.ALL_ASSETS, f"🇧🇷 B3 + 🌍 Crypto (30 ativos)"
+    else:
+        return settings.CRYPTO_ASSETS, f"🌍 Crypto 24/7 ({len(settings.CRYPTO_ASSETS)} ativos)"
 
 
 async def _auto_cycle_loop():
@@ -115,23 +131,29 @@ async def _auto_cycle_loop():
         interval_sec = _scheduler_state["interval_minutes"] * 60
         _scheduler_state["next_run"] = datetime.now().isoformat()
 
-        # Verificar horário de mercado (se configurado)
-        if _scheduler_state["only_market_hours"] and not _is_market_open():
-            print("[scheduler] Fora do horário de mercado — aguardando...", flush=True)
+        # Determina sessão: B3+Crypto ou Crypto-only
+        active_assets, session_label = _current_session()
+        _scheduler_state["session"] = session_label
+
+        # Intervalo maior fora do horário B3 (crypto é menos volátil à noite)
+        if _is_market_open():
+            interval_sec = _scheduler_state["interval_minutes"] * 60
         else:
-            try:
-                result = await _run_trade_cycle_internal()
-                _scheduler_state["total_auto_cycles"] += 1
-                pnl = result.get("cycle_pnl", 0)
-                irq = result.get("irq", 0)
-                print(
-                    f"[scheduler] Ciclo #{_scheduler_state['total_auto_cycles']} "
-                    f"| P&L: R$ {pnl:.4f} (5m:{result.get('pnl_5m',0):.2f} 1h:{result.get('pnl_1h',0):.2f} 1d:{result.get('pnl_1d',0):.2f})"
-                    f" | IRQ: {irq:.3f}",
-                    flush=True,
-                )
-            except Exception as e:
-                print(f"[scheduler] Erro no ciclo automático: {e}", flush=True)
+            interval_sec = max(_scheduler_state["interval_minutes"], 60) * 60  # mín 1h fora do B3
+
+        try:
+            result = await _run_trade_cycle_internal(assets=active_assets)
+            _scheduler_state["total_auto_cycles"] += 1
+            pnl = result.get("cycle_pnl", 0)
+            irq = result.get("irq", 0)
+            print(
+                f"[scheduler] Ciclo #{_scheduler_state['total_auto_cycles']} [{session_label}] "
+                f"| P&L: R$ {pnl:.4f} (5m:{result.get('pnl_5m',0):.2f} 1h:{result.get('pnl_1h',0):.2f} 1d:{result.get('pnl_1d',0):.2f})"
+                f" | IRQ: {irq:.3f}",
+                flush=True,
+            )
+        except Exception as e:
+            print(f"[scheduler] Erro no ciclo automático: {e}", flush=True)
 
         await asyncio.sleep(interval_sec)
 
@@ -1450,15 +1472,18 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
 @app.get("/trade/status")
 async def trade_status():
     """Retorna o estado atual do trading: capital, posições, log de eventos."""
+    _, session_label = _current_session()
     return {
         "success": True,
         "data": {
-            "capital": _trade_state["capital"],
+            "capital":      _trade_state["capital"],
             "auto_trading": _trade_state["auto_trading"],
-            "total_pnl": _trade_state["total_pnl"],
-            "positions": _trade_state["positions"],
-            "log": _trade_state["log"],
-            "last_cycle": _trade_state["last_cycle"],
+            "total_pnl":    _trade_state["total_pnl"],
+            "positions":    _trade_state["positions"],
+            "log":          _trade_state["log"],
+            "last_cycle":   _trade_state["last_cycle"],
+            "b3_open":      _is_market_open(),
+            "session":      session_label,
         },
     }
 
@@ -1526,10 +1551,12 @@ async def run_trade_cycle():
     }
 
 
-async def _run_trade_cycle_internal() -> dict:
+async def _run_trade_cycle_internal(assets: list = None) -> dict:
     """Lógica interna de um ciclo de trading com alocação em 3 timeframes (20/35/45%)."""
     capital = _trade_state["capital"]
-    all_assets = settings.ALL_ASSETS
+    all_assets = assets if assets is not None else settings.ALL_ASSETS
+    b3_open = _is_market_open()
+    session_label = "B3+Crypto" if (assets is None or len(all_assets) > len(settings.CRYPTO_ASSETS)) else "Crypto24/7"
     data_source = "test"
 
     # ── 1. Buscar dados para os 3 timeframes ─────────────────────────────
@@ -1617,7 +1644,7 @@ async def _run_trade_cycle_internal() -> dict:
 
     # ── 6. Log e histórico ───────────────────────────────────────────────
     _trade_log("CICLO", "—", capital,
-        f"🔄 {data_source} | 5m(20%): R${pnl_5m:+.2f} | 1h(35%): R${pnl_1h:+.2f} | 1d(45%): R${pnl_1d:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f}")
+        f"🔄 [{session_label}] {data_source} | 5m(20%): R${pnl_5m:+.2f} | 1h(35%): R${pnl_1h:+.2f} | 1d(45%): R${pnl_1d:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d)
 
@@ -1634,6 +1661,8 @@ async def _run_trade_cycle_internal() -> dict:
         "assets_analyzed": len(new_positions),
         "last_cycle":  _trade_state["last_cycle"],
         "data_source": data_source,
+        "session":     session_label,
+        "b3_open":     b3_open,
         "cycle_pnl":   cycle_pnl,
         "pnl_5m":      pnl_5m,
         "pnl_1h":      pnl_1h,
@@ -1661,6 +1690,9 @@ async def scheduler_status():
             "only_market_hours":  _scheduler_state["only_market_hours"],
             "total_auto_cycles":  _scheduler_state["total_auto_cycles"],
             "market_open_now":    _is_market_open(),
+            "session":            _scheduler_state.get("session", _current_session()[1]),
+            "b3_open":            _is_market_open(),
+            "crypto_always_on":   True,
         },
     }
 

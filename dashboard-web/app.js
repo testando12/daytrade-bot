@@ -257,6 +257,14 @@ function destroyChart(id) {
   }
 }
 
+// Helper: verifica horário B3 no navegador (BRT = UTC-3, seg-sex 10-17h)
+function _is_market_open_js() {
+  const now = new Date();
+  const brt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const h = brt.getHours(), dow = brt.getDay();
+  return dow >= 1 && dow <= 5 && h >= 10 && h < 17;
+}
+
 // =============================================
 // PAGE: DASHBOARD
 // =============================================
@@ -1163,6 +1171,14 @@ async function loadTradePage() {
     }
     const capitalBadge = document.getElementById('trade-capital-badge');
     if (capitalBadge) capitalBadge.textContent = fmtMoney(d.capital);
+
+    // Sessão atual
+    const sessionBadge = document.getElementById('trade-session-badge');
+    if (sessionBadge) {
+      const b3Open = d.b3_open ?? _is_market_open_js();
+      sessionBadge.textContent = b3Open ? '🇧🇷 B3 + 🌍 Crypto' : '🌍 Crypto 24/7';
+      sessionBadge.className = `badge ${b3Open ? 'badge-green' : 'badge-blue'}`;
+    }
 
     const lastCycle = document.getElementById('trade-last-cycle');
     if (lastCycle) {
