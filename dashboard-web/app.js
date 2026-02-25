@@ -128,7 +128,7 @@ async function api(path, options = {}, timeoutMs = 30000) {
 
 async function checkApiConnection() {
   try {
-    await api('/');
+    await api('/health');
     setApiStatus(true);
   } catch (e) {
     setApiStatus(false);
