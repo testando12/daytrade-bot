@@ -789,10 +789,9 @@ async def get_market_predictions():
     try:
         assets = list(settings.ALL_ASSETS)
 
-        klines_5m, klines_1d = await asyncio.gather(
-            market_data_service.get_all_klines(assets, "5m", 35),
-            market_data_service.get_all_klines(assets, "1d", 35),
-        )
+        # Busca sequencial para evitar contencao de semaforo (80 assets x 2 intervalos)
+        klines_5m = await market_data_service.get_all_klines(assets, "5m", 35)
+        klines_1d = await market_data_service.get_all_klines(assets, "1d", 35)
 
         predictions = {}
         for asset in assets:
@@ -1080,10 +1079,9 @@ async def get_market_score():
     try:
         assets = list(settings.ALL_ASSETS)
 
-        klines_5m, klines_1d = await asyncio.gather(
-            market_data_service.get_all_klines(assets, "5m", 50),
-            market_data_service.get_all_klines(assets, "1d", 35),
-        )
+        # Busca sequencial para evitar contencao de semaforo
+        klines_5m = await market_data_service.get_all_klines(assets, "5m", 50)
+        klines_1d = await market_data_service.get_all_klines(assets, "1d", 35)
 
         # Notícias RSS (cache 10 min)
         global _news_cache

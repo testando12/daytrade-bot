@@ -13,7 +13,7 @@ Configure o token via variável de ambiente:
 
 import asyncio
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     import httpx
@@ -87,7 +87,7 @@ class BrapiMarketData:
         if not HTTPX_AVAILABLE:
             raise ImportError("httpx nao instalado. Execute: pip install httpx")
         self.timeout = getattr(settings, "MARKET_API_TIMEOUT", 8)
-        self._semaphore = asyncio.Semaphore(15)  # max 15 concurrent requests
+        self._semaphore = asyncio.Semaphore(30)  # max 30 concurrent requests
         self.token   = getattr(settings, "BRAPI_TOKEN", "").strip()
         # Populate US stock set from settings
         global _US_STOCK_SYMBOLS
@@ -443,13 +443,18 @@ class BrapiMarketData:
         asset: str,
         interval: str = "5m",
         limit: int = 25,
+        _client: Optional[Any] = None,
     ) -> Optional[Dict]:
-        """Candles históricos. Binance (crypto RT) | BRAPI (B3) | Yahoo (US/fallback)."""
+        """Candles historicos. Binance (crypto RT) | BRAPI (B3) | Yahoo (US/fallback)."""
         ticker = asset.upper()
         if interval not in self.VALID_INTERVALS:
             interval = "5m"
         async with self._semaphore:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            if _client is not None:
+                client = _client
+            else:
+                client = httpx.AsyncClient(timeout=self.timeout)
+            try:
                 result = None
                 if self._is_crypto(ticker):
                     result = await self._binance_get_klines(client, ticker, interval, limit)
@@ -458,34 +463,50 @@ class BrapiMarketData:
                 if result is None:
                     result = await self._yf_get_klines(client, ticker, interval, limit)
                 return result
+            finally:
+                if _client is None:
+                    await client.aclose()
 
     async def get_all_klines(
         self,
         assets: Optional[List[str]] = None,
         interval: str = "5m",
         limit: int = 25,
+        timeout: float = 45.0,
     ) -> Dict[str, Dict]:
-        """Klines de múltiplos ativos (BRAPI + Yahoo fallback). Timeout global de 10s."""
+        """Klines de multiplos ativos. Usa asyncio.wait para coletar resultados parciais.
+        Compartilha um unico httpx.AsyncClient para reduzir overhead de conexao."""
         if assets is None:
             assets = settings.ALLOWED_ASSETS
 
-        tasks   = [self.get_klines(a, interval, limit) for a in assets]
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=10.0
-            )
-        except asyncio.TimeoutError:
-            print(f"[market] get_all_klines timeout global (10s) para {len(assets)} ativos", flush=True)
-            results = []
+        async with httpx.AsyncClient(timeout=self.timeout) as shared_client:
+            task_map = {
+                asyncio.create_task(self.get_klines(a, interval, limit, _client=shared_client)): a
+                for a in assets
+            }
+
+            done, pending = await asyncio.wait(task_map.keys(), timeout=timeout)
+
+            # Cancel tasks still running after timeout
+            for t in pending:
+                t.cancel()
+            if pending:
+                print(f"[market] get_all_klines: {len(done)}/{len(assets)} OK, {len(pending)} timeout ({timeout}s, {interval})", flush=True)
+            else:
+                print(f"[market] get_all_klines: {len(done)}/{len(assets)} OK ({interval})", flush=True)
 
         market_data: Dict[str, Dict] = {}
-        for asset, klines in zip(assets, results):
-            if isinstance(klines, dict) and klines and klines.get("count", 0) > 0:
-                market_data[asset.upper()] = {
-                    "prices":  klines["prices"],
-                    "volumes": klines["volumes"],
-                }
+        for t in done:
+            asset = task_map[t]
+            try:
+                klines = t.result()
+                if isinstance(klines, dict) and klines and klines.get("count", 0) > 0:
+                    market_data[asset.upper()] = {
+                        "prices":  klines["prices"],
+                        "volumes": klines["volumes"],
+                    }
+            except Exception:
+                pass
         return market_data
 
     async def get_24h_ticker(self, asset: str) -> Optional[Dict]:
