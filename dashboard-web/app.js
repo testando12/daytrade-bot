@@ -864,17 +864,13 @@ async function loadPortfolio() {
     const data = await api('/analyze/full', { method: 'POST' }, 90000).catch(() => null);
     if (data && data.success) {
 
-    // Banner capital + P&L (update with full data)
+    // Full data from analysis
     const allocs = data.data.allocations || {};
     const mom = data.data.momentum_analysis || {};
     const irq = data.data.risk_analysis?.irq_score || 0;
 
     // Usar posições reais do trade quando existirem
-    const tradePositions = td.positions || {};
     const hasTradePos = Object.keys(tradePositions).length > 0;
-    const allocs = data.data.allocations || {};
-    const mom = data.data.momentum_analysis || {};
-    const irq = data.data.risk_analysis?.irq_score || 0;
 
     let total = 0;
     let entries;
@@ -925,10 +921,7 @@ async function loadPortfolio() {
       pieCtx.parentElement.innerHTML = '<div class="empty-state"><div class="empty-icon">💼</div><p>Sem posições — execute um ciclo no Trade</p></div>';
     }
 
-    // Summary — sincronizado com trade
-    const capital = td.capital || 2000;
-    const totalPnl = perf.total_pnl || td.total_pnl || 0;
-    const posCount = Object.keys(tradePositions).length;
+    // Summary — update with full analysis data
     summaryEl.innerHTML = `
       <div class="config-item"><span class="config-key">Capital do Bot</span><span class="config-value">${fmtMoney(capital)}</span></div>
       <div class="config-item"><span class="config-key">Total Alocado</span><span class="config-value">${fmtMoney(total)}</span></div>
