@@ -1553,12 +1553,22 @@ async def _run_trade_cycle_internal() -> dict:
     _trade_state["positions"] = new_positions
     _trade_state["last_cycle"] = datetime.now().isoformat()
 
-    # Calcular P&L do ciclo (aproximação por variação das posições)
-    cycle_pnl = sum(
-        ev[2] * (1 if ev[0] == "COMPRA" else -1 if ev[0] == "VENDA" else 0)
-        for ev in cycle_events
-    )
-    # Actualizar total_pnl acumulado
+    # Calcular P&L do ciclo com base na variação real de preço de cada posição
+    # P&L = Σ (valor_alocado × retorno_do_último_candle)
+    cycle_pnl = 0.0
+    for asset, pos in new_positions.items():
+        allocated = pos.get("amount", 0.0)
+        if allocated <= 0:
+            continue
+        prices = []
+        if market_data and asset in market_data:
+            prices = market_data[asset].get("prices", [])
+        if len(prices) >= 2:
+            last_ret = (prices[-1] - prices[-2]) / prices[-2] if prices[-2] != 0 else 0.0
+            cycle_pnl += allocated * last_ret
+    cycle_pnl = round(cycle_pnl, 4)
+
+    # Acumular total_pnl
     _trade_state["total_pnl"] = round(
         _trade_state.get("total_pnl", 0.0) + cycle_pnl, 4
     )
