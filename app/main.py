@@ -1383,8 +1383,10 @@ _trade_state: dict = _load_json(_STATE_FILE, dict(_DEFAULT_TRADE_STATE))
 if _trade_state.get("total_pnl", 0.0) < -5:
     _trade_state["total_pnl"] = 0.0
     _save_json(_STATE_FILE, _trade_state)
-# garantir que o capital do settings bata com o persisted
-settings.INITIAL_CAPITAL = _trade_state.get("capital", settings.INITIAL_CAPITAL)
+# Se o capital salvo for menor que o capital configurado, atualiza para o maior
+if _trade_state.get("capital", 0) < settings.INITIAL_CAPITAL:
+    _trade_state["capital"] = settings.INITIAL_CAPITAL
+    _save_json(_STATE_FILE, _trade_state)
 
 # ── performance history ────────────────────────────────
 _DEFAULT_PERF: dict = {
@@ -1495,9 +1497,11 @@ async def stop_auto_trading():
 @app.get("/trade/reset")
 @app.post("/trade/reset")
 async def reset_trade_state():
-    """Zera o histórico de P&L e ciclos (mantém capital e posições)."""
+    """Zera o histórico de P&L, ciclos e restaura capital ao valor padrão."""
     _trade_state["total_pnl"] = 0.0
-    _trade_state["log"] = []
+    _trade_state["capital"]   = settings.INITIAL_CAPITAL
+    _trade_state["log"]       = []
+    _trade_state["positions"] = {}
     _save_json(_STATE_FILE, _trade_state)
     _perf_state["cycles"] = []
     _perf_state["total_pnl_history"] = []
@@ -1506,7 +1510,7 @@ async def reset_trade_state():
     _perf_state["best_day_pnl"] = 0.0
     _perf_state["worst_day_pnl"] = 0.0
     _save_json(_PERF_FILE, _perf_state)
-    return {"success": True, "message": "Histórico zerado com sucesso"}
+    return {"success": True, "message": f"Histórico zerado — capital restaurado para R$ {settings.INITIAL_CAPITAL:.2f}"}
 
 
 @app.post("/trade/cycle")
