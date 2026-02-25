@@ -131,7 +131,8 @@
               <div class="card-icon blue">💰</div>
             </div>
             <div class="kpi-value" id="kpi-capital">R$ --</div>
-            <div class="kpi-label">Capital inicial configurado</div>
+            <div class="kpi-label">Capital atual do bot</div>
+            <div class="kpi-change" id="kpi-pnl" style="margin-top:4px">P&L: --</div>
           </div>
           <div class="card">
             <div class="card-header">
@@ -350,6 +351,38 @@
         <div class="flex items-center gap-12 mb-16">
           <button class="btn btn-primary" onclick="loadPortfolio()">↻ Recalcular</button>
           <span id="portfolio-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <!-- Banner capital + P&L do Trade -->
+        <div class="card mb-16" style="padding:12px 16px">
+          <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Capital do Bot</span>
+              <span id="ptf-capital" style="font-size:22px;font-weight:800;color:var(--text-primary)">R$ --</span>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase">P&L Hoje</span>
+              <span id="ptf-pnl-today" style="font-size:18px;font-weight:700">R$ --</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase">⚡ 5min (20%)</span>
+              <span id="ptf-pnl-5m" style="font-size:16px;font-weight:600">R$ --</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase">🕐 1h (35%)</span>
+              <span id="ptf-pnl-1h" style="font-size:16px;font-weight:600">R$ --</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase">📅 1d (45%)</span>
+              <span id="ptf-pnl-1d" style="font-size:16px;font-weight:600">R$ --</span>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase">P&L Total</span>
+              <span id="ptf-pnl-total" style="font-size:18px;font-weight:700">R$ --</span>
+            </div>
+          </div>
         </div>
 
         <div class="cards-grid cards-2">

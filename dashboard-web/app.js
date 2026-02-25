@@ -264,14 +264,15 @@ function destroyChart(id) {
 async function loadDashboard() {
   try {
     setApiStatus(true);
-    // Parallel: full analysis + market prices + risk status
-    const [analysis, riskStatus] = await Promise.all([
+    // Parallel: full analysis + trade status + risk status
+    const [analysis, tradeStatus, riskStatus] = await Promise.all([
       api('/analyze/full', { method: 'POST' }).catch(() => null),
+      api('/trade/status').catch(() => null),
       api('/risk/status').catch(() => null),
     ]);
 
     if (analysis && analysis.success) {
-      renderDashboardKPIs(analysis.data, riskStatus);
+      renderDashboardKPIs(analysis.data, riskStatus, tradeStatus);
       renderMomentumChart(analysis.data);
       renderRiskRadar(analysis.data);
       renderDashboardAllocation(analysis.data);
@@ -286,10 +287,16 @@ async function loadDashboard() {
   }
 }
 
-function renderDashboardKPIs(data, riskStatus) {
-  // Capital
-  const capital = data.market_data?.capital || data.portfolio?.capital || 150;
+function renderDashboardKPIs(data, riskStatus, tradeStatus) {
+  // Capital — usa /trade/status como fonte principal
+  const capital = tradeStatus?.data?.capital || data.market_data?.capital || data.portfolio?.capital || 2000;
   document.getElementById('kpi-capital').textContent = fmtMoney(capital);
+  const pnlVal = tradeStatus?.data?.total_pnl || 0;
+  const pnlEl = document.getElementById('kpi-pnl');
+  if (pnlEl) {
+    pnlEl.textContent = `P&L: ${fmtMoney(pnlVal)}`;
+    pnlEl.className = `kpi-change ${pnlVal >= 0 ? 'up' : 'down'}`;
+  }
 
   // IRQ
   const irq = data.risk_analysis;
@@ -776,8 +783,28 @@ async function loadPortfolio() {
   tbodyEl.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Calculando...</td></tr>';
 
   try {
-    const data = await api('/analyze/full', { method: 'POST' });
+    const [data, tradeStatus, perfData] = await Promise.all([
+      api('/analyze/full', { method: 'POST' }),
+      api('/trade/status').catch(() => null),
+      api('/performance').catch(() => null),
+    ]);
     if (!data.success) throw new Error();
+
+    // Banner capital + P&L
+    const td = tradeStatus?.data || {};
+    const perf = perfData?.data || {};
+    const setEl = (id, val, positive) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = val;
+      if (positive !== undefined) el.style.color = positive ? 'var(--green)' : 'var(--red)';
+    };
+    setEl('ptf-capital', fmtMoney(td.capital || 2000));
+    setEl('ptf-pnl-today', fmtMoney(perf.pnl_today || 0), (perf.pnl_today || 0) >= 0);
+    setEl('ptf-pnl-5m',   fmtMoney(perf.pnl_today_5m || 0), (perf.pnl_today_5m || 0) >= 0);
+    setEl('ptf-pnl-1h',   fmtMoney(perf.pnl_today_1h || 0), (perf.pnl_today_1h || 0) >= 0);
+    setEl('ptf-pnl-1d',   fmtMoney(perf.pnl_today_1d || 0), (perf.pnl_today_1d || 0) >= 0);
+    setEl('ptf-pnl-total', fmtMoney(perf.total_pnl || td.total_pnl || 0), (perf.total_pnl || 0) >= 0);
 
     const allocs = data.data.allocations || {};
     const mom = data.data.momentum_analysis || {};
