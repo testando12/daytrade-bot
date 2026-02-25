@@ -17,6 +17,61 @@ let currentPage = 'dashboard';
 let autoRefreshInterval = null;
 let charts = {};
 
+// Auto-refresh por página (segundos)
+const PAGE_REFRESH = {
+  dashboard:  30,
+  trade:      30,   // P&L 5min ao vivo
+  market:     60,
+  live:       45,
+  portfolio:  60,
+  risk:       30,
+  indicators: 0,    // manual
+  finance:    0,
+  events:     300,
+  security:   0,
+  history:    0,
+  settings:   0,
+};
+let _refreshCountdown = 0;
+let _refreshTimer = null;
+let _countdownTimer = null;
+
+function _startPageRefresh(page) {
+  // Limpa timers anteriores
+  if (_refreshTimer)   { clearInterval(_refreshTimer);   _refreshTimer = null; }
+  if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
+
+  const secs = PAGE_REFRESH[page] || 0;
+  if (!secs) {
+    _updateCountdownEl('');
+    return;
+  }
+
+  _refreshCountdown = secs;
+  _updateCountdownEl(_refreshCountdown);
+
+  // Countdown display
+  _countdownTimer = setInterval(() => {
+    _refreshCountdown--;
+    _updateCountdownEl(_refreshCountdown);
+    if (_refreshCountdown <= 0) _refreshCountdown = secs;
+  }, 1000);
+
+  // Real refresh
+  _refreshTimer = setInterval(() => {
+    loadPage(page);
+    _refreshCountdown = secs;
+  }, secs * 1000);
+}
+
+function _updateCountdownEl(val) {
+  const el = document.getElementById('topbar-countdown');
+  if (!el) return;
+  if (val === '') { el.textContent = ''; return; }
+  el.textContent = `↻ ${val}s`;
+  el.style.color = val <= 5 ? 'var(--yellow)' : 'var(--text-muted)';
+}
+
 // =============================================
 // INIT
 // =============================================
@@ -24,10 +79,7 @@ let charts = {};
 document.addEventListener('DOMContentLoaded', () => {
   checkApiConnection();
   loadPage('dashboard');
-  // Auto-refresh do dashboard a cada 30s
-  autoRefreshInterval = setInterval(() => {
-    if (currentPage === 'dashboard') loadDashboard();
-  }, 30000);
+  _startPageRefresh('dashboard');
 });
 
 // =============================================
@@ -68,6 +120,7 @@ function navigate(page) {
 
   currentPage = page;
   loadPage(page);
+  _startPageRefresh(page);
 }
 
 function loadPage(page) {
@@ -89,6 +142,7 @@ function loadPage(page) {
 
 function refreshCurrentPage() {
   loadPage(currentPage);
+  _startPageRefresh(currentPage); // reinicia o contador do zero
   toast('Dados atualizados', 'success');
 }
 
