@@ -64,6 +64,30 @@
       </div>
 
       <div class="nav-section">
+        <div class="nav-section-label">Análise</div>
+        <a class="nav-item" data-page="indicators" onclick="navigate('indicators')">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Indicadores</span>
+          <span class="nav-tooltip">Indicadores Técnicos</span>
+        </a>
+        <a class="nav-item" data-page="finance" onclick="navigate('finance')">
+          <span class="nav-icon">🧮</span>
+          <span class="nav-label">Finanças</span>
+          <span class="nav-tooltip">Calculadora Financeira</span>
+        </a>
+        <a class="nav-item" data-page="events" onclick="navigate('events')">
+          <span class="nav-icon">📅</span>
+          <span class="nav-label">Eventos</span>
+          <span class="nav-tooltip">Calendário & Dividendos</span>
+        </a>
+        <a class="nav-item" data-page="security" onclick="navigate('security')">
+          <span class="nav-icon">🔒</span>
+          <span class="nav-label">Segurança</span>
+          <span class="nav-tooltip">Segurança & Audit</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
         <div class="nav-section-label">Sistema</div>
         <a class="nav-item" data-page="settings" onclick="navigate('settings')">
           <span class="nav-icon">⚙️</span>
@@ -813,6 +837,304 @@
                 <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/risk/can-trade</td><td>Verificar se pode operar</td></tr>
                 <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/db/stats</td><td>Estatísticas do banco</td></tr>
                 <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/modules</td><td>Status dos módulos</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/market/forex</td><td>Câmbio & índices de mercado</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/market/indicators/{asset}</td><td>Indicadores técnicos completos</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/market/indicators-all</td><td>Indicadores resumidos (todos ativos)</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/finance/calculator</td><td>Taxas, impostos, preço médio</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/market/events</td><td>Calendário econômico & notícias</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/market/dividends</td><td>Dividend yield dos ativos</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/security/audit</td><td>Audit trail (compliance)</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/security/status</td><td>Status de segurança</td></tr>
+                <tr><td><span class="badge badge-blue">GET</span></td><td class="monospace">/user/summary</td><td>Resumo consolidado do usuário</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: INDICADORES TÉCNICOS
+           ========================================= -->
+      <div id="page-indicators" class="page">
+        <div class="page-title">📊 Indicadores Técnicos</div>
+        <div class="page-subtitle">MACD, Bollinger Bands, Estocástico, Fibonacci, VWAP e RSI para todos os ativos</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadIndicators()">↻ Atualizar Indicadores</button>
+          <select id="indicators-interval"
+            style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px"
+            onchange="loadIndicators()">
+            <option value="5m">5 Minutos</option>
+            <option value="1h">1 Hora</option>
+            <option value="1d">1 Dia</option>
+          </select>
+          <span id="indicators-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <!-- Resumo de todos os ativos -->
+        <div class="card mb-16">
+          <div class="card-header">
+            <span class="card-title">Painel de Indicadores — Todos os Ativos</span>
+            <span class="badge badge-blue">MACD + Bollinger + RSI</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ativo</th>
+                  <th>Preço</th>
+                  <th>RSI</th>
+                  <th>MACD Trend</th>
+                  <th>MACD Cross</th>
+                  <th>Bollinger %</th>
+                  <th>Banda</th>
+                  <th>Consenso</th>
+                </tr>
+              </thead>
+              <tbody id="indicators-all-tbody">
+                <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Clique em Atualizar para carregar...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Detalhe de um ativo específico -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Detalhe do Ativo</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="indicator-asset-input" type="text" placeholder="Ex: BTCUSDT"
+                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px;width:140px" />
+              <button class="btn btn-primary btn-sm" onclick="loadSingleIndicator()">Analisar</button>
+            </div>
+          </div>
+          <div id="indicator-detail-content">
+            <div class="empty-state"><div class="empty-icon">📊</div><p>Digite um ativo acima e clique Analisar</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: FINANÇAS
+           ========================================= -->
+      <div id="page-finance" class="page">
+        <div class="page-title">🧮 Calculadora Financeira</div>
+        <div class="page-subtitle">Taxas, impostos, preço médio e rentabilidade líquida</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadFinance()">↻ Recalcular</button>
+          <span id="finance-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="cards-grid cards-4 mb-16" id="finance-kpis">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Capital</span><div class="card-icon blue">💰</div></div>
+            <div class="kpi-value" id="fin-capital">R$ --</div>
+            <div class="kpi-label">Capital do bot</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">P&L Bruto</span><div class="card-icon green">📈</div></div>
+            <div class="kpi-value" id="fin-pnl-bruto">R$ --</div>
+            <div class="kpi-label">Sem descontar taxas</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Taxas + IR</span><div class="card-icon red">🏛️</div></div>
+            <div class="kpi-value" id="fin-fees-tax">R$ --</div>
+            <div class="kpi-label">Total estimado</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">P&L Líquido</span><div class="card-icon green">💎</div></div>
+            <div class="kpi-value" id="fin-pnl-liq">R$ --</div>
+            <div class="kpi-label" id="fin-rentab">Rentab.: --%</div>
+          </div>
+        </div>
+
+        <!-- Taxas de referência -->
+        <div class="cards-grid cards-2 mb-16">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Taxas de Referência</span></div>
+            <div id="finance-fee-rates"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Regras de IR (Brasil)</span></div>
+            <div id="finance-tax-rates"></div>
+          </div>
+        </div>
+
+        <!-- Detalhamento por posição -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Detalhamento por Posição</span>
+            <span class="badge badge-blue">Taxas + IR estimado</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ativo</th><th>Tipo</th><th>Qtd</th><th>Preço Entrada</th>
+                  <th>Alocado</th><th>P&L Bruto</th><th>Taxas</th>
+                  <th>IR Est.</th><th>P&L Líq</th><th>Rentab.</th>
+                </tr>
+              </thead>
+              <tbody id="finance-positions-tbody">
+                <tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text-muted)">Clique Recalcular...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: EVENTOS & DIVIDENDOS
+           ========================================= -->
+      <div id="page-events" class="page">
+        <div class="page-title">📅 Eventos & Dividendos</div>
+        <div class="page-subtitle">Calendário econômico, notícias RSS e dividend yield</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadEvents()">↻ Atualizar</button>
+          <span id="events-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <!-- Forex & Índices -->
+        <div class="card mb-16">
+          <div class="card-header">
+            <span class="card-title">💱 Câmbio & Índices de Mercado</span>
+            <span class="badge badge-blue">Tempo Real</span>
+          </div>
+          <div class="cards-grid cards-5" id="forex-cards" style="padding:8px 0">
+            <div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div> Carregando câmbio...</div>
+          </div>
+        </div>
+
+        <!-- Calendário Econômico -->
+        <div class="cards-grid cards-2 mb-16">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">📋 Calendário Econômico</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Evento</th><th>Região</th><th>Impacto</th><th>Frequência</th></tr>
+                </thead>
+                <tbody id="events-calendar-tbody">
+                  <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">📰 Últimas Notícias</span>
+              <span class="badge badge-green">RSS</span>
+            </div>
+            <div id="events-news-list" style="max-height:400px;overflow-y:auto">
+              <div class="loading-overlay"><div class="spinner"></div> Carregando...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dividendos -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">💰 Dividend Yield dos Ativos</span>
+            <span class="badge badge-green">Yahoo Finance</span>
+          </div>
+          <div style="padding:6px 0 12px;font-size:11px;color:var(--text-muted);border-bottom:1px solid var(--border);margin-bottom:12px">
+            Dividend yield anualizado dos ativos B3 e US — ordenados do maior para o menor.
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Ativo</th><th>Preço</th><th>Div. Anual</th><th>Yield %</th></tr>
+              </thead>
+              <tbody id="events-dividends-tbody">
+                <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando dividendos...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- =========================================
+           PAGE: SEGURANÇA & COMPLIANCE
+           ========================================= -->
+      <div id="page-security" class="page">
+        <div class="page-title">🔒 Segurança & Compliance</div>
+        <div class="page-subtitle">API keys, proteções, audit trail e status de segurança</div>
+
+        <div class="flex items-center gap-12 mb-16">
+          <button class="btn btn-primary" onclick="loadSecurity()">↻ Atualizar</button>
+          <span id="security-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
+        </div>
+
+        <!-- KPIs de segurança -->
+        <div class="cards-grid cards-4 mb-16" id="security-kpis">
+          <div class="card">
+            <div class="card-header"><span class="card-title">APIs Configuradas</span><div class="card-icon green">🔑</div></div>
+            <div class="kpi-value" id="sec-apis">--</div>
+            <div class="kpi-label">Serviços conectados</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Proteções Ativas</span><div class="card-icon blue">🛡️</div></div>
+            <div class="kpi-value" id="sec-protections">--</div>
+            <div class="kpi-label">Stop Loss, Take Profit, IRQ</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Eventos Audit</span><div class="card-icon yellow">📋</div></div>
+            <div class="kpi-value" id="sec-audit-total">--</div>
+            <div class="kpi-label">Total de eventos registrados</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Alertas 24h</span><div class="card-icon red">⚠️</div></div>
+            <div class="kpi-value" id="sec-critical-24h">--</div>
+            <div class="kpi-label">Eventos críticos em 24h</div>
+          </div>
+        </div>
+
+        <!-- Detalhes -->
+        <div class="cards-grid cards-2 mb-16">
+          <div class="card">
+            <div class="card-header"><span class="card-title">API Keys</span></div>
+            <div id="security-api-keys"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Proteções Ativas</span></div>
+            <div id="security-protections"></div>
+          </div>
+        </div>
+
+        <!-- Compliance Notes -->
+        <div class="card mb-16">
+          <div class="card-header"><span class="card-title">Notas de Compliance</span></div>
+          <div id="security-compliance"></div>
+        </div>
+
+        <!-- Audit Trail -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📋 Audit Trail</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select id="audit-severity-filter"
+                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:4px 8px;border-radius:6px;font-size:12px"
+                onchange="loadAuditLog()">
+                <option value="">Todos</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="critical">Crítico</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="loadAuditLog()">↻</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="max-height:400px;overflow-y:auto">
+            <table>
+              <thead>
+                <tr><th>Data/Hora</th><th>Severidade</th><th>Ação</th><th>Detalhes</th></tr>
+              </thead>
+              <tbody id="audit-log-tbody">
+                <tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando audit log...</td></tr>
               </tbody>
             </table>
           </div>

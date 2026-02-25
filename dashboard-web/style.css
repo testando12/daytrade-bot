@@ -438,6 +438,7 @@ body {
   gap: 16px;
 }
 
+.cards-5 { grid-template-columns: repeat(5, 1fr); }
 .cards-4 { grid-template-columns: repeat(4, 1fr); }
 .cards-3 { grid-template-columns: repeat(3, 1fr); }
 .cards-2 { grid-template-columns: repeat(2, 1fr); }
@@ -886,6 +887,7 @@ tbody tr:last-child {
    ============================================= */
 
 @media (max-width: 1200px) {
+  .cards-5 { grid-template-columns: repeat(3, 1fr); }
   .cards-4 { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -896,12 +898,12 @@ tbody tr:last-child {
   .sidebar .nav-section-label,
   .sidebar .sidebar-collapse-btn .nav-label { display: none; }
   .main-content { margin-left: 60px; }
-  .cards-4, .cards-3 { grid-template-columns: repeat(2, 1fr); }
+  .cards-5, .cards-4, .cards-3 { grid-template-columns: repeat(2, 1fr); }
   .cards-2-1 { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
-  .cards-4, .cards-3, .cards-2 { grid-template-columns: 1fr; }
+  .cards-5, .cards-4, .cards-3, .cards-2 { grid-template-columns: 1fr; }
   .topbar { padding: 0 16px; }
   .page-content { padding: 16px; }
 }

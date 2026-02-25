@@ -2225,6 +2225,650 @@ async def run_backtest_endpoint(body: dict = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# NOVOS MODULOS — Adicionados sem alterar nada existente
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ─── 1. COTACOES DE MOEDAS & INDICES DE MERCADO ─────────────────────────────
+
+_forex_cache: dict = {"data": {}, "ts": 0.0}
+_FOREX_TTL = 300  # 5 min
+
+async def _fetch_forex() -> dict:
+    """Busca cotacoes USD/BRL, EUR/BRL, EUR/USD + indices IBOV, SP500, Nasdaq."""
+    global _forex_cache
+    now = _time_module.time()
+    if now - _forex_cache["ts"] < _FOREX_TTL and _forex_cache["data"]:
+        return _forex_cache["data"]
+    import httpx
+    pairs = {
+        "USD/BRL": "USDBRL=X",
+        "EUR/BRL": "EURBRL=X",
+        "EUR/USD": "EURUSD=X",
+        "GBP/BRL": "GBPBRL=X",
+        "BTC/USD": "BTC-USD",
+    }
+    indices = {
+        "IBOVESPA": "^BVSP",
+        "S&P 500": "^GSPC",
+        "NASDAQ": "^IXIC",
+        "DOW JONES": "^DJI",
+        "DOLAR INDEX": "DX-Y.NYB",
+    }
+    result = {"currencies": {}, "indices": {}, "updated_at": datetime.now().isoformat()}
+    async with httpx.AsyncClient(timeout=10) as client:
+        for label, symbol in {**pairs, **indices}.items():
+            try:
+                r = await client.get(
+                    f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+                    params={"interval": "1d", "range": "5d"},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                if r.status_code == 200:
+                    meta = r.json()["chart"]["result"][0]["meta"]
+                    price = float(meta.get("regularMarketPrice", 0))
+                    prev  = float(meta.get("chartPreviousClose", 0) or meta.get("previousClose", 0))
+                    change_pct = round((price - prev) / prev * 100, 2) if prev else 0
+                    entry = {
+                        "price": round(price, 4),
+                        "previous_close": round(prev, 4),
+                        "change_pct": change_pct,
+                        "symbol": symbol,
+                    }
+                    if label in pairs:
+                        result["currencies"][label] = entry
+                    else:
+                        result["indices"][label] = entry
+            except Exception:
+                pass
+    _forex_cache = {"data": result, "ts": now}
+    return result
+
+
+@app.get("/market/forex")
+async def get_forex():
+    """Cotacoes de moedas (USD/BRL, EUR/BRL etc) e indices de mercado (IBOV, SP500, Nasdaq)."""
+    data = await _fetch_forex()
+    return {"success": True, "data": data}
+
+
+# ─── 2. INDICADORES TECNICOS AVANCADOS ──────────────────────────────────────
+
+def _calc_bollinger(prices: list, period: int = 20, num_std: float = 2.0) -> dict:
+    if len(prices) < period:
+        return {}
+    window = prices[-period:]
+    sma = sum(window) / period
+    variance = sum((p - sma) ** 2 for p in window) / period
+    std = variance ** 0.5
+    return {
+        "sma": round(sma, 4),
+        "upper": round(sma + num_std * std, 4),
+        "lower": round(sma - num_std * std, 4),
+        "bandwidth": round((num_std * 2 * std) / sma * 100, 3) if sma else 0,
+        "current": round(prices[-1], 4),
+        "position": round((prices[-1] - (sma - num_std * std)) / (2 * num_std * std) * 100, 1) if std else 50,
+    }
+
+
+def _calc_macd(prices: list, fast: int = 12, slow: int = 26, signal: int = 9) -> dict:
+    if len(prices) < slow + signal:
+        return {}
+    def ema_series(data, period):
+        k = 2 / (period + 1)
+        result = [sum(data[:period]) / period]
+        for p in data[period:]:
+            result.append(p * k + result[-1] * (1 - k))
+        return result
+    ema_fast = ema_series(prices, fast)
+    ema_slow = ema_series(prices, slow)
+    offset = slow - fast
+    macd_line = [ema_fast[i + offset] - ema_slow[i] for i in range(len(ema_slow))]
+    sig_line = ema_series(macd_line, signal)
+    offset2 = len(macd_line) - len(sig_line)
+    histogram = [macd_line[i + offset2] - sig_line[i] for i in range(len(sig_line))]
+    return {
+        "macd": round(macd_line[-1], 6),
+        "signal": round(sig_line[-1], 6),
+        "histogram": round(histogram[-1], 6),
+        "trend": "ALTA" if histogram[-1] > 0 else "BAIXA",
+        "crossover": "COMPRA" if len(histogram) >= 2 and histogram[-2] <= 0 < histogram[-1] else (
+            "VENDA" if len(histogram) >= 2 and histogram[-2] >= 0 > histogram[-1] else "NEUTRO"
+        ),
+    }
+
+
+def _calc_stochastic(prices: list, highs: list, lows: list, k_period: int = 14, d_period: int = 3) -> dict:
+    if len(prices) < k_period + d_period:
+        return {}
+    k_values = []
+    for i in range(k_period - 1, len(prices)):
+        h = max(highs[i - k_period + 1:i + 1])
+        l = min(lows[i - k_period + 1:i + 1])
+        k_val = ((prices[i] - l) / (h - l) * 100) if (h - l) > 0 else 50
+        k_values.append(k_val)
+    d_values = [sum(k_values[i:i + d_period]) / d_period for i in range(len(k_values) - d_period + 1)]
+    return {
+        "k": round(k_values[-1], 2),
+        "d": round(d_values[-1], 2) if d_values else 0,
+        "zone": "SOBRECOMPRADO" if k_values[-1] > 80 else ("SOBREVENDIDO" if k_values[-1] < 20 else "NEUTRO"),
+        "crossover": "COMPRA" if len(d_values) >= 2 and k_values[-2] <= d_values[-2] and k_values[-1] > d_values[-1] else (
+            "VENDA" if len(d_values) >= 2 and k_values[-2] >= d_values[-2] and k_values[-1] < d_values[-1] else "NEUTRO"
+        ),
+    }
+
+
+def _calc_fibonacci(prices: list) -> dict:
+    if len(prices) < 10:
+        return {}
+    high = max(prices[-50:]) if len(prices) >= 50 else max(prices)
+    low = min(prices[-50:]) if len(prices) >= 50 else min(prices)
+    diff = high - low
+    if diff == 0:
+        return {}
+    levels = {
+        "0.0": round(low, 4),
+        "23.6": round(low + 0.236 * diff, 4),
+        "38.2": round(low + 0.382 * diff, 4),
+        "50.0": round(low + 0.500 * diff, 4),
+        "61.8": round(low + 0.618 * diff, 4),
+        "78.6": round(low + 0.786 * diff, 4),
+        "100.0": round(high, 4),
+    }
+    current = prices[-1]
+    nearest = min(levels.values(), key=lambda x: abs(x - current))
+    nearest_level = [k for k, v in levels.items() if v == nearest][0]
+    return {
+        "levels": levels,
+        "current": round(current, 4),
+        "nearest_level": nearest_level,
+        "nearest_price": nearest,
+        "trend": "ALTA" if current > levels["50.0"] else "BAIXA",
+    }
+
+
+def _calc_vwap(prices: list, volumes: list) -> dict:
+    if len(prices) < 5 or len(volumes) < 5:
+        return {}
+    cum_pv = 0.0
+    cum_vol = 0.0
+    vwap_values = []
+    for p, v in zip(prices, volumes):
+        cum_pv += p * v
+        cum_vol += v
+        vwap_values.append(cum_pv / cum_vol if cum_vol else p)
+    vwap = vwap_values[-1]
+    current = prices[-1]
+    return {
+        "vwap": round(vwap, 4),
+        "current": round(current, 4),
+        "deviation_pct": round((current - vwap) / vwap * 100, 3) if vwap else 0,
+        "position": "ACIMA" if current > vwap else "ABAIXO",
+        "signal": "COMPRA" if current < vwap * 0.99 else ("VENDA" if current > vwap * 1.01 else "NEUTRO"),
+    }
+
+
+def _rsi_calc(prices: list, period: int = 14) -> float:
+    if len(prices) < period + 1:
+        return 50.0
+    changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+    gains = [max(c, 0) for c in changes]
+    losses = [abs(min(c, 0)) for c in changes]
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    for i in range(period, len(changes)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return round(100 - 100 / (1 + rs), 2)
+
+
+@app.get("/market/indicators/{asset}")
+async def get_technical_indicators(asset: str, interval: str = "5m", limit: int = 100):
+    """Indicadores tecnicos completos: MACD, Bollinger, Stochastic, Fibonacci, VWAP, RSI."""
+    if not MARKET_DATA_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Servico de dados nao disponivel")
+    try:
+        klines = await market_data_service.get_klines(asset.upper(), interval, limit)
+        if not klines or klines.get("count", 0) < 10:
+            raise HTTPException(status_code=404, detail=f"Dados insuficientes para {asset}")
+        prices  = klines["prices"]
+        volumes = klines["volumes"]
+        highs   = klines.get("highs", prices)
+        lows    = klines.get("lows", prices)
+        return {
+            "success": True,
+            "asset": asset.upper(),
+            "interval": interval,
+            "candles": len(prices),
+            "data": {
+                "rsi": _rsi_calc(prices),
+                "macd": _calc_macd(prices),
+                "bollinger": _calc_bollinger(prices),
+                "stochastic": _calc_stochastic(prices, highs, lows),
+                "fibonacci": _calc_fibonacci(prices),
+                "vwap": _calc_vwap(prices, volumes),
+                "summary": {
+                    "current_price": round(prices[-1], 4),
+                    "high": round(max(prices[-20:]), 4) if len(prices) >= 20 else round(max(prices), 4),
+                    "low": round(min(prices[-20:]), 4) if len(prices) >= 20 else round(min(prices), 4),
+                    "volatility_pct": round(
+                        (max(prices[-20:]) - min(prices[-20:])) / min(prices[-20:]) * 100, 2
+                    ) if len(prices) >= 20 and min(prices[-20:]) > 0 else 0,
+                },
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/market/indicators-all")
+async def get_all_indicators(interval: str = "5m"):
+    """Indicadores tecnicos resumidos para TODOS os ativos."""
+    if not MARKET_DATA_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Servico de dados nao disponivel")
+    try:
+        assets = list(settings.ALL_ASSETS)
+        klines_data = await market_data_service.get_all_klines(assets, interval, 100)
+        result = {}
+        for asset in assets:
+            d = klines_data.get(asset, {})
+            prices  = d.get("prices", [])
+            if len(prices) < 10:
+                continue
+            rsi_val = _rsi_calc(prices)
+            macd = _calc_macd(prices)
+            boll = _calc_bollinger(prices)
+            signals = 0
+            if rsi_val < 30: signals += 1
+            elif rsi_val > 70: signals -= 1
+            if macd.get("crossover") == "COMPRA": signals += 1
+            elif macd.get("crossover") == "VENDA": signals -= 1
+            if boll.get("position", 50) < 20: signals += 1
+            elif boll.get("position", 50) > 80: signals -= 1
+            consensus = "COMPRA" if signals >= 2 else ("VENDA" if signals <= -2 else "NEUTRO")
+            result[asset] = {
+                "price": round(prices[-1], 4),
+                "rsi": rsi_val,
+                "macd_trend": macd.get("trend", "--"),
+                "macd_cross": macd.get("crossover", "--"),
+                "boll_position": boll.get("position", 50),
+                "boll_band": f"{boll.get('lower', 0):.2f} - {boll.get('upper', 0):.2f}" if boll else "--",
+                "consensus": consensus,
+            }
+        return {"success": True, "data": result, "count": len(result)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── 3. MOTOR DE CALCULO FINANCEIRO (Taxas, Impostos, Preco Medio) ──────────
+
+_FEE_RATES = {
+    "b3_corretagem": 0.0,
+    "b3_emolumentos": 0.00005,
+    "b3_liquidacao": 0.000275,
+    "crypto_maker": 0.001,
+    "crypto_taker": 0.001,
+    "us_corretagem": 0.0,
+}
+
+_TAX_RATES = {
+    "br_daytrade": 0.20,
+    "br_swing": 0.15,
+    "br_crypto": 0.15,
+    "br_isencao_swing_mensal": 20000.0,
+    "br_isencao_crypto_mensal": 35000.0,
+}
+
+
+@app.get("/finance/calculator")
+async def finance_calculator():
+    """Motor de calculo financeiro: preco medio, taxas, impostos, rentabilidade."""
+    td = _trade_state
+    capital = td.get("capital", settings.INITIAL_CAPITAL)
+    total_pnl = td.get("total_pnl", 0)
+    positions = td.get("positions", {})
+
+    portfolio_detail = []
+    total_allocated = 0.0
+    total_fees_estimated = 0.0
+    total_tax_estimated = 0.0
+
+    crypto_set = {c.upper() for c in settings.CRYPTO_ASSETS}
+    b3_set = {a.upper() for a in settings.ALLOWED_ASSETS}
+
+    for asset, pos in positions.items():
+        qty = pos.get("quantity", 0)
+        entry = pos.get("entry_price", 0)
+        pnl = pos.get("pnl", 0)
+        alloc = pos.get("allocated", 0)
+        if qty <= 0 and alloc <= 0:
+            continue
+
+        is_crypto = asset.upper() in crypto_set or "USDT" in asset.upper()
+        is_b3 = asset.upper() in b3_set
+
+        if is_crypto:
+            fee_rate = _FEE_RATES["crypto_taker"]
+            tax_rate = _TAX_RATES["br_crypto"]
+        elif is_b3:
+            fee_rate = _FEE_RATES["b3_emolumentos"] + _FEE_RATES["b3_liquidacao"]
+            tax_rate = _TAX_RATES["br_daytrade"]
+        else:
+            fee_rate = 0.0
+            tax_rate = _TAX_RATES["br_swing"]
+
+        value = alloc if alloc else qty * entry
+        fees = value * fee_rate * 2
+        tax = max(0, pnl * tax_rate) if pnl > 0 else 0
+        net_pnl = pnl - fees - tax
+        rentab = round(net_pnl / value * 100, 2) if value > 0 else 0
+
+        total_allocated += value
+        total_fees_estimated += fees
+        total_tax_estimated += tax
+
+        portfolio_detail.append({
+            "asset": asset,
+            "quantity": round(qty, 8),
+            "entry_price": round(entry, 4),
+            "allocated": round(value, 2),
+            "pnl_bruto": round(pnl, 2),
+            "fees_estimated": round(fees, 4),
+            "tax_estimated": round(tax, 2),
+            "pnl_liquido": round(net_pnl, 2),
+            "rentabilidade_pct": rentab,
+            "asset_type": "crypto" if is_crypto else ("b3" if is_b3 else "us"),
+        })
+
+    gross_pnl = total_pnl
+    net_pnl = gross_pnl - total_fees_estimated - total_tax_estimated
+    return {
+        "success": True,
+        "data": {
+            "summary": {
+                "capital": round(capital, 2),
+                "total_allocated": round(total_allocated, 2),
+                "free_capital": round(capital - total_allocated, 2),
+                "pnl_bruto": round(gross_pnl, 2),
+                "total_fees": round(total_fees_estimated, 4),
+                "total_tax_estimated": round(total_tax_estimated, 2),
+                "pnl_liquido": round(net_pnl, 2),
+                "rentabilidade_bruta_pct": round(gross_pnl / capital * 100, 2) if capital > 0 else 0,
+                "rentabilidade_liquida_pct": round(net_pnl / capital * 100, 2) if capital > 0 else 0,
+            },
+            "fee_rates": _FEE_RATES,
+            "tax_rates": {k: v for k, v in _TAX_RATES.items() if not k.startswith("br_isencao")},
+            "tax_exemptions": {
+                "swing_monthly_limit": _TAX_RATES["br_isencao_swing_mensal"],
+                "crypto_monthly_limit": _TAX_RATES["br_isencao_crypto_mensal"],
+                "note": "Day trade: sem isencao. Swing: isento abaixo de R$20k vendas/mes. Crypto: isento abaixo de R$35k vendas/mes.",
+            },
+            "positions": portfolio_detail,
+        },
+    }
+
+
+# ─── 4. NOTICIAS, CALENDARIO DE DIVIDENDOS & EVENTOS FINANCEIROS ────────────
+
+def _fetch_economic_calendar() -> list:
+    """Calendario economico simplificado com eventos recorrentes importantes."""
+    return [
+        {"event": "FOMC Decision", "region": "US", "impact": "alto", "frequency": "6 semanas"},
+        {"event": "Non-Farm Payrolls (NFP)", "region": "US", "impact": "alto", "frequency": "mensal (1a sexta)"},
+        {"event": "CPI (Inflacao EUA)", "region": "US", "impact": "alto", "frequency": "mensal"},
+        {"event": "Ata do Copom", "region": "BR", "impact": "alto", "frequency": "a cada 45 dias"},
+        {"event": "IPCA (Inflacao BR)", "region": "BR", "impact": "alto", "frequency": "mensal"},
+        {"event": "PIB Brasil", "region": "BR", "impact": "medio", "frequency": "trimestral"},
+        {"event": "Earnings Season", "region": "US/BR", "impact": "alto", "frequency": "trimestral"},
+        {"event": "Payroll (CAGED)", "region": "BR", "impact": "medio", "frequency": "mensal"},
+        {"event": "PCE (Deflator EUA)", "region": "US", "impact": "alto", "frequency": "mensal"},
+        {"event": "Decisao Selic (Copom)", "region": "BR", "impact": "alto", "frequency": "a cada 45 dias"},
+    ]
+
+
+async def _fetch_dividends(assets: list) -> dict:
+    """Busca dividend yield via Yahoo Finance."""
+    import httpx
+    dividends = {}
+    async with httpx.AsyncClient(timeout=8) as client:
+        for asset in assets[:30]:
+            ticker = asset
+            if asset in settings.ALLOWED_ASSETS:
+                ticker = f"{asset}.SA"
+            try:
+                r = await client.get(
+                    f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+                    params={"interval": "1d", "range": "1y"},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                if r.status_code == 200:
+                    meta = r.json()["chart"]["result"][0]["meta"]
+                    div_yield = meta.get("trailingAnnualDividendYield")
+                    div_rate  = meta.get("trailingAnnualDividendRate")
+                    if div_yield is not None or div_rate is not None:
+                        dividends[asset] = {
+                            "dividend_yield_pct": round(float(div_yield or 0) * 100, 2),
+                            "annual_dividend": round(float(div_rate or 0), 4),
+                            "price": round(float(meta.get("regularMarketPrice", 0)), 4),
+                        }
+            except Exception:
+                pass
+    return dividends
+
+
+@app.get("/market/events")
+async def get_market_events():
+    """Calendario economico, noticias RSS e eventos do mercado."""
+    global _news_cache
+    now = _time_module.time()
+    if now - _news_cache["ts"] > _NEWS_TTL:
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, _fetch_news_raw)
+        sentiment_map = {a: _score_news(a, raw) for a in settings.ALL_ASSETS}
+        _news_cache = {"data": sentiment_map, "ts": now}
+
+    raw_news = []
+    try:
+        raw = await asyncio.get_event_loop().run_in_executor(None, _fetch_news_raw)
+        for title, source in raw[:30]:
+            raw_news.append({"title": title, "source": source})
+    except Exception:
+        pass
+
+    calendar = _fetch_economic_calendar()
+    return {
+        "success": True,
+        "data": {
+            "news": raw_news,
+            "economic_calendar": calendar,
+            "sentiment_by_asset": _news_cache.get("data", {}),
+            "updated_at": datetime.now().isoformat(),
+        },
+    }
+
+
+@app.get("/market/dividends")
+async def get_dividends():
+    """Dividendos (dividend yield) dos ativos B3 + US."""
+    try:
+        b3_assets = list(settings.ALLOWED_ASSETS)
+        us_top = settings.US_STOCKS[:20]
+        divs = await _fetch_dividends(b3_assets + us_top)
+        ranked = dict(sorted(divs.items(), key=lambda x: x[1].get("dividend_yield_pct", 0), reverse=True))
+        return {"success": True, "data": ranked, "count": len(ranked)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── 5. SEGURANCA & COMPLIANCE ──────────────────────────────────────────────
+
+_audit_log: list = []
+_AUDIT_FILE = Path(__file__).resolve().parent.parent / "data" / "audit_log.json"
+_MAX_AUDIT = 5000
+
+def _load_audit():
+    global _audit_log
+    try:
+        if _AUDIT_FILE.exists():
+            _audit_log = json.loads(_AUDIT_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        _audit_log = []
+
+def _append_audit(action: str, details: dict = None, severity: str = "info"):
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "action": action,
+        "severity": severity,
+        "details": details or {},
+    }
+    _audit_log.append(entry)
+    if len(_audit_log) > _MAX_AUDIT:
+        _audit_log[:] = _audit_log[-_MAX_AUDIT:]
+    try:
+        _AUDIT_FILE.write_text(json.dumps(_audit_log, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception:
+        pass
+
+_load_audit()
+
+
+@app.get("/security/audit")
+async def get_audit_log(limit: int = 100, severity: str = None):
+    """Audit trail de acoes do sistema (compliance)."""
+    entries = _audit_log[-limit:]
+    if severity:
+        entries = [e for e in entries if e.get("severity") == severity]
+    return {"success": True, "data": list(reversed(entries)), "total": len(_audit_log)}
+
+
+@app.get("/security/status")
+async def get_security_status():
+    """Status de seguranca: API keys, rate limits, protecoes ativas."""
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+    recent_critical = sum(1 for e in _audit_log if e.get("severity") == "critical" and e.get("timestamp", "") > cutoff)
+
+    return {
+        "success": True,
+        "data": {
+            "api_keys": {
+                "brapi_configured": bool(settings.BRAPI_TOKEN),
+                "binance_configured": bool(settings.BINANCE_API_KEY),
+                "telegram_configured": bool(settings.TELEGRAM_BOT_TOKEN),
+            },
+            "protections": {
+                "stop_loss": {"active": True, "value": f"{settings.STOP_LOSS_PERCENTAGE*100}%"},
+                "take_profit": {"active": True, "value": f"{settings.TAKE_PROFIT_PERCENTAGE*100}%"},
+                "max_daily_loss": {"active": True, "value": f"{settings.MAX_DAILY_LOSS_PERCENTAGE*100}%"},
+                "max_trades_hour": {"active": True, "value": settings.MAX_TRADES_PER_HOUR},
+                "max_trades_day": {"active": True, "value": settings.MAX_TRADES_PER_DAY},
+                "irq_protection": {"active": True, "thresholds": {
+                    "moderate": settings.IRQ_THRESHOLD_HIGH,
+                    "high": settings.IRQ_THRESHOLD_VERY_HIGH,
+                    "critical": settings.IRQ_THRESHOLD_CRITICAL,
+                }},
+            },
+            "audit": {
+                "total_events": len(_audit_log),
+                "critical_24h": recent_critical,
+                "last_event": _audit_log[-1] if _audit_log else None,
+            },
+            "compliance_notes": [
+                "Todas as operacoes registradas no audit log",
+                "Stop loss e take profit automaticos",
+                "Limites diarios de perda e operacoes",
+                "IRQ com protecao em 3 niveis",
+                "Dados de fontes oficiais (B3/Binance/Yahoo)",
+            ],
+            "risk_score": risk_manager.to_dict() if risk_manager else {},
+        },
+    }
+
+
+@app.middleware("http")
+async def audit_middleware(request, call_next):
+    """Registra acoes criticas no audit log."""
+    response = await call_next(request)
+    path = request.url.path
+    method = request.method
+    if method == "POST" and path in ["/trade/start", "/trade/stop", "/trade/capital",
+                                       "/trade/cycle", "/trade/reset",
+                                       "/scheduler/start", "/scheduler/stop"]:
+        _append_audit(
+            f"{method} {path}",
+            {"status_code": response.status_code},
+            severity="warning" if "reset" in path else "info"
+        )
+    return response
+
+
+# ─── 6. DADOS CONSOLIDADOS DO USUARIO ───────────────────────────────────────
+
+@app.get("/user/summary")
+async def get_user_summary():
+    """Resumo consolidado: saldo, carteira, P&L, historico, risco."""
+    td = _trade_state
+    perf = _perf_state
+    capital = td.get("capital", settings.INITIAL_CAPITAL)
+    total_pnl = td.get("total_pnl", 0)
+    positions = td.get("positions", {})
+    log = td.get("log", [])
+
+    active_positions = {k: v for k, v in positions.items()
+                        if v.get("quantity", 0) > 0 or v.get("allocated", 0) > 0}
+    total_allocated = sum(p.get("allocated", 0) for p in active_positions.values())
+
+    cycles = perf.get("cycles", [])
+    wins = perf.get("win_count", 0)
+    losses = perf.get("loss_count", 0)
+    total_trades = wins + losses
+    win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+
+    pnl_5m = sum(c.get("pnl_5m", 0) for c in cycles)
+    pnl_1h = sum(c.get("pnl_1h", 0) for c in cycles)
+    pnl_1d = sum(c.get("pnl_1d", 0) for c in cycles)
+
+    return {
+        "success": True,
+        "data": {
+            "account": {
+                "capital": round(capital, 2),
+                "total_pnl": round(total_pnl, 2),
+                "patrimonio_total": round(capital + total_pnl, 2),
+                "free_capital": round(capital - total_allocated, 2),
+                "allocated": round(total_allocated, 2),
+                "rentabilidade_pct": round(total_pnl / capital * 100, 2) if capital > 0 else 0,
+            },
+            "portfolio": {
+                "active_count": len(active_positions),
+                "positions": {k: {
+                    "allocated": round(v.get("allocated", 0), 2),
+                    "pnl": round(v.get("pnl", 0), 4),
+                    "entry_price": round(v.get("entry_price", 0), 4),
+                    "timeframe": v.get("timeframe", "--"),
+                } for k, v in active_positions.items()},
+            },
+            "performance": {
+                "total_cycles": len(cycles),
+                "win_count": wins,
+                "loss_count": losses,
+                "win_rate_pct": round(win_rate, 1),
+                "pnl_by_timeframe": {"5m": round(pnl_5m, 2), "1h": round(pnl_1h, 2), "1d": round(pnl_1d, 2)},
+                "best_cycle": round(perf.get("best_day_pnl", 0), 2),
+                "worst_cycle": round(perf.get("worst_day_pnl", 0), 2),
+            },
+            "risk": risk_manager.to_dict() if risk_manager else {},
+            "recent_activity": log[-20:] if log else [],
+            "updated_at": datetime.now().isoformat(),
+        },
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     import os

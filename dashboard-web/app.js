@@ -42,6 +42,10 @@ const PAGE_NAMES = {
   portfolio: 'Portfólio',
   risk: 'Gestão de Risco',
   history: 'Histórico',
+  indicators: 'Indicadores Técnicos',
+  finance: 'Calculadora Financeira',
+  events: 'Eventos & Dividendos',
+  security: 'Segurança & Compliance',
   settings: 'Configurações',
 };
 
@@ -75,6 +79,10 @@ function loadPage(page) {
     case 'portfolio': loadPortfolio(); break;
     case 'risk':      loadRiskPage(); break;
     case 'history':   loadHistoryPage(); break;
+    case 'indicators': loadIndicators(); break;
+    case 'finance':   loadFinance(); break;
+    case 'events':    loadEvents(); break;
+    case 'security':  loadSecurity(); break;
     case 'settings':  loadSettings(); break;
   }
 }
@@ -1531,6 +1539,329 @@ async function loadSettings() {
   } catch (e) {
     toast('Erro ao carregar configurações', 'error');
   }
+}
+
+// =============================================
+// INDICADORES TÉCNICOS
+// =============================================
+
+async function loadIndicators() {
+  const interval = document.getElementById('indicators-interval')?.value || '5m';
+  const tbody = document.getElementById('indicators-all-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div> Carregando indicadores...</td></tr>';
+  try {
+    const res = await api(`/market/indicators-all?interval=${interval}`, {}, 60000);
+    const data = res.data || {};
+    const assets = Object.entries(data);
+    if (!assets.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhum indicador disponível</td></tr>';
+      return;
+    }
+    const rows = assets.map(([asset, d]) => {
+      const rsiClass = d.rsi < 30 ? 'green' : d.rsi > 70 ? 'red' : '';
+      const consClass = d.consensus === 'COMPRA' ? 'badge-green' : d.consensus === 'VENDA' ? 'badge-red' : 'badge-gray';
+      const crossClass = d.macd_cross === 'COMPRA' ? 'green' : d.macd_cross === 'VENDA' ? 'red' : '';
+      return `<tr>
+        <td><strong>${asset}</strong></td>
+        <td>${fmtPrice(d.price)}</td>
+        <td class="${rsiClass}">${d.rsi?.toFixed(1) || '--'}</td>
+        <td>${d.macd_trend || '--'}</td>
+        <td class="${crossClass}">${d.macd_cross || '--'}</td>
+        <td>${d.boll_position != null ? d.boll_position.toFixed(0) + '%' : '--'}</td>
+        <td style="font-size:11px">${d.boll_band || '--'}</td>
+        <td><span class="badge ${consClass}">${d.consensus}</span></td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join('');
+    document.getElementById('indicators-update-time').textContent = `Atualizado: ${new Date().toLocaleTimeString()}`;
+    setLastUpdate();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--red)">Erro: ${e.message}</td></tr>`;
+  }
+}
+
+async function loadSingleIndicator() {
+  const asset = document.getElementById('indicator-asset-input')?.value?.trim();
+  if (!asset) { toast('Digite um ativo', 'warning'); return; }
+  const interval = document.getElementById('indicators-interval')?.value || '5m';
+  const container = document.getElementById('indicator-detail-content');
+  container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div> Analisando...</div>';
+  try {
+    const res = await api(`/market/indicators/${asset}?interval=${interval}`, {}, 30000);
+    const d = res.data || {};
+    const s = d.summary || {};
+    let html = `<div class="cards-grid cards-3" style="margin-top:12px">`;
+    // RSI
+    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">RSI</span></div>
+      <div class="kpi-value ${d.rsi < 30 ? 'green' : d.rsi > 70 ? 'red' : ''}">${d.rsi?.toFixed(1) || '--'}</div>
+      <div class="kpi-label">${d.rsi < 30 ? 'Sobrevendido' : d.rsi > 70 ? 'Sobrecomprado' : 'Neutro'}</div></div>`;
+    // MACD
+    const macd = d.macd || {};
+    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">MACD</span></div>
+      <div class="kpi-value" style="font-size:18px">${macd.trend || '--'}</div>
+      <div class="kpi-label">Cross: <strong class="${macd.crossover === 'COMPRA' ? 'green' : macd.crossover === 'VENDA' ? 'red' : ''}">${macd.crossover || '--'}</strong></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">MACD: ${macd.macd?.toFixed(6) || '--'} | Signal: ${macd.signal?.toFixed(6) || '--'}</div></div>`;
+    // Bollinger
+    const boll = d.bollinger || {};
+    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">Bollinger Bands</span></div>
+      <div class="kpi-value" style="font-size:18px">${boll.position != null ? boll.position.toFixed(0) + '%' : '--'}</div>
+      <div class="kpi-label">Banda: ${boll.lower || '--'} — ${boll.upper || '--'}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">BW: ${boll.bandwidth || '--'}% | SMA: ${boll.sma || '--'}</div></div>`;
+    // Stochastic
+    const stoch = d.stochastic || {};
+    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">Estocástico</span></div>
+      <div class="kpi-value" style="font-size:18px">K: ${stoch.k?.toFixed(1) || '--'} / D: ${stoch.d?.toFixed(1) || '--'}</div>
+      <div class="kpi-label">${stoch.zone || '--'}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cross: ${stoch.crossover || '--'}</div></div>`;
+    // Fibonacci
+    const fib = d.fibonacci || {};
+    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">Fibonacci</span></div>
+      <div class="kpi-value" style="font-size:18px">${fib.nearest_level || '--'}%</div>
+      <div class="kpi-label">Nível mais próximo: ${fmtPrice(fib.nearest_price)}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Trend: ${fib.trend || '--'}</div></div>`;
+    // VWAP
+    const vwap = d.vwap || {};
+    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">VWAP</span></div>
+      <div class="kpi-value" style="font-size:18px">${fmtPrice(vwap.vwap)}</div>
+      <div class="kpi-label">${vwap.position || '--'} (${vwap.deviation_pct?.toFixed(2) || '0'}%)</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Sinal: <strong>${vwap.signal || '--'}</strong></div></div>`;
+    html += `</div>`;
+    // Summary
+    html += `<div style="margin-top:12px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;font-size:12px;color:var(--text-muted)">
+      Preço: <strong>${fmtPrice(s.current_price)}</strong> | High(20): ${fmtPrice(s.high)} | Low(20): ${fmtPrice(s.low)} | Volatilidade: ${s.volatility_pct?.toFixed(2) || '0'}%
+    </div>`;
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state"><p style="color:var(--red)">Erro: ${e.message}</p></div>`;
+  }
+}
+
+// =============================================
+// CALCULADORA FINANCEIRA
+// =============================================
+
+async function loadFinance() {
+  try {
+    const res = await api('/finance/calculator', {}, 15000);
+    const d = res.data || {};
+    const s = d.summary || {};
+    // KPIs
+    document.getElementById('fin-capital').textContent = fmtMoney(s.capital);
+    document.getElementById('fin-pnl-bruto').textContent = fmtMoney(s.pnl_bruto);
+    document.getElementById('fin-pnl-bruto').className = `kpi-value ${s.pnl_bruto >= 0 ? 'green' : 'red'}`;
+    document.getElementById('fin-fees-tax').textContent = fmtMoney(s.total_fees + s.total_tax_estimated);
+    document.getElementById('fin-pnl-liq').textContent = fmtMoney(s.pnl_liquido);
+    document.getElementById('fin-pnl-liq').className = `kpi-value ${s.pnl_liquido >= 0 ? 'green' : 'red'}`;
+    document.getElementById('fin-rentab').textContent = `Rentab. líq.: ${s.rentabilidade_liquida_pct?.toFixed(2) || '0'}%`;
+    // Fee rates
+    const feeEl = document.getElementById('finance-fee-rates');
+    const fr = d.fee_rates || {};
+    feeEl.innerHTML = Object.entries(fr).map(([k, v]) => `<div class="config-item">
+      <span class="config-key">${k.replace(/_/g, ' ')}</span>
+      <span class="config-value">${(v * 100).toFixed(4)}%</span>
+    </div>`).join('');
+    // Tax rates
+    const taxEl = document.getElementById('finance-tax-rates');
+    const tr = d.tax_rates || {};
+    const ex = d.tax_exemptions || {};
+    let taxHtml = Object.entries(tr).map(([k, v]) => `<div class="config-item">
+      <span class="config-key">${k.replace(/_/g, ' ')}</span>
+      <span class="config-value">${(v * 100).toFixed(0)}%</span>
+    </div>`).join('');
+    if (ex.note) taxHtml += `<div style="margin-top:8px;padding:8px;background:var(--bg-tertiary);border-radius:6px;font-size:11px;color:var(--text-muted)">${ex.note}</div>`;
+    taxEl.innerHTML = taxHtml;
+    // Positions
+    const tbody = document.getElementById('finance-positions-tbody');
+    const positions = d.positions || [];
+    if (!positions.length) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhuma posição ativa</td></tr>';
+    } else {
+      tbody.innerHTML = positions.map(p => `<tr>
+        <td><strong>${p.asset}</strong></td>
+        <td><span class="badge badge-${p.asset_type === 'crypto' ? 'yellow' : p.asset_type === 'b3' ? 'blue' : 'green'}">${p.asset_type}</span></td>
+        <td>${p.quantity}</td>
+        <td>${fmtPrice(p.entry_price)}</td>
+        <td>${fmtMoney(p.allocated)}</td>
+        <td class="${p.pnl_bruto >= 0 ? 'green' : 'red'}">${fmtMoney(p.pnl_bruto)}</td>
+        <td>${p.fees_estimated?.toFixed(4) || '0'}</td>
+        <td>${fmtMoney(p.tax_estimated)}</td>
+        <td class="${p.pnl_liquido >= 0 ? 'green' : 'red'}">${fmtMoney(p.pnl_liquido)}</td>
+        <td>${p.rentabilidade_pct?.toFixed(2) || '0'}%</td>
+      </tr>`).join('');
+    }
+    document.getElementById('finance-update-time').textContent = `Atualizado: ${new Date().toLocaleTimeString()}`;
+    setLastUpdate();
+  } catch (e) {
+    toast('Erro ao carregar calculadora financeira', 'error');
+  }
+}
+
+// =============================================
+// EVENTOS, CÂMBIO & DIVIDENDOS
+// =============================================
+
+async function loadEvents() {
+  try {
+    // Fetch all 3 endpoints in parallel
+    const [evRes, fxRes, divRes] = await Promise.all([
+      api('/market/events', {}, 30000).catch(() => null),
+      api('/market/forex', {}, 15000).catch(() => null),
+      api('/market/dividends', {}, 30000).catch(() => null),
+    ]);
+
+    // FOREX & INDICES
+    const fxData = fxRes?.data || {};
+    const currencies = fxData.currencies || {};
+    const indices = fxData.indices || {};
+    const fxCards = document.getElementById('forex-cards');
+    let fxHtml = '';
+    for (const [label, d] of Object.entries({...currencies, ...indices})) {
+      const isUp = d.change_pct >= 0;
+      fxHtml += `<div class="card" style="padding:10px;text-align:center">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">${label}</div>
+        <div style="font-size:20px;font-weight:800">${d.price?.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 4})}</div>
+        <div class="${isUp ? 'green' : 'red'}" style="font-size:13px;margin-top:2px">${isUp ? '▲' : '▼'} ${d.change_pct?.toFixed(2)}%</div>
+      </div>`;
+    }
+    fxCards.innerHTML = fxHtml || '<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:12px">Dados de câmbio indisponíveis</div>';
+
+    // CALENDAR
+    const evData = evRes?.data || {};
+    const calendar = evData.economic_calendar || [];
+    const calTbody = document.getElementById('events-calendar-tbody');
+    if (calendar.length) {
+      calTbody.innerHTML = calendar.map(ev => {
+        const impactClass = ev.impact === 'alto' ? 'red' : ev.impact === 'medio' ? 'yellow' : '';
+        return `<tr>
+          <td><strong>${ev.event}</strong></td>
+          <td>${ev.region}</td>
+          <td><span class="badge badge-${ev.impact === 'alto' ? 'red' : ev.impact === 'medio' ? 'yellow' : 'gray'}">${ev.impact}</span></td>
+          <td style="font-size:12px">${ev.frequency}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // NEWS
+    const news = evData.news || [];
+    const newsEl = document.getElementById('events-news-list');
+    if (news.length) {
+      newsEl.innerHTML = news.map(n => `<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;color:var(--text-primary)">${n.title}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${n.source}</div>
+      </div>`).join('');
+    } else {
+      newsEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:24px">Nenhuma notícia disponível</div>';
+    }
+
+    // DIVIDENDS
+    const divData = divRes?.data || {};
+    const divTbody = document.getElementById('events-dividends-tbody');
+    const divEntries = Object.entries(divData);
+    if (divEntries.length) {
+      divTbody.innerHTML = divEntries.map(([asset, d], i) => `<tr>
+        <td>${i + 1}</td>
+        <td><strong>${asset}</strong></td>
+        <td>${fmtPrice(d.price)}</td>
+        <td>${d.annual_dividend?.toFixed(4) || '--'}</td>
+        <td class="${d.dividend_yield_pct > 5 ? 'green' : ''}">${d.dividend_yield_pct?.toFixed(2) || '0'}%</td>
+      </tr>`).join('');
+    } else {
+      divTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Sem dados de dividendos</td></tr>';
+    }
+
+    document.getElementById('events-update-time').textContent = `Atualizado: ${new Date().toLocaleTimeString()}`;
+    setLastUpdate();
+  } catch (e) {
+    toast('Erro ao carregar eventos', 'error');
+  }
+}
+
+// =============================================
+// SEGURANÇA & COMPLIANCE
+// =============================================
+
+async function loadSecurity() {
+  try {
+    const [statusRes, auditRes] = await Promise.all([
+      api('/security/status', {}, 15000).catch(() => null),
+      api('/security/audit?limit=200', {}, 15000).catch(() => null),
+    ]);
+
+    // STATUS
+    const d = statusRes?.data || {};
+    const keys = d.api_keys || {};
+    const prot = d.protections || {};
+    const aud = d.audit || {};
+
+    // KPIs
+    const apiCount = Object.values(keys).filter(Boolean).length;
+    document.getElementById('sec-apis').textContent = `${apiCount}/3`;
+    document.getElementById('sec-apis').className = `kpi-value ${apiCount >= 2 ? 'green' : 'yellow'}`;
+
+    const protCount = Object.values(prot).filter(p => p && p.active).length;
+    document.getElementById('sec-protections').textContent = `${protCount}`;
+    document.getElementById('sec-protections').className = `kpi-value ${protCount >= 4 ? 'green' : 'yellow'}`;
+
+    document.getElementById('sec-audit-total').textContent = aud.total_events || 0;
+    document.getElementById('sec-critical-24h').textContent = aud.critical_24h || 0;
+    document.getElementById('sec-critical-24h').className = `kpi-value ${aud.critical_24h > 0 ? 'red' : 'green'}`;
+
+    // API Keys detail
+    const keyEl = document.getElementById('security-api-keys');
+    keyEl.innerHTML = Object.entries(keys).map(([k, v]) => `<div class="config-item">
+      <span class="config-key">${k.replace(/_/g, ' ')}</span>
+      <span class="badge ${v ? 'badge-green' : 'badge-red'}">${v ? '✅ Configurada' : '❌ Não configurada'}</span>
+    </div>`).join('');
+
+    // Protections detail
+    const protEl = document.getElementById('security-protections');
+    protEl.innerHTML = Object.entries(prot).map(([k, v]) => `<div class="config-item">
+      <span class="config-key">${k.replace(/_/g, ' ')}</span>
+      <span class="config-value">${v?.active ? '✅ ' : '❌ '}${v?.value || ''}</span>
+    </div>`).join('');
+
+    // Compliance notes
+    const compEl = document.getElementById('security-compliance');
+    const notes = d.compliance_notes || [];
+    compEl.innerHTML = notes.map(n => `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;color:var(--text-primary)">✅ ${n}</div>`).join('');
+
+    // AUDIT LOG
+    _renderAuditLog(auditRes?.data || []);
+
+    document.getElementById('security-update-time').textContent = `Atualizado: ${new Date().toLocaleTimeString()}`;
+    setLastUpdate();
+  } catch (e) {
+    toast('Erro ao carregar segurança', 'error');
+  }
+}
+
+async function loadAuditLog() {
+  const severity = document.getElementById('audit-severity-filter')?.value || '';
+  try {
+    const res = await api(`/security/audit?limit=200${severity ? '&severity=' + severity : ''}`, {}, 15000);
+    _renderAuditLog(res.data || []);
+  } catch (e) {
+    toast('Erro ao carregar audit log', 'error');
+  }
+}
+
+function _renderAuditLog(entries) {
+  const tbody = document.getElementById('audit-log-tbody');
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhum evento registrado</td></tr>';
+    return;
+  }
+  tbody.innerHTML = entries.map(e => {
+    const sevClass = e.severity === 'critical' ? 'badge-red' : e.severity === 'warning' ? 'badge-yellow' : 'badge-gray';
+    const ts = e.timestamp ? new Date(e.timestamp).toLocaleString('pt-BR') : '--';
+    const details = e.details ? JSON.stringify(e.details) : '--';
+    return `<tr>
+      <td style="font-size:12px;white-space:nowrap">${ts}</td>
+      <td><span class="badge ${sevClass}">${e.severity}</span></td>
+      <td style="font-size:12px">${e.action || '--'}</td>
+      <td style="font-size:11px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis">${details}</td>
+    </tr>`;
+  }).join('');
 }
 
 // =============================================
