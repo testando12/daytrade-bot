@@ -1545,94 +1545,279 @@ async function loadSettings() {
 // INDICADORES TÉCNICOS
 // =============================================
 
+// Armazena dados globais para filtragem/ordenação sem nova chamada à API
+let _indicatorsData = {};
+let _indicatorsSortKey = 'consensus';
+let _indicatorsSortAsc = true;
+
+// Classifica o tipo do ativo
+const _B3_LIST = ['PETR4','PRIO3','CSAN3','EGIE3','VALE3','ITUB4','BBDC4','ABEV3','WEGE3','RENT3','MGLU3','BBAS3','VBBR3','LREN3','SUZB3','RDOR3','B3SA3','BPAC11','GGBR4','SBSP3'];
+const _CRYPTO_LIST = ['BTCUSDT','ETHUSDT','BNBUSDT','ADAUSDT','XRPUSDT','SOLUSDT','DOTUSDT','LINKUSDT','LTCUSDT','UNIUSDT'];
+function _assetType(asset) {
+  if (_CRYPTO_LIST.includes(asset)) return 'CRYPTO';
+  if (_B3_LIST.includes(asset)) return 'B3';
+  return 'US';
+}
+
 async function loadIndicators() {
   const interval = document.getElementById('indicators-interval')?.value || '5m';
   const tbody = document.getElementById('indicators-all-tbody');
-  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div> Carregando indicadores...</td></tr>';
+  tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted)">
+    <div class="spinner" style="margin:0 auto 12px"></div>Buscando indicadores para 80 ativos (pode levar ~20s)...
+  </td></tr>`;
+  // Reset summary while loading
+  ['ind-count-compra','ind-count-venda','ind-count-neutro','ind-avg-rsi'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '...';
+  });
   try {
-    const res = await api(`/market/indicators-all?interval=${interval}`, {}, 60000);
-    const data = res.data || {};
-    const assets = Object.entries(data);
+    const res = await api(`/market/indicators-all?interval=${interval}`, {}, 90000);
+    _indicatorsData = res.data || {};
+    const assets = Object.entries(_indicatorsData);
     if (!assets.length) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhum indicador disponível</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted)">Nenhum dado disponível</td></tr>';
       return;
     }
-    const rows = assets.map(([asset, d]) => {
-      const rsiClass = d.rsi < 30 ? 'green' : d.rsi > 70 ? 'red' : '';
-      const consClass = d.consensus === 'COMPRA' ? 'badge-green' : d.consensus === 'VENDA' ? 'badge-red' : 'badge-gray';
-      const crossClass = d.macd_cross === 'COMPRA' ? 'green' : d.macd_cross === 'VENDA' ? 'red' : '';
-      return `<tr>
-        <td><strong>${asset}</strong></td>
-        <td>${fmtPrice(d.price)}</td>
-        <td class="${rsiClass}">${d.rsi?.toFixed(1) || '--'}</td>
-        <td>${d.macd_trend || '--'}</td>
-        <td class="${crossClass}">${d.macd_cross || '--'}</td>
-        <td>${d.boll_position != null ? d.boll_position.toFixed(0) + '%' : '--'}</td>
-        <td style="font-size:11px">${d.boll_band || '--'}</td>
-        <td><span class="badge ${consClass}">${d.consensus}</span></td>
-      </tr>`;
-    });
-    tbody.innerHTML = rows.join('');
+    // Summary cards
+    const compraCount = assets.filter(([,d]) => d.consensus === 'COMPRA').length;
+    const vendaCount  = assets.filter(([,d]) => d.consensus === 'VENDA').length;
+    const neutroCount = assets.filter(([,d]) => d.consensus === 'NEUTRO').length;
+    const rsiValues   = assets.map(([,d]) => d.rsi).filter(v => v != null && v > 0);
+    const avgRsi      = rsiValues.length ? rsiValues.reduce((a, b) => a + b, 0) / rsiValues.length : 0;
+    document.getElementById('ind-count-compra').textContent = compraCount;
+    document.getElementById('ind-count-venda').textContent = vendaCount;
+    document.getElementById('ind-count-neutro').textContent = neutroCount;
+    document.getElementById('ind-avg-rsi').textContent = avgRsi.toFixed(1);
+    document.getElementById('ind-avg-rsi-label').textContent =
+      avgRsi < 40 ? '📉 Mercado sobrevendido' : avgRsi > 60 ? '📈 Mercado sobrecomprado' : '↔️ Mercado neutro';
     document.getElementById('indicators-update-time').textContent = `Atualizado: ${new Date().toLocaleTimeString()}`;
     setLastUpdate();
+    // Render table
+    filterIndicatorsTable();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--red)">Erro: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--red)">
+      ⚠️ Erro ao carregar: ${e.message}
+    </td></tr>`;
   }
 }
 
+function filterIndicatorsTable() {
+  const consensusFilter = document.getElementById('indicators-filter-consensus')?.value || '';
+  const typeFilter      = document.getElementById('indicators-filter-type')?.value || '';
+  const search          = (document.getElementById('indicators-search')?.value || '').toUpperCase().trim();
+  const tbody           = document.getElementById('indicators-all-tbody');
+
+  let entries = Object.entries(_indicatorsData);
+  if (!entries.length) return;
+
+  // Filter
+  if (consensusFilter) entries = entries.filter(([,d]) => d.consensus === consensusFilter);
+  if (typeFilter)      entries = entries.filter(([a]) => _assetType(a) === typeFilter);
+  if (search)          entries = entries.filter(([a]) => a.includes(search));
+
+  // Sort
+  entries.sort(([aKey, aVal], [bKey, bVal]) => {
+    let av, bv;
+    switch (_indicatorsSortKey) {
+      case 'asset':     av = aKey; bv = bKey; break;
+      case 'price':     av = aVal.price || 0; bv = bVal.price || 0; break;
+      case 'rsi':       av = aVal.rsi || 0; bv = bVal.rsi || 0; break;
+      case 'boll':      av = aVal.boll_position || 50; bv = bVal.boll_position || 50; break;
+      case 'consensus': av = aVal.consensus; bv = bVal.consensus; break;
+      default:          av = aKey; bv = bKey;
+    }
+    if (av < bv) return _indicatorsSortAsc ? -1 : 1;
+    if (av > bv) return _indicatorsSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  document.getElementById('ind-showing-count').textContent = `${entries.length} ativos`;
+
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhum ativo corresponde aos filtros</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = entries.map(([asset, d]) => {
+    const rsiNum   = d.rsi || 0;
+    const rsiZone  = rsiNum < 30 ? 'SOBREVENDIDO' : rsiNum > 70 ? 'SOBRECOMPRADO' : 'NEUTRO';
+    const rsiClass = rsiNum < 30 ? 'green' : rsiNum > 70 ? 'red' : 'text-muted';
+    const crossCls = d.macd_cross === 'COMPRA' ? 'green' : d.macd_cross === 'VENDA' ? 'red' : 'text-muted';
+    const bollPos  = d.boll_position != null ? d.boll_position : 50;
+    const bollCls  = bollPos < 20 ? 'green' : bollPos > 80 ? 'red' : '';
+    const consBadge = d.consensus === 'COMPRA' ? 'badge-green' : d.consensus === 'VENDA' ? 'badge-red' : 'badge-gray';
+    const rowBg    = d.consensus === 'COMPRA'
+      ? 'background:rgba(0,255,136,0.04)'
+      : d.consensus === 'VENDA'
+        ? 'background:rgba(255,68,68,0.04)'
+        : '';
+    const type = _assetType(asset);
+    const typeBadge = type === 'B3' ? 'badge-blue' : type === 'CRYPTO' ? 'badge-yellow' : 'badge-gray';
+
+    return `<tr style="${rowBg};cursor:pointer" onclick="analyzeFromTable('${asset}')">
+      <td><strong>${asset}</strong></td>
+      <td><span class="badge ${typeBadge}" style="font-size:10px">${type}</span></td>
+      <td>${fmtPrice(d.price)}</td>
+      <td class="${rsiClass}" style="font-weight:700">${rsiNum.toFixed(1)}</td>
+      <td style="font-size:11px" class="${rsiClass}">${rsiZone}</td>
+      <td class="${d.macd_trend === 'ALTA' ? 'green' : 'red'}">${d.macd_trend || '--'}</td>
+      <td class="${crossCls}" style="font-weight:600">${d.macd_cross || '--'}</td>
+      <td class="${bollCls}">${bollPos.toFixed(0)}%</td>
+      <td><span class="badge ${consBadge}">${d.consensus}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function sortIndicatorsBy(key) {
+  if (_indicatorsSortKey === key) {
+    _indicatorsSortAsc = !_indicatorsSortAsc;
+  } else {
+    _indicatorsSortKey = key;
+    _indicatorsSortAsc = true;
+  }
+  filterIndicatorsTable();
+}
+
+// Chamado ao clicar na linha da tabela
+function analyzeFromTable(asset) {
+  const input = document.getElementById('indicator-asset-input');
+  if (input) input.value = asset;
+  loadSingleIndicator();
+}
+
 async function loadSingleIndicator() {
-  const asset = document.getElementById('indicator-asset-input')?.value?.trim();
+  const asset = document.getElementById('indicator-asset-input')?.value?.trim()?.toUpperCase();
   if (!asset) { toast('Digite um ativo', 'warning'); return; }
-  const interval = document.getElementById('indicators-interval')?.value || '5m';
+  const interval = document.getElementById('indicator-detail-interval')?.value
+    || document.getElementById('indicators-interval')?.value
+    || '5m';
   const container = document.getElementById('indicator-detail-content');
-  container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div> Analisando...</div>';
+  container.innerHTML = '<div class="loading-overlay"><div class="spinner"></div> Analisando ' + asset + '...</div>';
   try {
     const res = await api(`/market/indicators/${asset}?interval=${interval}`, {}, 30000);
     const d = res.data || {};
     const s = d.summary || {};
-    let html = `<div class="cards-grid cards-3" style="margin-top:12px">`;
-    // RSI
-    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">RSI</span></div>
-      <div class="kpi-value ${d.rsi < 30 ? 'green' : d.rsi > 70 ? 'red' : ''}">${d.rsi?.toFixed(1) || '--'}</div>
-      <div class="kpi-label">${d.rsi < 30 ? 'Sobrevendido' : d.rsi > 70 ? 'Sobrecomprado' : 'Neutro'}</div></div>`;
-    // MACD
-    const macd = d.macd || {};
-    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">MACD</span></div>
-      <div class="kpi-value" style="font-size:18px">${macd.trend || '--'}</div>
-      <div class="kpi-label">Cross: <strong class="${macd.crossover === 'COMPRA' ? 'green' : macd.crossover === 'VENDA' ? 'red' : ''}">${macd.crossover || '--'}</strong></div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">MACD: ${macd.macd?.toFixed(6) || '--'} | Signal: ${macd.signal?.toFixed(6) || '--'}</div></div>`;
-    // Bollinger
-    const boll = d.bollinger || {};
-    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">Bollinger Bands</span></div>
-      <div class="kpi-value" style="font-size:18px">${boll.position != null ? boll.position.toFixed(0) + '%' : '--'}</div>
-      <div class="kpi-label">Banda: ${boll.lower || '--'} — ${boll.upper || '--'}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">BW: ${boll.bandwidth || '--'}% | SMA: ${boll.sma || '--'}</div></div>`;
-    // Stochastic
-    const stoch = d.stochastic || {};
-    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">Estocástico</span></div>
-      <div class="kpi-value" style="font-size:18px">K: ${stoch.k?.toFixed(1) || '--'} / D: ${stoch.d?.toFixed(1) || '--'}</div>
-      <div class="kpi-label">${stoch.zone || '--'}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Cross: ${stoch.crossover || '--'}</div></div>`;
-    // Fibonacci
-    const fib = d.fibonacci || {};
-    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">Fibonacci</span></div>
-      <div class="kpi-value" style="font-size:18px">${fib.nearest_level || '--'}%</div>
-      <div class="kpi-label">Nível mais próximo: ${fmtPrice(fib.nearest_price)}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Trend: ${fib.trend || '--'}</div></div>`;
-    // VWAP
-    const vwap = d.vwap || {};
-    html += `<div class="card" style="padding:12px"><div class="card-header"><span class="card-title">VWAP</span></div>
-      <div class="kpi-value" style="font-size:18px">${fmtPrice(vwap.vwap)}</div>
-      <div class="kpi-label">${vwap.position || '--'} (${vwap.deviation_pct?.toFixed(2) || '0'}%)</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Sinal: <strong>${vwap.signal || '--'}</strong></div></div>`;
-    html += `</div>`;
-    // Summary
-    html += `<div style="margin-top:12px;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;font-size:12px;color:var(--text-muted)">
-      Preço: <strong>${fmtPrice(s.current_price)}</strong> | High(20): ${fmtPrice(s.high)} | Low(20): ${fmtPrice(s.low)} | Volatilidade: ${s.volatility_pct?.toFixed(2) || '0'}%
+
+    // Header com preço e volatilidade
+    let html = `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 4px 16px;border-bottom:1px solid var(--border);margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted)">ATIVO</div>
+        <div style="font-size:22px;font-weight:800;color:var(--green)">${asset}</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted)">PREÇO</div>
+        <div style="font-size:18px;font-weight:700">${fmtPrice(s.current_price)}</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted)">HIGH 20</div>
+        <div style="font-size:15px;font-weight:600;color:var(--green)">${fmtPrice(s.high)}</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted)">LOW 20</div>
+        <div style="font-size:15px;font-weight:600;color:var(--red)">${fmtPrice(s.low)}</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--text-muted)">VOLATILIDADE</div>
+        <div style="font-size:15px;font-weight:600;color:var(--yellow)">${s.volatility_pct?.toFixed(2) || '0'}%</div>
+      </div>
+      <div style="margin-left:auto">
+        <div style="font-size:11px;color:var(--text-muted)">TIMEFRAME</div>
+        <div class="badge badge-blue">${interval} | ${d.candles || '--'} candles</div>
+      </div>
     </div>`;
+
+    html += `<div class="cards-grid cards-3">`;
+
+    // RSI card
+    const rsiVal = d.rsi || 0;
+    const rsiZone = rsiVal < 30 ? 'Sobrevendido 📉' : rsiVal > 70 ? 'Sobrecomprado 📈' : 'Zona Neutra ↔️';
+    const rsiColor = rsiVal < 30 ? 'var(--green)' : rsiVal > 70 ? 'var(--red)' : 'var(--text-primary)';
+    html += `<div class="card" style="padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">RSI (14)</div>
+      <div style="font-size:36px;font-weight:800;color:${rsiColor};line-height:1">${rsiVal.toFixed(1)}</div>
+      <div style="font-size:12px;margin-top:6px;color:${rsiColor}">${rsiZone}</div>
+      <div style="margin-top:8px">
+        <div style="height:6px;background:var(--bg-tertiary);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${rsiVal}%;background:${rsiColor};border-radius:3px;transition:width .5s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:2px"><span>0</span><span>30</span><span>70</span><span>100</span></div>
+      </div>
+    </div>`;
+
+    // MACD card
+    const macd = d.macd || {};
+    const macdColor = macd.crossover === 'COMPRA' ? 'var(--green)' : macd.crossover === 'VENDA' ? 'var(--red)' : 'var(--text-primary)';
+    html += `<div class="card" style="padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">MACD (12,26,9)</div>
+      <div style="font-size:24px;font-weight:800;color:${macdColor}">${macd.trend || '--'}</div>
+      <div style="font-size:12px;margin-top:4px">Cross: <strong style="color:${macdColor}">${macd.crossover || '--'}</strong></div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:2px">
+        <span>MACD: <strong>${macd.macd?.toFixed(5) || '--'}</strong></span>
+        <span>Signal: <strong>${macd.signal?.toFixed(5) || '--'}</strong></span>
+        <span>Histograma: <strong style="color:${(macd.histogram||0) > 0 ? 'var(--green)' : 'var(--red)'}">${macd.histogram?.toFixed(5) || '--'}</strong></span>
+      </div>
+    </div>`;
+
+    // Bollinger card
+    const boll = d.bollinger || {};
+    const bollPos = boll.position ?? 50;
+    const bollColor = bollPos < 20 ? 'var(--green)' : bollPos > 80 ? 'var(--red)' : 'var(--yellow)';
+    html += `<div class="card" style="padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Bollinger Bands (20,2)</div>
+      <div style="font-size:30px;font-weight:800;color:${bollColor}">${bollPos.toFixed(0)}%</div>
+      <div style="font-size:11px;margin-top:4px;color:var(--text-muted)">dentro da banda</div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:2px">
+        <span>SMA: <strong>${boll.sma || '--'}</strong></span>
+        <span style="color:var(--red)">Superior: <strong>${boll.upper || '--'}</strong></span>
+        <span style="color:var(--green)">Inferior: <strong>${boll.lower || '--'}</strong></span>
+        <span>BW: <strong>${boll.bandwidth || '--'}%</strong></span>
+      </div>
+    </div>`;
+
+    // Stochastic card
+    const stoch = d.stochastic || {};
+    const stochColor = stoch.zone === 'SOBRECOMPRADO' ? 'var(--red)' : stoch.zone === 'SOBREVENDIDO' ? 'var(--green)' : 'var(--text-primary)';
+    html += `<div class="card" style="padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Estocástico (14,3)</div>
+      <div style="font-size:24px;font-weight:800;color:${stochColor}">K: ${stoch.k?.toFixed(1) || '--'}</div>
+      <div style="font-size:14px;color:var(--text-muted)">D: ${stoch.d?.toFixed(1) || '--'}</div>
+      <div style="margin-top:6px;font-size:12px;color:${stochColor}">${stoch.zone || '--'}</div>
+      <div style="font-size:12px;margin-top:4px">Cross: <strong style="color:${stoch.crossover === 'COMPRA' ? 'var(--green)' : stoch.crossover === 'VENDA' ? 'var(--red)' : ''}">${stoch.crossover || '--'}</strong></div>
+    </div>`;
+
+    // Fibonacci card
+    const fib = d.fibonacci || {};
+    const fibLevels = fib.levels || {};
+    html += `<div class="card" style="padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Fibonacci Retracement</div>
+      <div style="font-size:20px;font-weight:800;color:var(--yellow)">Nível ${fib.nearest_level || '--'}%</div>
+      <div style="font-size:12px;margin-top:4px">Preço: <strong>${fmtPrice(fib.nearest_price)}</strong></div>
+      <div style="font-size:12px">Trend: <strong style="color:${fib.trend === 'ALTA' ? 'var(--green)' : 'var(--red)'}">${fib.trend || '--'}</strong></div>
+      <div style="margin-top:8px;font-size:10px;color:var(--text-muted);display:flex;flex-direction:column;gap:1px">
+        ${Object.entries(fibLevels).map(([k,v]) => `<span>${k}%: <strong>${v}</strong>${fib.nearest_level === k ? ' ◀' : ''}</span>`).join('')}
+      </div>
+    </div>`;
+
+    // VWAP card
+    const vwap = d.vwap || {};
+    const vwapColor = vwap.signal === 'COMPRA' ? 'var(--green)' : vwap.signal === 'VENDA' ? 'var(--red)' : 'var(--text-primary)';
+    html += `<div class="card" style="padding:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">VWAP</div>
+      <div style="font-size:22px;font-weight:800">${fmtPrice(vwap.vwap)}</div>
+      <div style="font-size:12px;margin-top:4px;color:${vwapColor}">${vwap.position || '--'} (${vwap.deviation_pct?.toFixed(2) || '0'}%)</div>
+      <div style="font-size:12px;margin-top:4px">Sinal: <strong style="color:${vwapColor}">${vwap.signal || '--'}</strong></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+        Preço atual: ${fmtPrice(vwap.current)}<br>
+        Desvio: ${vwap.deviation_pct?.toFixed(3) || '0'}%
+      </div>
+    </div>`;
+
+    html += `</div>`;
     container.innerHTML = html;
+    // Scroll down to detail
+    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
-    container.innerHTML = `<div class="empty-state"><p style="color:var(--red)">Erro: ${e.message}</p></div>`;
+    container.innerHTML = `<div class="empty-state"><p style="color:var(--red)">Erro ao analisar ${asset}: ${e.message}</p></div>`;
   }
 }
 

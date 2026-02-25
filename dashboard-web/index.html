@@ -857,10 +857,11 @@
            ========================================= -->
       <div id="page-indicators" class="page">
         <div class="page-title">📊 Indicadores Técnicos</div>
-        <div class="page-subtitle">MACD, Bollinger Bands, Estocástico, Fibonacci, VWAP e RSI para todos os ativos</div>
+        <div class="page-subtitle">MACD, Bollinger Bands, Estocástico, Fibonacci, VWAP e RSI para todos os 80 ativos em tempo real</div>
 
-        <div class="flex items-center gap-12 mb-16">
-          <button class="btn btn-primary" onclick="loadIndicators()">↻ Atualizar Indicadores</button>
+        <!-- Controles -->
+        <div class="flex items-center gap-12 mb-16" style="flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="loadIndicators()">↻ Atualizar</button>
           <select id="indicators-interval"
             style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px"
             onchange="loadIndicators()">
@@ -868,31 +869,78 @@
             <option value="1h">1 Hora</option>
             <option value="1d">1 Dia</option>
           </select>
+          <select id="indicators-filter-consensus"
+            style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px"
+            onchange="filterIndicatorsTable()">
+            <option value="">Todos os Consensos</option>
+            <option value="COMPRA">Apenas COMPRA</option>
+            <option value="VENDA">Apenas VENDA</option>
+            <option value="NEUTRO">Apenas NEUTRO</option>
+          </select>
+          <select id="indicators-filter-type"
+            style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px"
+            onchange="filterIndicatorsTable()">
+            <option value="">Todos os Tipos</option>
+            <option value="B3">B3</option>
+            <option value="CRYPTO">Crypto</option>
+            <option value="US">US Stocks</option>
+          </select>
+          <input id="indicators-search" type="text" placeholder="Buscar ativo..."
+            style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px;width:150px"
+            oninput="filterIndicatorsTable()" />
           <span id="indicators-update-time" class="text-muted" style="font-size:12px;margin-left:auto"></span>
         </div>
 
-        <!-- Resumo de todos os ativos -->
+        <!-- Cards de resumo -->
+        <div class="cards-grid cards-4 mb-16" id="indicators-summary-cards">
+          <div class="card">
+            <div class="card-header"><span class="card-title">Sinal COMPRA</span><div class="card-icon green">📈</div></div>
+            <div class="kpi-value green" id="ind-count-compra">--</div>
+            <div class="kpi-label">Ativos com consenso COMPRA</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Sinal VENDA</span><div class="card-icon red">📉</div></div>
+            <div class="kpi-value red" id="ind-count-venda">--</div>
+            <div class="kpi-label">Ativos com consenso VENDA</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">Neutros</span><div class="card-icon blue">↔️</div></div>
+            <div class="kpi-value" id="ind-count-neutro">--</div>
+            <div class="kpi-label">Ativos sem sinal claro</div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="card-title">RSI Médio</span><div class="card-icon yellow">📊</div></div>
+            <div class="kpi-value" id="ind-avg-rsi">--</div>
+            <div class="kpi-label" id="ind-avg-rsi-label">do mercado</div>
+          </div>
+        </div>
+
+        <!-- Tabela de todos os ativos -->
         <div class="card mb-16">
           <div class="card-header">
             <span class="card-title">Painel de Indicadores — Todos os Ativos</span>
-            <span class="badge badge-blue">MACD + Bollinger + RSI</span>
+            <span id="ind-showing-count" class="badge badge-blue">--</span>
           </div>
           <div class="table-wrap">
-            <table>
+            <table id="indicators-all-table">
               <thead>
                 <tr>
-                  <th>Ativo</th>
-                  <th>Preço</th>
-                  <th>RSI</th>
+                  <th style="cursor:pointer" onclick="sortIndicatorsBy('asset')">Ativo ⇅</th>
+                  <th>Tipo</th>
+                  <th style="cursor:pointer" onclick="sortIndicatorsBy('price')">Preço ⇅</th>
+                  <th style="cursor:pointer" onclick="sortIndicatorsBy('rsi')">RSI ⇅</th>
+                  <th>Zona RSI</th>
                   <th>MACD Trend</th>
                   <th>MACD Cross</th>
-                  <th>Bollinger %</th>
-                  <th>Banda</th>
-                  <th>Consenso</th>
+                  <th style="cursor:pointer" onclick="sortIndicatorsBy('boll')">Bollinger ⇅</th>
+                  <th style="cursor:pointer" onclick="sortIndicatorsBy('consensus')">Consenso ⇅</th>
                 </tr>
               </thead>
               <tbody id="indicators-all-tbody">
-                <tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-muted)">Clique em Atualizar para carregar...</td></tr>
+                <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-muted)">
+                  <div class="spinner" style="margin:0 auto 12px"></div>
+                  Aguardando dados...
+                </td></tr>
               </tbody>
             </table>
           </div>
@@ -901,15 +949,21 @@
         <!-- Detalhe de um ativo específico -->
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Detalhe do Ativo</span>
+            <span class="card-title">🔎 Detalhe Completo do Ativo</span>
             <div style="display:flex;gap:8px;align-items:center">
               <input id="indicator-asset-input" type="text" placeholder="Ex: BTCUSDT"
-                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px;width:140px" />
+                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 12px;border-radius:6px;font-size:13px;width:150px" />
+              <select id="indicator-detail-interval"
+                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px">
+                <option value="5m">5m</option>
+                <option value="1h">1h</option>
+                <option value="1d">1d</option>
+              </select>
               <button class="btn btn-primary btn-sm" onclick="loadSingleIndicator()">Analisar</button>
             </div>
           </div>
           <div id="indicator-detail-content">
-            <div class="empty-state"><div class="empty-icon">📊</div><p>Digite um ativo acima e clique Analisar</p></div>
+            <div class="empty-state"><div class="empty-icon">📊</div><p>Clique num ativo da tabela acima ou digite o nome e clique Analisar</p></div>
           </div>
         </div>
       </div>
