@@ -314,7 +314,7 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData) {
   // Render KPIs from fast endpoints immediately
   const td = tradeStatus?.data || {};
   const perf = perfData?.data || {};
-  const capital = td.capital || 2000;
+  const capital = td.capital_efetivo || td.capital || 2000;
   document.getElementById('kpi-capital').textContent = fmtMoney(capital);
   const pnlVal = perf.total_pnl || td.total_pnl || 0;
   const pnlEl = document.getElementById('kpi-pnl');
@@ -334,8 +334,8 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData) {
 }
 
 function renderDashboardKPIs(data, riskStatus, tradeStatus) {
-  // Capital — usa /trade/status como fonte principal
-  const capital = tradeStatus?.data?.capital || data.market_data?.capital || data.portfolio?.capital || 2000;
+  // Capital — usa capital_efetivo (capital base + pnl hoje)
+  const capital = tradeStatus?.data?.capital_efetivo || tradeStatus?.data?.capital || data.market_data?.capital || data.portfolio?.capital || 2000;
   document.getElementById('kpi-capital').textContent = fmtMoney(capital);
   const pnlVal = tradeStatus?.data?.total_pnl || 0;
   const pnlEl = document.getElementById('kpi-pnl');
@@ -849,15 +849,15 @@ async function loadPortfolio() {
       el.textContent = val;
       if (positive !== undefined) el.style.color = positive ? 'var(--green)' : 'var(--red)';
     };
-    setEl('ptf-capital', fmtMoney(td.capital || 2000));
-    setEl('ptf-pnl-today', fmtMoney(perf.pnl_today || 0), (perf.pnl_today || 0) >= 0);
+    setEl('ptf-capital', fmtMoney(td.capital_efetivo || td.capital || 2000));
+    setEl('ptf-pnl-today', fmtMoney(perf.pnl_today || td.pnl_hoje || 0), (perf.pnl_today || 0) >= 0);
     setEl('ptf-pnl-5m',   fmtMoney(perf.pnl_today_5m || 0), (perf.pnl_today_5m || 0) >= 0);
     setEl('ptf-pnl-1h',   fmtMoney(perf.pnl_today_1h || 0), (perf.pnl_today_1h || 0) >= 0);
     setEl('ptf-pnl-1d',   fmtMoney(perf.pnl_today_1d || 0), (perf.pnl_today_1d || 0) >= 0);
     setEl('ptf-pnl-total', fmtMoney(perf.total_pnl || td.total_pnl || 0), (perf.total_pnl || 0) >= 0);
 
     // Quick summary from trade data
-    const capital = td.capital || 2000;
+    const capital = td.capital_efetivo || td.capital || 2000;
     const totalPnl = perf.total_pnl || td.total_pnl || 0;
     const tradePositions = td.positions || {};
     const posCount = Object.keys(tradePositions).length;
@@ -1204,9 +1204,22 @@ async function loadTradePage() {
     const totalPnl  = perf.total_pnl   || d.total_pnl || 0;
     const totalCycles = perf.total_cycles || 0;
 
-    // Capital display (badge no header do card)
+    // Capital display
     const capDisplayEl = document.getElementById('trade-capital-display');
-    if (capDisplayEl) capDisplayEl.textContent = fmtMoney(d.capital);
+    if (capDisplayEl) capDisplayEl.textContent = fmtMoney(d.capital_efetivo || d.capital);
+    const tradeCurrentCapEl = document.getElementById('trade-current-capital');
+    if (tradeCurrentCapEl) tradeCurrentCapEl.textContent = fmtMoney(d.capital);
+    const tradePnlHojeEl = document.getElementById('trade-pnl-hoje');
+    if (tradePnlHojeEl) {
+      const ph = d.pnl_hoje ?? todayPnl;
+      tradePnlHojeEl.textContent = (ph >= 0 ? '+' : '') + fmtMoney(ph);
+      tradePnlHojeEl.style.color = ph >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    const tradeCapEfetivoEl = document.getElementById('trade-capital-efetivo');
+    if (tradeCapEfetivoEl) {
+      tradeCapEfetivoEl.textContent = fmtMoney(d.capital_efetivo || d.capital);
+      tradeCapEfetivoEl.style.color = (d.pnl_hoje ?? todayPnl) >= 0 ? 'var(--green)' : 'var(--red)';
+    }
 
     // ⚡ 5min
     const gain5mEl = document.getElementById('trade-gain-5m');
@@ -1285,7 +1298,7 @@ async function loadTradePage() {
       toggleBtn.className = `btn ${isActive ? 'btn-secondary' : 'btn-primary'}`;
     }
     const capitalBadge = document.getElementById('trade-capital-badge');
-    if (capitalBadge) capitalBadge.textContent = fmtMoney(d.capital);
+    if (capitalBadge) capitalBadge.textContent = fmtMoney(d.capital_efetivo || d.capital);
 
     // Sessão atual
     const sessionBadge = document.getElementById('trade-session-badge');
@@ -1305,6 +1318,11 @@ async function loadTradePage() {
     // Capital card
     const capEl = document.getElementById('trade-current-capital');
     if (capEl) capEl.textContent = fmtMoney(d.capital);
+    const ceEl = document.getElementById('trade-capital-efetivo');
+    if (ceEl) {
+      ceEl.textContent = fmtMoney(d.capital_efetivo || d.capital);
+      ceEl.style.color = (d.pnl_hoje ?? 0) >= 0 ? 'var(--green)' : 'var(--red)';
+    }
     const pnlEl = document.getElementById('trade-total-pnl');
     if (pnlEl) {
       pnlEl.textContent = fmtMoney(d.total_pnl || 0);

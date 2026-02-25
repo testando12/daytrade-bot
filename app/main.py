@@ -1519,17 +1519,27 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
 async def trade_status():
     """Retorna o estado atual do trading: capital, posições, log de eventos."""
     _, session_label = _current_session()
+    # Capital efetivo = capital base + ganho/perda acumulado do dia (BRT)
+    from datetime import timezone as _tz, timedelta as _td
+    _brt = _tz(_td(hours=-3))
+    today_str = datetime.now(_brt).strftime("%Y-%m-%d")
+    today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str)]
+    pnl_today_live = round(sum(c.get("pnl", 0) for c in today_cycles), 2)
+    capital_base = _trade_state["capital"]
+    capital_efetivo = round(capital_base + pnl_today_live, 2)
     return {
         "success": True,
         "data": {
-            "capital":      _trade_state["capital"],
-            "auto_trading": _trade_state["auto_trading"],
-            "total_pnl":    _trade_state["total_pnl"],
-            "positions":    _trade_state["positions"],
-            "log":          _trade_state["log"],
-            "last_cycle":   _trade_state["last_cycle"],
-            "b3_open":      _is_market_open(),
-            "session":      session_label,
+            "capital":          capital_base,
+            "capital_efetivo":  capital_efetivo,
+            "pnl_hoje":         pnl_today_live,
+            "auto_trading":     _trade_state["auto_trading"],
+            "total_pnl":        _trade_state["total_pnl"],
+            "positions":        _trade_state["positions"],
+            "log":              _trade_state["log"],
+            "last_cycle":       _trade_state["last_cycle"],
+            "b3_open":          _is_market_open(),
+            "session":          session_label,
         },
     }
 
