@@ -25,3 +25,7 @@
 [2026-02-25T16:52:16] Dados obtidos: 78 ativos via yahoo.finance
 [2026-02-25T16:52:16] Ciclo concluído | IRQ: 0.077 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 22.2079 | Total P&L: R$ 22.2079
 [2026-02-25T16:52:16] Top posições: DOGE=R$6.57 | AVAX=R$6.56 | ETH=R$4.61 | DOT=R$4.47
+[2026-02-25T19:53:36] Iniciando ciclo — capital: R$ 150.00
+[2026-02-25T19:53:37] Dados obtidos: 78 ativos via yahoo.finance
+[2026-02-25T19:53:37] Ciclo concluído | IRQ: 0.079 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 20.7537 | Total P&L: R$ 20.7537
+[2026-02-25T19:53:37] Top posições: DOT=R$7.41 | MU=R$4.88 | UNH=R$4.47 | SOL=R$4.00
