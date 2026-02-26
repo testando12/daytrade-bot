@@ -20,6 +20,7 @@ import asyncio
 import json
 
 from app.core.config import settings
+from app import db_state
 from app.engines import MomentumAnalyzer, RiskAnalyzer, PortfolioManager
 from app.engines.risk_manager import risk_manager
 
@@ -1442,15 +1443,15 @@ _DEFAULT_TRADE_STATE: dict = {
     "total_pnl": 0.0,
     "last_cycle": None,
 }
-_trade_state: dict = _load_json(_STATE_FILE, dict(_DEFAULT_TRADE_STATE))
+_trade_state: dict = db_state.load_state("trade_state", dict(_DEFAULT_TRADE_STATE))
 # Corrige valores corrompidos do bug antigo de P&L
 if _trade_state.get("total_pnl", 0.0) < -5:
     _trade_state["total_pnl"] = 0.0
-    _save_json(_STATE_FILE, _trade_state)
+    db_state.save_state("trade_state", _trade_state)
 # Se o capital salvo for menor que o capital configurado, atualiza para o maior
 if _trade_state.get("capital", 0) < settings.INITIAL_CAPITAL:
     _trade_state["capital"] = settings.INITIAL_CAPITAL
-    _save_json(_STATE_FILE, _trade_state)
+    db_state.save_state("trade_state", _trade_state)
 
 # ── performance history ────────────────────────────────
 _DEFAULT_PERF: dict = {
@@ -1464,7 +1465,7 @@ _DEFAULT_PERF: dict = {
     "total_gain": 0.0,     # soma acumulada de todos os ciclos positivos
     "total_loss": 0.0,     # soma acumulada do absoluto de ciclos negativos
 }
-_perf_state: dict = _load_json(_PERF_FILE, dict(_DEFAULT_PERF))
+_perf_state: dict = db_state.load_state("performance", dict(_DEFAULT_PERF))
 
 
 def _trade_log(event_type: str, asset: str, amount: float, note: str):
@@ -1478,7 +1479,7 @@ def _trade_log(event_type: str, asset: str, amount: float, note: str):
     })
     if len(_trade_state["log"]) > 200:
         _trade_state["log"] = _trade_state["log"][:200]
-    _save_json(_STATE_FILE, _trade_state)
+    db_state.save_state("trade_state", _trade_state)
 
 
 def _record_cycle_performance(pnl: float, capital: float, irq: float,
@@ -1512,7 +1513,7 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
             _perf_state["worst_day_pnl"] = round(pnl, 4)
         _perf_state["total_loss"] = round(_perf_state.get("total_loss", 0.0) + abs(pnl), 4)
 
-    _save_json(_PERF_FILE, _perf_state)
+    db_state.save_state("performance", _perf_state)
 
 
 @app.get("/trade/status")
@@ -1583,14 +1584,14 @@ async def reset_trade_state():
     _trade_state["capital"]   = settings.INITIAL_CAPITAL
     _trade_state["log"]       = []
     _trade_state["positions"] = {}
-    _save_json(_STATE_FILE, _trade_state)
+    db_state.save_state("trade_state", _trade_state)
     _perf_state["cycles"] = []
     _perf_state["total_pnl_history"] = []
     _perf_state["win_count"] = 0
     _perf_state["loss_count"] = 0
     _perf_state["best_day_pnl"] = 0.0
     _perf_state["worst_day_pnl"] = 0.0
-    _save_json(_PERF_FILE, _perf_state)
+    db_state.save_state("performance", _perf_state)
     return {"success": True, "message": f"Histórico zerado — capital restaurado para R$ {settings.INITIAL_CAPITAL:.2f}"}
 
 
@@ -2248,7 +2249,7 @@ async def run_backtest_endpoint(body: dict = None):
             "max_drawdown_pct":report.get("max_drawdown_pct"),
             "data_source":     report.get("data_source"),
         }
-        _save_json(_PERF_FILE, _perf_state)
+        db_state.save_state("performance", _perf_state)
 
         return {
             "success": True,
