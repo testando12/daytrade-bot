@@ -1529,11 +1529,14 @@ async function loadTradePage() {
     const brokerBadges = document.getElementById('broker-status-badges');
     if (brokerBadges && d.broker_status) {
       const bs = d.broker_status;
+      const brokers = bs.brokers || {};
+      const ds = bs.data_sources || {};
       const parts = [];
-      if (bs.binance)   parts.push(`<span class="badge ${bs.binance === 'connected' ? 'badge-green' : 'badge-gray'}" style="font-size:10px">Binance: ${bs.binance}</span>`);
-      if (bs.btg)       parts.push(`<span class="badge ${bs.btg === 'connected' ? 'badge-green' : 'badge-gray'}" style="font-size:10px">BTG: ${bs.btg}</span>`);
-      if (bs.brapi)     parts.push(`<span class="badge badge-green" style="font-size:10px">BRAPI ✓</span>`);
-      if (bs.yahoo)     parts.push(`<span class="badge badge-green" style="font-size:10px">Yahoo ✓</span>`);
+      if (brokers.binance) parts.push(`<span class="badge ${brokers.binance.connected ? 'badge-green' : 'badge-gray'}" style="font-size:10px">Binance: ${brokers.binance.mode || 'paper'}</span>`);
+      if (brokers.btg)     parts.push(`<span class="badge ${brokers.btg.connected ? 'badge-green' : 'badge-gray'}" style="font-size:10px">BTG: ${brokers.btg.mode || 'paper'}</span>`);
+      if (ds.brapi && ds.brapi.configured)          parts.push(`<span class="badge badge-green" style="font-size:10px">BRAPI ✓</span>`);
+      if (ds.binance_public && ds.binance_public.connected) parts.push(`<span class="badge badge-green" style="font-size:10px">Binance Pub ✓</span>`);
+      if (ds.yahoo && ds.yahoo.connected)            parts.push(`<span class="badge badge-green" style="font-size:10px">Yahoo ✓</span>`);
       brokerBadges.innerHTML = parts.join(' ');
     }
 
@@ -1554,7 +1557,7 @@ async function loadBrokerOrders() {
     const res = await api('/brokers/orders');
     const tbody = document.getElementById('broker-orders-tbody');
     if (!tbody) return;
-    const orders = (res.success ? res.data?.orders : null) || [];
+    const orders = (res.success ? (Array.isArray(res.data) ? res.data : res.data?.orders) : null) || [];
     if (!orders.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhuma ordem registrada</td></tr>';
       return;
@@ -1591,12 +1594,17 @@ function renderTradeLog(entries) {
   const typeStyles = {
     'COMPRA':    { cls: 'badge-green',  icon: '📈' },
     'VENDA':     { cls: 'badge-red',    icon: '📉' },
+    'ENTRY':     { cls: 'badge-green',  icon: '📈' },
+    'EXIT':      { cls: 'badge-red',    icon: '📉' },
     'HOLD':      { cls: 'badge-gray',   icon: '⏸' },
     'DEPÓSITO':  { cls: 'badge-blue',   icon: '💰' },
     'RETIRADA':  { cls: 'badge-yellow', icon: '💸' },
     'CICLO':     { cls: 'badge-blue',   icon: '🔄' },
     'SISTEMA':   { cls: 'badge-gray',   icon: 'âš™️' },
     'ERRO':      { cls: 'badge-red',    icon: '❌' },
+    'TAKE_PROFIT_ATR': { cls: 'badge-green', icon: '💰' },
+    'PARTIAL_TP':      { cls: 'badge-green', icon: '💰' },
+    'STOP_LOSS':       { cls: 'badge-red',   icon: '🛑' },
   };
 
   tbody.innerHTML = entries.map(ev => {
