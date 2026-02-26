@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 import asyncio
 import json
+import os
 
 from app.core.config import settings
 from app import db_state
@@ -200,6 +201,31 @@ async def _auto_cycle_loop():
     print("[scheduler] Parado.", flush=True)
 
 
+# ═══════════════════════════════════════════
+# KEEP-ALIVE: Self-ping para manter Render ativo 24/7
+# ═══════════════════════════════════════════
+
+async def _keep_alive_loop():
+    """Pinga o próprio servidor a cada 10 min para impedir que o Render Free durma."""
+    import httpx
+    # Detectar URL do serviço: RENDER_EXTERNAL_URL é setada automaticamente pelo Render
+    base_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+    if not base_url:
+        # Fallback: URL conhecida do deploy
+        base_url = "https://daytrade-bot.onrender.com"
+    health_url = f"{base_url}/health"
+    print(f"[keep-alive] Iniciado — ping a cada 10 min em {health_url}", flush=True)
+    await asyncio.sleep(60)  # espera 1 min para o servidor subir
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(health_url)
+                print(f"[keep-alive] Ping OK — status {resp.status_code}", flush=True)
+        except Exception as e:
+            print(f"[keep-alive] Ping falhou: {e}", flush=True)
+        await asyncio.sleep(600)  # 10 minutos
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicia o scheduler automático quando o servidor sobe."""
@@ -211,14 +237,25 @@ async def lifespan(app: FastAPI):
         if settings.DISCORD_WEBHOOK_URL:
             alert_manager.add_discord("discord_main", settings.DISCORD_WEBHOOK_URL)
             print("[alerts] Discord configurado", flush=True)
+    # ── Auto-trading ativo por padrão ──────────────────────────────────
+    _trade_state["auto_trading"] = True
+    # ── Scheduler de ciclos ────────────────────────────────────────────
     task = asyncio.create_task(_auto_cycle_loop())
     _scheduler_state["task"] = task
+    # ── Keep-alive self-ping (Render free tier) ────────────────────────
+    keep_alive_task = asyncio.create_task(_keep_alive_loop())
+    print("[lifespan] Bot 24/7 ativo — scheduler + keep-alive iniciados", flush=True)
     yield
     # Shutdown
     _scheduler_state["running"] = False
     task.cancel()
+    keep_alive_task.cancel()
     try:
         await task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await keep_alive_task
     except asyncio.CancelledError:
         pass
 
@@ -399,8 +436,18 @@ async def api_status():
 
 @app.get("/health")
 async def health_check():
-    """Health check"""
-    return {"status": "ok", "timestamp": datetime.utcnow()}
+    """Health check — usado pelo keep-alive e monitoramento externo."""
+    from datetime import timezone as _tz, timedelta as _td
+    _brt = _tz(_td(hours=-3))
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(_brt).isoformat(),
+        "auto_trading": _trade_state.get("auto_trading", False),
+        "scheduler_running": _scheduler_state.get("running", False),
+        "total_cycles": _scheduler_state.get("total_auto_cycles", 0),
+        "last_cycle": _trade_state.get("last_cycle"),
+        "uptime_session": _scheduler_state.get("session", ""),
+    }
 
 
 @app.post("/analyze/momentum")
@@ -1471,7 +1518,7 @@ def _save_json(path: Path, obj: dict):
 # ── trade state ────────────────────────────────────────
 _DEFAULT_TRADE_STATE: dict = {
     "capital": settings.INITIAL_CAPITAL,
-    "auto_trading": False,
+    "auto_trading": True,
     "positions": {},       # asset -> {"amount": float, "action": str, "pct": float}
     "log": [],             # lista de eventos {timestamp, type, asset, amount, note}
     "total_pnl": 0.0,
