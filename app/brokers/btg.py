@@ -53,10 +53,22 @@ class BTGBroker:
         self._token_expiry: float = 0
         self._connected = False
 
-        # Paper trading state
+        # Paper trading state (defaults)
         self._paper_orders: List[Dict] = []
         self._paper_positions: Dict[str, Dict] = {}
         self._paper_balance: float = settings.INITIAL_CAPITAL * settings.CAPITAL_BRL_PCT
+
+        # ── Restaurar estado persistido ────────────────────────────────
+        try:
+            from app import db_state as _dbs
+            _saved = _dbs.load_state("paper_btg", {})
+            if _saved and "balance" in _saved:
+                self._paper_orders = _saved.get("orders", [])[-100:]
+                self._paper_positions = _saved.get("positions", {})
+                self._paper_balance = _saved.get("balance", self._paper_balance)
+                print(f"[btg] Paper state restored: R${self._paper_balance:.2f} | {len(self._paper_positions)} positions | {len(self._paper_orders)} orders", flush=True)
+        except Exception as e:
+            print(f"[btg] Aviso: não restaurou paper state: {e}", flush=True)
 
         mode = "PAPER" if self.paper_trading else "LIVE"
         has_keys = bool(self.api_key and self.api_secret)
@@ -415,8 +427,22 @@ class BTGBroker:
             "mode": "paper",
         }
         self._paper_orders.append(order)
+        self._save_paper_state()
         print(f"[btg] PAPER: {side.upper()} {quantity} {ticker} @ R${exec_price:.2f} = R${cost:.2f} | Saldo: R${self._paper_balance:.2f}", flush=True)
         return order
+
+    def _save_paper_state(self):
+        """Persiste estado do paper trading no banco/arquivo."""
+        try:
+            from app import db_state as _dbs
+            _dbs.save_state("paper_btg", {
+                "orders": self._paper_orders[-100:],
+                "positions": dict(self._paper_positions),
+                "balance": self._paper_balance,
+                "updated_at": datetime.now().isoformat(),
+            })
+        except Exception as e:
+            print(f"[btg] Erro ao salvar paper state: {e}", flush=True)
 
     # ── Account / Positions ───────────────────────────────────────────────
 

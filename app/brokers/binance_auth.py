@@ -63,10 +63,22 @@ class BinanceAuthBroker:
 
         self._connected = False
 
-        # Paper trading state
+        # Paper trading state (defaults)
         self._paper_orders: List[Dict] = []
         self._paper_balances: Dict[str, float] = {"USDT": settings.INITIAL_CAPITAL * settings.CAPITAL_USD_PCT}
         self._paper_positions: Dict[str, float] = {}  # asset → qty
+
+        # ── Restaurar estado persistido ────────────────────────────────
+        try:
+            from app import db_state as _dbs
+            _saved = _dbs.load_state("paper_binance", {})
+            if _saved and _saved.get("balances"):
+                self._paper_orders = _saved.get("orders", [])[-100:]
+                self._paper_balances = _saved.get("balances", self._paper_balances)
+                self._paper_positions = _saved.get("positions", {})
+                print(f"[binance-auth] Paper state restored: USDT=${self._paper_balances.get('USDT', 0):.2f} | {len(self._paper_positions)} positions | {len(self._paper_orders)} orders", flush=True)
+        except Exception as e:
+            print(f"[binance-auth] Aviso: não restaurou paper state: {e}", flush=True)
 
         mode = "PAPER" if self.paper_trading else ("TESTNET" if self.use_testnet else "LIVE")
         has_keys = bool(self.api_key and self.api_secret)
@@ -373,9 +385,23 @@ class BinanceAuthBroker:
             "mode": "paper",
         }
         self._paper_orders.append(order)
+        self._save_paper_state()
         usdt_bal = self._paper_balances.get("USDT", 0)
         print(f"[binance-auth] PAPER: {side} {quantity:.6f} {ticker} @ ${exec_price:.2f} = ${cost_usdt:.2f} | USDT: ${usdt_bal:.2f}", flush=True)
         return order
+
+    def _save_paper_state(self):
+        """Persiste estado do paper trading no banco/arquivo."""
+        try:
+            from app import db_state as _dbs
+            _dbs.save_state("paper_binance", {
+                "orders": self._paper_orders[-100:],
+                "balances": dict(self._paper_balances),
+                "positions": dict(self._paper_positions),
+                "updated_at": datetime.now().isoformat(),
+            })
+        except Exception as e:
+            print(f"[binance-auth] Erro ao salvar paper state: {e}", flush=True)
 
     # ── Account / Positions ───────────────────────────────────────────────
 

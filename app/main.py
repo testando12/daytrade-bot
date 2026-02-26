@@ -203,6 +203,14 @@ async def _auto_cycle_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicia o scheduler automático quando o servidor sobe."""
+    # ── Inicializar alertas Telegram/Discord (se configurados) ─────────
+    if ALERTS_AVAILABLE and alert_manager:
+        if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
+            alert_manager.add_telegram("telegram_main", settings.TELEGRAM_BOT_TOKEN, settings.TELEGRAM_CHAT_ID)
+            print("[alerts] Telegram configurado", flush=True)
+        if settings.DISCORD_WEBHOOK_URL:
+            alert_manager.add_discord("discord_main", settings.DISCORD_WEBHOOK_URL)
+            print("[alerts] Discord configurado", flush=True)
     task = asyncio.create_task(_auto_cycle_loop())
     _scheduler_state["task"] = task
     yield
@@ -1594,6 +1602,9 @@ async def trade_status():
             "capital_usd_brl":  capital_usd_brl,   # parcela crypto/US em R$
             "capital_usd":      capital_usd,        # parcela crypto/US em USD
             "usd_rate":         usd_rate,           # R$/USD usado na conversão
+            # ── Broker info ────────────────────────────────────────────
+            "trading_mode":     getattr(settings, "TRADING_MODE", "paper"),
+            "broker_status":    market_data_service.broker_status() if market_data_service else {},
         },
     }
 
@@ -2425,6 +2436,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             f"📉 Operando com {_pause_mult*100:.0f}% do tamanho | Diário: R$ {_today_pnl:.2f} | Semanal: R$ {_week_pnl:.2f}")
 
     # ── 5. Montar posições unificadas ────────────────────────────────────
+    prev_positions = dict(_trade_state.get("positions", {}))  # snapshot antes
     new_positions = {}
     for asset, info in pos_5m.items():
         new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "5m",
@@ -2447,6 +2459,74 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     _trade_state["positions"] = new_positions
     _trade_state["last_cycle"] = _brt_now().isoformat()
     _trade_state["total_pnl"] = round(_trade_state.get("total_pnl", 0.0) + cycle_pnl, 4)
+
+    # ── 5a. Executar ordens nos brokers (paper/live) ──────────────────
+    if MARKET_DATA_AVAILABLE and market_data_service and _pause_mult > 0:
+        # Novas entradas: ativos em new_positions que não estavam antes
+        entries = {a: info for a, info in new_positions.items() if a not in prev_positions}
+        # Saídas: ativos que saíram do portfólio
+        exits = {a: info for a, info in prev_positions.items() if a not in new_positions}
+
+        _order_count = 0
+        for asset, info in entries.items():
+            try:
+                prices = klines_by_tf.get("5m", {}).get(asset, {}).get("prices", [])
+                entry_price = prices[-1] if prices else 0
+                if entry_price <= 0:
+                    continue
+                # Quantidade: valor alocado / preço
+                quantity = round(info["amount"] / entry_price, 8)
+                if quantity <= 0:
+                    continue
+                result = await market_data_service.place_order(asset, "buy", quantity, entry_price, "market")
+                if result and result.get("status") not in ("REJECTED", "rejected"):
+                    # Guardar preço de entrada na posição
+                    new_positions[asset]["entry_price"] = entry_price
+                    new_positions[asset]["order_id"] = result.get("order_id", "")
+                    currency = "R$" if market_data_service._is_b3(asset) else "$"
+                    _trade_log("ENTRY", asset, info["amount"],
+                        f"📈 COMPRA {asset}: {quantity:.6f} @ {currency}{entry_price:.4f} = {currency}{info['amount']:.2f} [{info.get('tf', '?')}]")
+                    _order_count += 1
+                    # Alerta
+                    if ALERTS_AVAILABLE and alert_manager:
+                        asyncio.create_task(alert_manager.alert_trade_executed(asset, "BUY", quantity, entry_price))
+            except Exception as e:
+                print(f"[trade] Erro entry order {asset}: {e}", flush=True)
+
+        for asset, info in exits.items():
+            try:
+                prices = klines_by_tf.get("5m", {}).get(asset, {}).get("prices", [])
+                exit_price = prices[-1] if prices else 0
+                prev_amt = info.get("amount", 0)
+                if exit_price <= 0 or prev_amt <= 0:
+                    continue
+                quantity = round(prev_amt / exit_price, 8)
+                if quantity <= 0:
+                    continue
+                result = await market_data_service.place_order(asset, "sell", quantity, exit_price, "market")
+                if result and result.get("status") not in ("REJECTED", "rejected"):
+                    entry_px = info.get("entry_price", exit_price)
+                    trade_pnl = round((exit_price - entry_px) / entry_px * prev_amt, 4) if entry_px > 0 else 0
+                    currency = "R$" if market_data_service._is_b3(asset) else "$"
+                    _trade_log("EXIT", asset, prev_amt,
+                        f"📉 VENDA {asset}: {quantity:.6f} @ {currency}{exit_price:.4f} | P&L: {currency}{trade_pnl:+.4f}")
+                    _order_count += 1
+                    # Alerta
+                    if ALERTS_AVAILABLE and alert_manager:
+                        asyncio.create_task(alert_manager.alert_trade_executed(asset, "SELL", quantity, exit_price))
+                    # Alerta de stop loss
+                    if trade_pnl < 0 and ALERTS_AVAILABLE and alert_manager:
+                        loss_pct = round((exit_price - entry_px) / entry_px * 100, 2) if entry_px > 0 else 0
+                        asyncio.create_task(alert_manager.alert_stop_loss_triggered(asset, exit_price, loss_pct))
+            except Exception as e:
+                print(f"[trade] Erro exit order {asset}: {e}", flush=True)
+
+        if _order_count > 0:
+            print(f"[trade] 📨 {_order_count} ordens executadas (entries={len(entries)}, exits={len(exits)})", flush=True)
+
+    # ── 5c. Alerta de risco elevado ──────────────────────────────────
+    if ALERTS_AVAILABLE and alert_manager and irq_score > 0.70:
+        asyncio.create_task(alert_manager.alert_risk_level(irq_score, {a: {"amount": i["amount"]} for a, i in new_positions.items()}))
 
     # ── 5b. Sincronizar risk_manager com dados do ciclo ──────────────────
     try:
@@ -3734,6 +3814,35 @@ async def get_recent_trades(asset: str, limit: int = 50):
 
     trades = await market_data_service.binance_broker.get_recent_trades(asset, limit)
     return {"success": True, "data": trades, "count": len(trades)}
+
+
+@app.get("/brokers/orders", tags=["Brokers"])
+async def brokers_order_history(limit: int = 50):
+    """Histórico de ordens paper/live de todos os brokers."""
+    if not market_data_service:
+        return {"success": False, "error": "Market data service não disponível"}
+
+    orders = []
+    # Binance paper orders
+    if market_data_service.binance_broker:
+        bn_orders = await market_data_service.binance_broker.get_order_history(limit=limit)
+        for o in bn_orders:
+            o["broker"] = "binance"
+        orders.extend(bn_orders)
+    # BTG paper orders
+    if market_data_service.btg_broker:
+        btg_orders = await market_data_service.btg_broker.get_order_history(limit=limit)
+        for o in btg_orders:
+            o["broker"] = "btg"
+        orders.extend(btg_orders)
+
+    # Ordenar por timestamp (mais recente primeiro)
+    orders.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return {
+        "success": True,
+        "data": orders[:limit],
+        "total": len(orders),
+    }
 
 
 # ─── 8. DADOS CONSOLIDADOS DO USUARIO ───────────────────────────────────────

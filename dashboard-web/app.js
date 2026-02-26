@@ -1519,12 +1519,64 @@ async function loadTradePage() {
     const ctEl = document.getElementById('trade-cycle-time');
     if (ctEl) ctEl.textContent = d.last_cycle ? `Ciclo: ${new Date(d.last_cycle).toLocaleString('pt-BR')}` : '';
 
+    // ── Trading Mode + Broker Status badge ──────────────────────
+    const modeBadge = document.getElementById('trade-mode-badge');
+    if (modeBadge) {
+      const mode = (d.trading_mode || 'paper').toUpperCase();
+      modeBadge.textContent = mode === 'PAPER' ? '📝 PAPER' : mode === 'LIVE' ? '🔴 LIVE' : mode;
+      modeBadge.className = `badge ${mode === 'LIVE' ? 'badge-red' : 'badge-yellow'}`;
+    }
+    const brokerBadges = document.getElementById('broker-status-badges');
+    if (brokerBadges && d.broker_status) {
+      const bs = d.broker_status;
+      const parts = [];
+      if (bs.binance)   parts.push(`<span class="badge ${bs.binance === 'connected' ? 'badge-green' : 'badge-gray'}" style="font-size:10px">Binance: ${bs.binance}</span>`);
+      if (bs.btg)       parts.push(`<span class="badge ${bs.btg === 'connected' ? 'badge-green' : 'badge-gray'}" style="font-size:10px">BTG: ${bs.btg}</span>`);
+      if (bs.brapi)     parts.push(`<span class="badge badge-green" style="font-size:10px">BRAPI ✓</span>`);
+      if (bs.yahoo)     parts.push(`<span class="badge badge-green" style="font-size:10px">Yahoo ✓</span>`);
+      brokerBadges.innerHTML = parts.join(' ');
+    }
+
+    // Broker orders
+    loadBrokerOrders();
+
     // Log
     _tradeLogCache = d.log || [];
     renderTradeLog(_tradeLogCache);
 
   } catch (e) {
     toast('Erro ao carregar Trade', 'error');
+  }
+}
+
+async function loadBrokerOrders() {
+  try {
+    const res = await api('/brokers/orders');
+    const tbody = document.getElementById('broker-orders-tbody');
+    if (!tbody) return;
+    const orders = (res.success ? res.data?.orders : null) || [];
+    if (!orders.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhuma ordem registrada</td></tr>';
+      return;
+    }
+    tbody.innerHTML = orders.slice(0, 50).map(o => {
+      const side = (o.side || '').toUpperCase();
+      const sideColor = side === 'BUY' ? 'var(--green)' : 'var(--red)';
+      const sideTxt   = side === 'BUY' ? '📈 COMPRA' : '📉 VENDA';
+      const status = (o.status || 'FILLED').toUpperCase();
+      const statusBadge = status === 'FILLED' ? 'badge-green' : status === 'REJECTED' ? 'badge-red' : 'badge-gray';
+      return `<tr>
+        <td style="font-size:11px">${o.timestamp ? new Date(o.timestamp).toLocaleString('pt-BR') : '—'}</td>
+        <td><span class="badge badge-blue" style="font-size:10px">${o.broker || '—'}</span></td>
+        <td><strong>${o.symbol || '—'}</strong></td>
+        <td style="color:${sideColor};font-weight:700">${sideTxt}</td>
+        <td>${(o.quantity || 0).toFixed(4)}</td>
+        <td>${fmtMoney(o.price || 0)}</td>
+        <td><span class="badge ${statusBadge}" style="font-size:10px">${status}</span></td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.warn('Erro broker orders:', e);
   }
 }
 

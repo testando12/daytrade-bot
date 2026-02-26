@@ -638,6 +638,10 @@
               <span id="trade-session-badge" class="badge badge-blue">—</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;color:var(--text-muted)">MODO:</span>
+              <span id="trade-mode-badge" class="badge badge-yellow">—</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
               <span style="font-size:12px;color:var(--text-muted)">ÚLTIMO CICLO:</span>
               <span id="trade-last-cycle" style="font-size:12px;color:var(--text-muted)">—</span>
             </div>
@@ -821,6 +825,35 @@
               </thead>
               <tbody id="trade-positions-tbody">
                 <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Execute um ciclo para ver as posições</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Row 2.5: Broker Orders -->
+        <div class="card mb-16" id="trade-broker-section">
+          <div class="card-header">
+            <span class="card-title">🔗 Ordens do Broker</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span id="broker-status-badges" style="font-size:11px;color:var(--text-muted)"></span>
+              <button class="btn btn-secondary btn-sm" onclick="loadBrokerOrders()">↻</button>
+            </div>
+          </div>
+          <div class="table-wrap" style="max-height:280px;overflow-y:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>DATA/HORA</th>
+                  <th>BROKER</th>
+                  <th>ATIVO</th>
+                  <th>LADO</th>
+                  <th>QTD</th>
+                  <th>PREÇO</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody id="broker-orders-tbody">
+                <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhuma ordem registrada</td></tr>
               </tbody>
             </table>
           </div>
