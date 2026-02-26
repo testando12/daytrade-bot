@@ -447,18 +447,16 @@ function renderCapitalSplitBanners(td) {
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
 
   // Dashboard banner
-  set('dash-usd-rate',      rateStr);
-  set('dash-capital-brl',   fmtMoney(capBrl));
-  set('dash-pct-brl',       `40% — ${fmtMoney(capBrl)}`);
-  set('dash-capital-usd',   `$ ${capUsd.toFixed(2)}`);
-  set('dash-capital-usd-brl', `≈ ${fmtMoney(capUsdBrl)}`);
+  set('dash-usd-rate',        rateStr);
+  set('dash-capital-brl',     fmtMoney(capBrl));
+  set('dash-capital-usd',     `$ ${capUsd.toFixed(2)}`);
+  set('dash-capital-usd-brl', `🌍 ≈ ${fmtMoney(capUsdBrl)}`);
 
   // Trade banner
   set('trade-usd-rate-banner', rateStr);
   set('trade-banner-brl',      fmtMoney(capBrl));
-  set('trade-banner-pct-brl',  `40% — ${fmtMoney(capBrl)}`);
   set('trade-banner-usd',      `$ ${capUsd.toFixed(2)}`);
-  set('trade-banner-usd-brl',  `≈ ${fmtMoney(capUsdBrl)}`);
+  set('trade-banner-usd-brl',  `🌍 ≈ ${fmtMoney(capUsdBrl)}`);
 }
 function round2(n) { return Math.round(n * 100) / 100; }
 
