@@ -33,3 +33,7 @@
 [2026-02-25T21:49:42] Dados obtidos: 78 ativos via yahoo.finance
 [2026-02-25T21:49:42] Ciclo concluído | IRQ: 0.079 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 16.9940 | Total P&L: R$ 16.9940
 [2026-02-25T21:49:42] Top posições: ADA=R$4.75 | XRP=R$4.25 | DOT=R$4.10 | DOGE=R$3.89
+[2026-02-26T16:08:25] Iniciando ciclo — capital: R$ 150.00
+[2026-02-26T16:08:26] Dados obtidos: 105 ativos via yahoo.finance
+[2026-02-26T16:08:26] Ciclo concluído | IRQ: 0.161 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 15.6109 | Total P&L: R$ 15.6109
+[2026-02-26T16:08:26] Top posições: OIL=R$6.08 | SILVER=R$3.54 | CVX=R$3.22 | CVS=R$2.76
