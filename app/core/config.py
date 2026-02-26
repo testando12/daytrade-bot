@@ -89,16 +89,39 @@ class Settings:
     # Banco de Dados
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/daytrade.db")
 
-    # API de Mercado
+    # ── APIs de Mercado ──────────────────────────────────────────────────
+
+    # Binance (Crypto — público + autenticado)
     BINANCE_API_KEY: str = os.getenv("BINANCE_API_KEY", "")
     BINANCE_API_SECRET: str = os.getenv("BINANCE_API_SECRET", "")
     BINANCE_BASE_URL: str = "https://api.binance.com"
+    BINANCE_TESTNET: bool = os.getenv("BINANCE_TESTNET", "False").lower() == "true"
+    BINANCE_TESTNET_URL: str = "https://testnet.binance.vision"
 
     # BRAPI — API B3 brasileira (brapi.dev)
     # Sem token: funciona para PETR4, MGLU3, VALE3, ITUB4 (plano gratuito)
     # Com token: todos os ativos, atualização a cada 5-30min conforme plano
     # Obtenha grátis em: https://brapi.dev/dashboard
     BRAPI_TOKEN: str = os.getenv("BRAPI_TOKEN", "")
+
+    # BTG Pactual — Broker B3 (market data + ordens)
+    # Requer conta BTG Pactual Digital + API key via painel do investidor
+    # Docs: https://developer.btgpactual.com
+    BTG_API_KEY: str = os.getenv("BTG_API_KEY", "")
+    BTG_API_SECRET: str = os.getenv("BTG_API_SECRET", "")
+    BTG_ACCOUNT_ID: str = os.getenv("BTG_ACCOUNT_ID", "")
+    BTG_BASE_URL: str = os.getenv("BTG_BASE_URL", "https://api.btgpactual.com")
+    BTG_PAPER_TRADING: bool = os.getenv("BTG_PAPER_TRADING", "True").lower() == "true"
+
+    # Alpha Vantage — US stocks, forex, commodities (mais estável que Yahoo)
+    # Free: 25 req/dia  |  Premium: 75+ req/min
+    # Obtenha grátis em: https://www.alphavantage.co/support/#api-key
+    ALPHA_VANTAGE_KEY: str = os.getenv("ALPHA_VANTAGE_KEY", "")
+    ALPHA_VANTAGE_BASE_URL: str = "https://www.alphavantage.co/query"
+
+    # ── Modo de Operação ───────────────────────────────────────────────
+    # paper = dados reais, ordens simuladas | live = ordens reais
+    TRADING_MODE: str = os.getenv("TRADING_MODE", "paper")  # "paper" ou "live"
 
     # Alertas
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")

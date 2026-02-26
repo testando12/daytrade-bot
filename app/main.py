@@ -1562,14 +1562,13 @@ async def trade_status():
     capital_efetivo = round(capital_base + pnl_today_live, 2)
 
     # ── Capital Split BRL vs USD ─────────────────────────────────────────
-    # Tenta cotação live do USD/BRL via Yahoo Finance, cai no fallback se falhar
+    # Tenta cotação live do USD/BRL via brokers integrados (AV → Yahoo → fallback)
     usd_rate = settings.USD_BRL_RATE
     try:
-        import yfinance as _yf_rate
-        _ticker_usd = _yf_rate.Ticker("USDBRL=X")
-        _live_rate = _ticker_usd.fast_info.last_price
-        if _live_rate and float(_live_rate) > 0:
-            usd_rate = round(float(_live_rate), 4)
+        if market_data_service:
+            live_rate = await market_data_service.get_usd_brl_rate()
+            if live_rate and live_rate > 0:
+                usd_rate = round(live_rate, 4)
     except Exception:
         pass
 
@@ -3571,8 +3570,12 @@ async def get_security_status():
             "api_keys": {
                 "brapi_configured": bool(settings.BRAPI_TOKEN),
                 "binance_configured": bool(settings.BINANCE_API_KEY),
+                "btg_configured": bool(getattr(settings, "BTG_API_KEY", "")),
+                "alpha_vantage_configured": bool(getattr(settings, "ALPHA_VANTAGE_KEY", "")),
                 "telegram_configured": bool(settings.TELEGRAM_BOT_TOKEN),
             },
+            "trading_mode": getattr(settings, "TRADING_MODE", "paper"),
+            "brokers": market_data_service.broker_status() if market_data_service else {},
             "protections": {
                 "stop_loss": {"active": True, "value": f"{settings.STOP_LOSS_PERCENTAGE*100}%"},
                 "take_profit": {"active": True, "value": f"{settings.TAKE_PROFIT_PERCENTAGE*100}%"},
@@ -3610,16 +3613,130 @@ async def audit_middleware(request, call_next):
     method = request.method
     if method == "POST" and path in ["/trade/start", "/trade/stop", "/trade/capital",
                                        "/trade/cycle", "/trade/reset",
-                                       "/scheduler/start", "/scheduler/stop"]:
+                                       "/scheduler/start", "/scheduler/stop",
+                                       "/brokers/connect", "/brokers/order"]:
         _append_audit(
             f"{method} {path}",
             {"status_code": response.status_code},
-            severity="warning" if "reset" in path else "info"
+            severity="warning" if "reset" in path or "order" in path else "info"
         )
     return response
 
 
-# ─── 6. DADOS CONSOLIDADOS DO USUARIO ───────────────────────────────────────
+# ─── 7. BROKERS — Corretoras e Exchanges ────────────────────────────────────
+
+@app.get("/brokers/status", tags=["Brokers"])
+async def brokers_status():
+    """Status de todos os brokers/fontes de dados integrados."""
+    if not market_data_service:
+        return {"success": False, "error": "Market data service não disponível"}
+
+    return {
+        "success": True,
+        "data": market_data_service.broker_status(),
+    }
+
+
+@app.post("/brokers/connect", tags=["Brokers"])
+async def brokers_connect():
+    """Tenta conectar todos os brokers configurados."""
+    if not market_data_service:
+        return {"success": False, "error": "Market data service não disponível"}
+
+    results = await market_data_service.connect_brokers()
+    return {
+        "success": True,
+        "data": results,
+        "connected": [k for k, v in results.items() if v],
+        "failed": [k for k, v in results.items() if not v],
+    }
+
+
+@app.get("/brokers/balance", tags=["Brokers"])
+async def brokers_balance():
+    """Saldo de todos os brokers (paper ou live)."""
+    if not market_data_service:
+        return {"success": False, "error": "Market data service não disponível"}
+
+    balances = await market_data_service.get_broker_balance()
+    return {
+        "success": True,
+        "data": balances,
+    }
+
+
+@app.get("/brokers/positions", tags=["Brokers"])
+async def brokers_positions():
+    """Posições abertas em todos os brokers."""
+    if not market_data_service:
+        return {"success": False, "error": "Market data service não disponível"}
+
+    positions = await market_data_service.get_broker_positions()
+    return {
+        "success": True,
+        "data": positions,
+    }
+
+
+@app.post("/brokers/order", tags=["Brokers"])
+async def brokers_place_order(body: dict):
+    """
+    Envia ordem ao broker correto (BTG para B3, Binance para Crypto).
+    Body: {"asset": "BTC", "side": "buy", "quantity": 0.001, "price": null, "type": "market"}
+    Em modo paper: simula execução com preços reais.
+    """
+    if not market_data_service:
+        return {"success": False, "error": "Market data service não disponível"}
+
+    asset = body.get("asset", "").upper()
+    side = body.get("side", "buy")
+    quantity = float(body.get("quantity", 0))
+    price = body.get("price")
+    order_type = body.get("type", "market")
+
+    if not asset or quantity <= 0:
+        raise HTTPException(status_code=400, detail="asset e quantity são obrigatórios (quantity > 0)")
+
+    if price is not None:
+        price = float(price)
+
+    _append_audit(
+        f"ORDER {side.upper()} {quantity} {asset}",
+        {"price": price, "type": order_type, "mode": getattr(settings, "TRADING_MODE", "paper")},
+        severity="warning",
+    )
+
+    result = await market_data_service.place_order(asset, side, quantity, price, order_type)
+    if result:
+        _trade_log(f"ORDER_{side.upper()}", asset, quantity, f"{order_type} {side} {quantity} {asset} @ {price or 'market'}")
+        return {"success": True, "data": result}
+    else:
+        return {"success": False, "error": f"Falha ao executar ordem {side} {asset}"}
+
+
+@app.get("/brokers/orderbook/{asset}", tags=["Brokers"])
+async def get_orderbook(asset: str, limit: int = 20):
+    """Order book (livro de ofertas) de um ativo crypto."""
+    if not market_data_service or not market_data_service.binance_broker:
+        return {"success": False, "error": "Binance broker não disponível"}
+
+    book = await market_data_service.binance_broker.get_orderbook(asset, limit)
+    if book:
+        return {"success": True, "data": book}
+    return {"success": False, "error": f"Orderbook não disponível para {asset}"}
+
+
+@app.get("/brokers/trades/{asset}", tags=["Brokers"])
+async def get_recent_trades(asset: str, limit: int = 50):
+    """Trades recentes de um ativo crypto."""
+    if not market_data_service or not market_data_service.binance_broker:
+        return {"success": False, "error": "Binance broker não disponível"}
+
+    trades = await market_data_service.binance_broker.get_recent_trades(asset, limit)
+    return {"success": True, "data": trades, "count": len(trades)}
+
+
+# ─── 8. DADOS CONSOLIDADOS DO USUARIO ───────────────────────────────────────
 
 @app.get("/user/summary")
 async def get_user_summary():

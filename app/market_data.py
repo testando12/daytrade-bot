@@ -1,14 +1,35 @@
 ﻿"""
-Servico de dados de mercado — multi-fonte com menor latência gratuita
+Servico de dados de mercado — multi-fonte com fallback inteligente
 
-Fontes de dados:
-  1. Binance API  — Crypto (TEMPO REAL, gratuito, sem chave, BTCUSDT...)
-  2. BRAPI        — B3 (primário: delay ~15min com token grátis ou ~30min sem token)
-     Obtenha token grátis em: https://brapi.dev/dashboard
-  3. Yahoo Finance — US stocks + fallback geral (delay ~1min durante pregão)
+Hierarquia de fontes (prioridade):
+  ┌─ B3 (Ações BRL):
+  │   BTG Pactual (real-time, auth) → BRAPI (delay 15-30min) → Yahoo (fallback)
+  │
+  ├─ Crypto (USD):
+  │   Binance Auth (RT, signed) → Binance Public (RT, sem auth) → Yahoo (fallback)
+  │
+  ├─ US Stocks:
+  │   Alpha Vantage (RT, API key) → Yahoo Finance (fallback)
+  │
+  ├─ Forex:
+  │   Alpha Vantage → Yahoo Finance (=X suffix)
+  │
+  └─ Commodities:
+      Alpha Vantage (ETFs: GLD, SLV, USO) → Yahoo Finance (GC=F, CL=F)
 
-Configure o token via variável de ambiente:
-  set BRAPI_TOKEN=seu_token_aqui
+Brokers integrados:
+  - BTG Pactual: B3 real-time + ordens (paper/live)
+  - Binance Auth: Crypto signed API + ordens (paper/live/testnet)
+  - Alpha Vantage: US stocks + forex + commodities (dados)
+  - BRAPI: B3 data de mercado (fallback)
+  - Yahoo Finance: Fallback universal
+
+Configure via variáveis de ambiente:
+  BTG_API_KEY, BTG_API_SECRET, BTG_ACCOUNT_ID     → B3 via BTG
+  BINANCE_API_KEY, BINANCE_API_SECRET              → Crypto via Binance
+  ALPHA_VANTAGE_KEY                                → US/Forex/Commodities
+  BRAPI_TOKEN                                      → B3 backup
+  TRADING_MODE=paper|live                          → Modo de operação
 """
 
 import asyncio
@@ -22,6 +43,16 @@ except ImportError:
     HTTPX_AVAILABLE = False
 
 from app.core.config import settings
+
+# Import brokers (safe — não falha se dependências estiverem OK)
+try:
+    from app.brokers.btg import BTGBroker
+    from app.brokers.binance_auth import BinanceAuthBroker
+    from app.brokers.alpha_vantage import AlphaVantageBroker
+    BROKERS_AVAILABLE = True
+except ImportError as e:
+    print(f"[market] Aviso: brokers não disponíveis ({e})", flush=True)
+    BROKERS_AVAILABLE = False
 
 
 # ── BRAPI ────────────────────────────────────────────────────────────────────
@@ -91,12 +122,14 @@ _US_STOCK_SYMBOLS: set = set()
 
 class BrapiMarketData:
     """
-    Cliente multi-fonte de dados de mercado.
-    - Crypto:      Binance (tempo real) → fallback Yahoo
-    - B3:          BRAPI (token grátis) → fallback Yahoo
-    - US Stocks:   Yahoo Finance
-    - Forex:       Yahoo Finance (EURUSD=X)
-    - Commodities: Yahoo Finance (GC=F, CL=F...)
+    Cliente multi-fonte de dados de mercado com brokers integrados.
+
+    Prioridade:
+    - B3:          BTG (auth) → BRAPI (token) → Yahoo (fallback)
+    - Crypto:      Binance Auth → Binance Public → Yahoo
+    - US Stocks:   Alpha Vantage → Yahoo Finance
+    - Forex:       Alpha Vantage → Yahoo Finance (EURUSD=X)
+    - Commodities: Alpha Vantage (ETFs) → Yahoo Finance (GC=F, CL=F...)
     """
 
     VALID_INTERVALS = ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "1d"]
@@ -110,14 +143,52 @@ class BrapiMarketData:
         # Populate US stock set from settings
         global _US_STOCK_SYMBOLS
         _US_STOCK_SYMBOLS = {s.upper() for s in getattr(settings, "US_STOCKS", [])}
-        brapi_src = "BRAPI+token" if self.token else "BRAPI free (4 ativos)"
-        print(f"[market] Crypto=Binance(RT) | B3={brapi_src}>Yahoo | US=Yahoo | Forex=Yahoo | Commodities=Yahoo", flush=True)
-        print(f"[market] US stocks: {len(_US_STOCK_SYMBOLS)} | Crypto: {len(_CRYPTO_SYMBOLS)} | Forex: {len(_FOREX_SYMBOLS)} | Commodities: {len(_COMMODITY_YF_MAP)}", flush=True)
+
+        # ── Inicializa Brokers ────────────────────────────────────────────
+        self.btg_broker: Optional[Any] = None
+        self.binance_broker: Optional[Any] = None
+        self.alpha_vantage: Optional[Any] = None
+
+        if BROKERS_AVAILABLE:
+            # BTG Pactual (B3)
+            self.btg_broker = BTGBroker()
+            # Binance Authenticated (Crypto)
+            self.binance_broker = BinanceAuthBroker()
+            # Alpha Vantage (US/Forex/Commodities)
+            self.alpha_vantage = AlphaVantageBroker()
+
+        # ── Log hierarquia de fontes ──────────────────────────────────────
+        btg_status = "BTG(RT)" if (self.btg_broker and self.btg_broker.is_configured) else None
+        brapi_src = "BRAPI+token" if self.token else "BRAPI(free:4)"
+        b3_chain = " → ".join(filter(None, [btg_status, brapi_src, "Yahoo"]))
+
+        bn_auth = "Binance(auth)" if (self.binance_broker and self.binance_broker.is_configured) else None
+        crypto_chain = " → ".join(filter(None, [bn_auth, "Binance(pub)", "Yahoo"]))
+
+        av_status = "AlphaVantage" if (self.alpha_vantage and self.alpha_vantage.is_configured) else None
+        us_chain = " → ".join(filter(None, [av_status, "Yahoo"]))
+
+        trading_mode = getattr(settings, "TRADING_MODE", "paper").upper()
+
+        print(f"[market] ═══ Data Sources ═══", flush=True)
+        print(f"[market]   B3:          {b3_chain}", flush=True)
+        print(f"[market]   Crypto:      {crypto_chain}", flush=True)
+        print(f"[market]   US Stocks:   {us_chain}", flush=True)
+        print(f"[market]   Forex:       {us_chain}", flush=True)
+        print(f"[market]   Commodities: {us_chain}", flush=True)
+        print(f"[market]   Mode:        {trading_mode}", flush=True)
+        print(f"[market] Assets: B3={len(getattr(settings, 'ALLOWED_ASSETS', []))} | US={len(_US_STOCK_SYMBOLS)} | Crypto={len(_CRYPTO_SYMBOLS)} | Forex={len(_FOREX_SYMBOLS)} | Commodities={len(_COMMODITY_YF_MAP)}", flush=True)
 
     # ── helpers de símbolo ────────────────────────────────────────────────────
 
     def _is_crypto(self, asset: str) -> bool:
         return asset.upper() in _CRYPTO_SYMBOLS
+
+    def _is_b3(self, asset: str) -> bool:
+        """Ativo é da B3? (nem crypto, nem US, nem forex, nem commodity)."""
+        s = asset.upper()
+        return (not self._is_crypto(s) and not self._is_us_stock(s)
+                and not self._is_forex(s) and not self._is_commodity(s))
 
     def _is_us_stock(self, asset: str) -> bool:
         return asset.upper() in _US_STOCK_SYMBOLS
@@ -383,90 +454,196 @@ class BrapiMarketData:
     # ── Interface pública ─────────────────────────────────────────────────────
 
     async def get_current_price(self, asset: str) -> Optional[Dict]:
-        """Preço atual de um ativo. Binance (crypto) | BRAPI (B3) | Yahoo (US/fallback)."""
+        """
+        Preço atual de um ativo com fallback inteligente:
+          B3:          BTG → BRAPI → Yahoo
+          Crypto:      Binance Public (batch rápido) → Yahoo
+          US Stocks:   Alpha Vantage → Yahoo
+          Forex:       Alpha Vantage → Yahoo
+          Commodities: Alpha Vantage → Yahoo
+        """
         ticker = asset.upper()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             price = None
+            source = None
+
             if self._is_crypto(ticker):
+                # Crypto: Binance Public (sempre rápido e grátis)
                 got = await self._binance_get_prices(client, [ticker])
                 price = got.get(ticker)
                 if price:
-                    print(f"[binance] {ticker}: $ {price}", flush=True)
-            elif self._brapi_supported(ticker):
-                prices = await self._brapi_get_prices(client, [ticker])
-                price  = prices.get(ticker)
-                if price:
-                    print(f"[brapi] {ticker}: R$ {price}", flush=True)
+                    source = "binance"
+
+            elif self._is_b3(ticker):
+                # B3: BTG → BRAPI → Yahoo
+                if self.btg_broker and self.btg_broker.is_configured:
+                    quote = await self.btg_broker.get_quote(ticker)
+                    if quote:
+                        price = quote["price"]
+                        source = "btg"
+                if price is None and self._brapi_supported(ticker):
+                    prices = await self._brapi_get_prices(client, [ticker])
+                    price = prices.get(ticker)
+                    if price:
+                        source = "brapi"
+
+            elif self._is_us_stock(ticker):
+                # US: Alpha Vantage → Yahoo
+                if self.alpha_vantage and self.alpha_vantage.is_configured:
+                    quote = await self.alpha_vantage.get_quote(ticker)
+                    if quote:
+                        price = quote["price"]
+                        source = "alpha_vantage"
+
+            elif self._is_forex(ticker):
+                # Forex: Alpha Vantage → Yahoo
+                if self.alpha_vantage and self.alpha_vantage.is_configured:
+                    rate = await self.alpha_vantage.get_forex_rate(ticker)
+                    if rate:
+                        price = rate["rate"]
+                        source = "alpha_vantage"
+
+            elif self._is_commodity(ticker):
+                # Commodities: Alpha Vantage (ETF) → Yahoo
+                if self.alpha_vantage and self.alpha_vantage.is_configured:
+                    quote = await self.alpha_vantage.get_quote(ticker)
+                    if quote:
+                        price = quote["price"]
+                        source = "alpha_vantage"
+
+            # Fallback universal: Yahoo Finance
             if price is None:
                 price = await self._yf_get_price(client, ticker)
                 if price:
-                    print(f"[yahoo] {ticker}: {price}", flush=True)
+                    source = "yahoo"
+
             if price is not None:
+                currency = "BRL" if self._is_b3(ticker) else "USD"
+                prefix = "R$" if currency == "BRL" else "$"
+                print(f"[{source}] {ticker}: {prefix} {price}", flush=True)
                 return {
                     "asset": ticker, "symbol": ticker,
                     "price": price, "timestamp": datetime.now().isoformat(),
+                    "source": source, "currency": currency,
                 }
         return None
 
     async def get_all_prices(self, assets: Optional[List[str]] = None) -> Dict[str, float]:
         """
-        Preços atuais de múltiplos ativos.
-        - Crypto  → Binance (tempo real, 1 request batch)
-        - B3      → BRAPI → fallback Yahoo
-        - US/rest → Yahoo
+        Preços atuais de múltiplos ativos com brokers prioritários.
+        - Crypto  → Binance Public (batch RT) → fallback Yahoo
+        - B3      → BTG (auth) → BRAPI (batch) → fallback Yahoo
+        - US/rest → Alpha Vantage → Yahoo
         """
         if assets is None:
             assets = settings.ALLOWED_ASSETS
 
         prices: Dict[str, float] = {}
         crypto_assets = [a for a in assets if self._is_crypto(a)]
-        brapi_assets  = [a for a in assets if self._brapi_supported(a)]
-        yf_assets     = [a for a in assets if not self._is_crypto(a) and not self._brapi_supported(a)]
+        b3_assets     = [a for a in assets if self._is_b3(a)]
+        us_assets     = [a for a in assets if self._is_us_stock(a)]
+        forex_assets  = [a for a in assets if self._is_forex(a)]
+        commodity_assets = [a for a in assets if self._is_commodity(a)]
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            # Binance: 1 request para todos os cryptos (tempo real)
+
+            # ── Crypto: Binance Public batch (1 request, real-time) ────────
             if crypto_assets:
                 got = await self._binance_get_prices(client, crypto_assets)
                 prices.update(got)
-                # Fallback Yahoo para cryptos que a Binance não retornou
                 missing = [a for a in crypto_assets if a.upper() not in prices]
                 for a in missing:
                     p = await self._yf_get_price(client, a)
                     if p:
                         prices[a.upper()] = p
 
-            # BRAPI batch para B3 (até 20 por vez com token)
-            if brapi_assets:
-                if self.token:
-                    for i in range(0, len(brapi_assets), 20):
-                        chunk = brapi_assets[i:i+20]
-                        got   = await self._brapi_get_prices(client, chunk)
-                        prices.update(got)
-                        failed = [a for a in chunk if a.upper() not in prices]
-                        for a in failed:
-                            p = await self._yf_get_price(client, a)
-                            if p:
-                                prices[a.upper()] = p
-                else:
-                    # Free: chamadas individuais (só 4 símbolos gratuitos)
-                    tasks = [self._brapi_get_prices(client, [a]) for a in brapi_assets]
-                    for a, result in zip(brapi_assets, await asyncio.gather(*tasks, return_exceptions=True)):
-                        if isinstance(result, dict) and result:
-                            prices.update(result)
-                        else:
-                            p = await self._yf_get_price(client, a)
-                            if p:
-                                prices[a.upper()] = p
+            # ── B3: BTG → BRAPI → Yahoo ───────────────────────────────────
+            if b3_assets:
+                # Tenta BTG primeiro (se configurado)
+                btg_remaining = list(b3_assets)
+                if self.btg_broker and self.btg_broker.is_configured:
+                    btg_prices = await self.btg_broker.get_quotes_batch(b3_assets)
+                    prices.update(btg_prices)
+                    btg_remaining = [a for a in b3_assets if a.upper() not in prices]
 
-            # Yahoo para US stocks e qualquer ativo não coberto
-            if yf_assets:
+                # BRAPI para o que BTG não cobriu
+                brapi_assets = [a for a in btg_remaining if self._brapi_supported(a)]
+                if brapi_assets:
+                    if self.token:
+                        for i in range(0, len(brapi_assets), 20):
+                            chunk = brapi_assets[i:i+20]
+                            got   = await self._brapi_get_prices(client, chunk)
+                            prices.update(got)
+                    else:
+                        tasks = [self._brapi_get_prices(client, [a]) for a in brapi_assets]
+                        for a, result in zip(brapi_assets, await asyncio.gather(*tasks, return_exceptions=True)):
+                            if isinstance(result, dict) and result:
+                                prices.update(result)
+
+                # Yahoo fallback para B3 sem preço
+                missing_b3 = [a for a in b3_assets if a.upper() not in prices]
+                for a in missing_b3:
+                    p = await self._yf_get_price(client, a)
+                    if p:
+                        prices[a.upper()] = p
+
+            # ── US Stocks: Alpha Vantage → Yahoo ──────────────────────────
+            if us_assets:
+                av_remaining = list(us_assets)
+                if self.alpha_vantage and self.alpha_vantage.is_configured:
+                    # Alpha Vantage tem rate limit, só usa para poucos ativos
+                    # ou quando Yahoo falha
+                    pass  # Yahoo é mais eficiente para batch de US stocks
+                # Yahoo para US stocks (batch via gather)
                 results = await asyncio.gather(
-                    *[self._yf_get_price(client, a) for a in yf_assets],
+                    *[self._yf_get_price(client, a) for a in us_assets],
                     return_exceptions=True,
                 )
-                for a, p in zip(yf_assets, results):
+                for a, p in zip(us_assets, results):
                     if isinstance(p, float):
                         prices[a.upper()] = p
+
+                # Alpha Vantage fallback para os que falharam
+                missing_us = [a for a in us_assets if a.upper() not in prices]
+                if missing_us and self.alpha_vantage and self.alpha_vantage.is_configured:
+                    for a in missing_us[:5]:  # limita por rate limit
+                        quote = await self.alpha_vantage.get_quote(a)
+                        if quote and quote.get("price", 0) > 0:
+                            prices[a.upper()] = quote["price"]
+
+            # ── Forex: Yahoo → Alpha Vantage fallback ─────────────────────
+            if forex_assets:
+                results = await asyncio.gather(
+                    *[self._yf_get_price(client, a) for a in forex_assets],
+                    return_exceptions=True,
+                )
+                for a, p in zip(forex_assets, results):
+                    if isinstance(p, float):
+                        prices[a.upper()] = p
+
+                missing_fx = [a for a in forex_assets if a.upper() not in prices]
+                if missing_fx and self.alpha_vantage and self.alpha_vantage.is_configured:
+                    for a in missing_fx:
+                        rate = await self.alpha_vantage.get_forex_rate(a)
+                        if rate:
+                            prices[a.upper()] = rate["rate"]
+
+            # ── Commodities: Yahoo → Alpha Vantage fallback ───────────────
+            if commodity_assets:
+                results = await asyncio.gather(
+                    *[self._yf_get_price(client, a) for a in commodity_assets],
+                    return_exceptions=True,
+                )
+                for a, p in zip(commodity_assets, results):
+                    if isinstance(p, float):
+                        prices[a.upper()] = p
+
+                missing_comm = [a for a in commodity_assets if a.upper() not in prices]
+                if missing_comm and self.alpha_vantage and self.alpha_vantage.is_configured:
+                    for a in missing_comm:
+                        quote = await self.alpha_vantage.get_quote(a)
+                        if quote and quote.get("price", 0) > 0:
+                            prices[a.upper()] = quote["price"]
 
         return prices
 
@@ -477,7 +654,14 @@ class BrapiMarketData:
         limit: int = 25,
         _client: Optional[Any] = None,
     ) -> Optional[Dict]:
-        """Candles historicos. Binance (crypto RT) | BRAPI (B3) | Yahoo (US/fallback)."""
+        """
+        Candles historicos com prioridade por tipo de ativo:
+          B3:     BTG → BRAPI → Yahoo
+          Crypto: Binance → Yahoo
+          US:     Alpha Vantage → Yahoo
+          Forex:  Alpha Vantage → Yahoo
+          Comm:   Alpha Vantage → Yahoo
+        """
         ticker = asset.upper()
         if interval not in self.VALID_INTERVALS:
             interval = "5m"
@@ -488,12 +672,31 @@ class BrapiMarketData:
                 client = httpx.AsyncClient(timeout=self.timeout)
             try:
                 result = None
+
                 if self._is_crypto(ticker):
                     result = await self._binance_get_klines(client, ticker, interval, limit)
-                elif self._brapi_supported(ticker):
-                    result = await self._brapi_get_klines(client, ticker, interval, limit)
+
+                elif self._is_b3(ticker):
+                    # BTG → BRAPI → Yahoo
+                    if self.btg_broker and self.btg_broker.is_configured:
+                        result = await self.btg_broker.get_candles(ticker, interval, limit)
+                    if result is None and self._brapi_supported(ticker):
+                        result = await self._brapi_get_klines(client, ticker, interval, limit)
+
+                elif self._is_us_stock(ticker) or self._is_commodity(ticker):
+                    # Alpha Vantage → Yahoo
+                    if self.alpha_vantage and self.alpha_vantage.is_configured:
+                        result = await self.alpha_vantage.get_candles(ticker, interval, limit)
+
+                elif self._is_forex(ticker):
+                    # Alpha Vantage → Yahoo
+                    if self.alpha_vantage and self.alpha_vantage.is_configured:
+                        result = await self.alpha_vantage.get_forex_candles(ticker, interval, limit)
+
+                # Fallback universal: Yahoo Finance
                 if result is None:
                     result = await self._yf_get_klines(client, ticker, interval, limit)
+
                 return result
             finally:
                 if _client is None:
@@ -542,7 +745,7 @@ class BrapiMarketData:
         return market_data
 
     async def get_24h_ticker(self, asset: str) -> Optional[Dict]:
-        """Estatísticas de 24h. Binance (crypto) | BRAPI (B3) | Yahoo (US/fallback)."""
+        """Estatísticas de 24h. Binance (crypto) | BTG/BRAPI (B3) | Yahoo (US/fallback)."""
         ticker = asset.upper()
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             # Binance: ticker 24h em tempo real para crypto
@@ -619,6 +822,166 @@ class BrapiMarketData:
             except Exception as e:
                 print(f"[yahoo] Erro 24h {ticker}: {e}", flush=True)
         return None
+
+    # ── Broker Management ─────────────────────────────────────────────────
+
+    async def connect_brokers(self) -> Dict[str, bool]:
+        """Tenta conectar todos os brokers configurados. Retorna status."""
+        results = {}
+
+        if self.btg_broker and self.btg_broker.is_configured:
+            results["btg"] = await self.btg_broker.connect()
+        else:
+            results["btg"] = False
+
+        if self.binance_broker and self.binance_broker.is_configured:
+            results["binance_auth"] = await self.binance_broker.connect()
+        else:
+            results["binance_auth"] = False
+
+        if self.alpha_vantage and self.alpha_vantage.is_configured:
+            results["alpha_vantage"] = await self.alpha_vantage.connect()
+        else:
+            results["alpha_vantage"] = False
+
+        # BRAPI e Binance Public não precisam de connect (sem auth)
+        results["brapi"] = bool(self.token)
+        results["binance_public"] = True  # Sempre disponível
+        results["yahoo"] = True  # Sempre disponível
+
+        connected = [k for k, v in results.items() if v]
+        print(f"[market] Brokers conectados: {', '.join(connected) if connected else 'nenhum (apenas públicos)'}", flush=True)
+        return results
+
+    def broker_status(self) -> Dict[str, Any]:
+        """Status consolidado de todos os brokers/fontes."""
+        status = {
+            "trading_mode": getattr(settings, "TRADING_MODE", "paper"),
+            "brokers": {},
+            "data_sources": {},
+        }
+
+        # Brokers (trading)
+        if self.btg_broker:
+            status["brokers"]["btg"] = self.btg_broker.status()
+        if self.binance_broker:
+            status["brokers"]["binance"] = self.binance_broker.status()
+
+        # Data sources
+        if self.alpha_vantage:
+            status["data_sources"]["alpha_vantage"] = self.alpha_vantage.status()
+
+        status["data_sources"]["brapi"] = {
+            "provider": "BRAPI",
+            "configured": bool(self.token),
+            "has_token": bool(self.token),
+            "free_symbols": list(_BRAPI_FREE_SYMBOLS) if not self.token else "all_b3",
+        }
+        status["data_sources"]["binance_public"] = {
+            "provider": "Binance Public",
+            "configured": True,
+            "connected": True,
+            "symbols": len(_CRYPTO_SYMBOLS),
+        }
+        status["data_sources"]["yahoo"] = {
+            "provider": "Yahoo Finance",
+            "configured": True,
+            "connected": True,
+            "role": "fallback universal",
+        }
+
+        return status
+
+    # ── Order Routing (delega ao broker correto) ──────────────────────────
+
+    async def place_order(
+        self,
+        asset: str,
+        side: str,
+        quantity: float,
+        price: Optional[float] = None,
+        order_type: str = "market",
+    ) -> Optional[Dict]:
+        """
+        Roteia ordem para o broker correto baseado no tipo de ativo.
+        B3 → BTG Pactual | Crypto → Binance
+        """
+        ticker = asset.upper()
+
+        if self._is_crypto(ticker):
+            if self.binance_broker:
+                return await self.binance_broker.place_order(ticker, side, quantity, price, order_type.upper())
+            else:
+                print(f"[market] Sem broker para crypto {ticker}", flush=True)
+                return None
+
+        elif self._is_b3(ticker):
+            if self.btg_broker:
+                return await self.btg_broker.place_order(ticker, side, quantity, price, order_type)
+            else:
+                print(f"[market] Sem broker para B3 {ticker}", flush=True)
+                return None
+
+        else:
+            print(f"[market] Ordens não suportadas para {ticker} (apenas dados de mercado)", flush=True)
+            return None
+
+    async def get_broker_balance(self) -> Dict[str, Any]:
+        """Saldo de todos os brokers."""
+        balances = {}
+
+        if self.btg_broker:
+            btg_bal = await self.btg_broker.get_balance()
+            if btg_bal:
+                balances["btg_brl"] = btg_bal
+
+        if self.binance_broker:
+            bn_bal = await self.binance_broker.get_balance()
+            if bn_bal:
+                balances["binance_usd"] = bn_bal
+
+        return balances
+
+    async def get_broker_positions(self) -> Dict[str, List]:
+        """Posições abertas de todos os brokers."""
+        positions = {}
+
+        if self.btg_broker:
+            btg_pos = await self.btg_broker.get_positions()
+            if btg_pos:
+                positions["btg_b3"] = btg_pos
+
+        if self.binance_broker:
+            # Paper positions
+            bn_bal = await self.binance_broker.get_balance()
+            if bn_bal and bn_bal.get("positions"):
+                positions["binance_crypto"] = [
+                    {"asset": k, "quantity": v}
+                    for k, v in bn_bal["positions"].items()
+                    if v > 0
+                ]
+
+        return positions
+
+    async def get_usd_brl_rate(self) -> float:
+        """Obtém taxa USD/BRL em tempo real. Tenta Alpha Vantage, depois Yahoo, depois fallback."""
+        # Alpha Vantage
+        if self.alpha_vantage and self.alpha_vantage.is_configured:
+            rate = await self.alpha_vantage.get_usd_brl_rate()
+            if rate:
+                return rate
+
+        # Yahoo fallback
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                p = await self._yf_get_price(client, "USDBRL")
+                if p:
+                    return p
+        except Exception:
+            pass
+
+        # Config fallback
+        return settings.USD_BRL_RATE
 
 
 # Instância global
