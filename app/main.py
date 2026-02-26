@@ -1494,10 +1494,16 @@ _DEFAULT_PERF: dict = {
 _perf_state: dict = db_state.load_state("performance", dict(_DEFAULT_PERF))
 
 
+def _brt_now():
+    """Retorna datetime atual em BRT (UTC-3) — consistente em qualquer servidor."""
+    from datetime import timezone as _tz, timedelta as _td
+    return datetime.now(_tz(_td(hours=-3)))
+
+
 def _trade_log(event_type: str, asset: str, amount: float, note: str):
     """Insere um evento no log de trading (máx 200 entradas) e persiste em disco."""
     _trade_state["log"].insert(0, {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": _brt_now().isoformat(),
         "type": event_type,
         "asset": asset,
         "amount": round(amount, 2),
@@ -1512,7 +1518,7 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
                                pnl_5m: float = 0.0, pnl_1h: float = 0.0, pnl_1d: float = 0.0):
     """Registra o P&L de um ciclo no histórico de performance."""
     _perf_state["cycles"].append({
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": _brt_now().isoformat(),
         "pnl":       round(pnl, 4),
         "pnl_5m":    round(pnl_5m, 4),
         "pnl_1h":    round(pnl_1h, 4),
@@ -2418,7 +2424,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 "pct": round(info["amount"]/capital*100, 1), "classification": "LONG", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
-    _trade_state["last_cycle"] = datetime.now().isoformat()
+    _trade_state["last_cycle"] = _brt_now().isoformat()
     _trade_state["total_pnl"] = round(_trade_state.get("total_pnl", 0.0) + cycle_pnl, 4)
 
     # ── 5b. Sincronizar risk_manager com dados do ciclo ──────────────────
