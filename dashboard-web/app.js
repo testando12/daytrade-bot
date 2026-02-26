@@ -385,6 +385,7 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData) {
     tradeOkEl.textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
     tradeOkEl.className = `kpi-change ${canTrade ? 'up' : 'down'}`;
   }
+  renderCapitalSplitBanners(td);
 }
 
 function renderDashboardKPIs(data, riskStatus, tradeStatus) {
@@ -427,7 +428,39 @@ function renderDashboardKPIs(data, riskStatus, tradeStatus) {
   document.getElementById('kpi-bot-status').textContent = canTrade ? '✅ Operacional' : '🔒 Bloqueado';
   document.getElementById('kpi-trade-ok').textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
   document.getElementById('kpi-trade-ok').className = `kpi-change ${canTrade ? 'up' : 'down'}`;
+  // Atualiza banners BRL/USD em ambas as páginas
+  const td2 = tradeStatus?.data || {};
+  renderCapitalSplitBanners(td2);
 }
+
+// ── Helper: popula os banners de split BRL/USD em Dashboard e Trade ──────────
+function renderCapitalSplitBanners(td) {
+  if (!td) return;
+  const cap       = td.capital_efetivo || td.capital || 0;
+  const usdRate   = td.usd_rate   || 5.75;
+  const capBrl    = td.capital_brl    ?? round2(cap * 0.40);
+  const capUsd    = td.capital_usd    ?? round2(cap * 0.60 / usdRate);
+  const capUsdBrl = td.capital_usd_brl ?? round2(cap * 0.60);
+
+  const rateStr = `R$ ${usdRate.toFixed(4).replace('.', ',')}`;
+  // helper: set text if element exists
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+  // Dashboard banner
+  set('dash-usd-rate',      rateStr);
+  set('dash-capital-brl',   fmtMoney(capBrl));
+  set('dash-pct-brl',       `40% — ${fmtMoney(capBrl)}`);
+  set('dash-capital-usd',   `$ ${capUsd.toFixed(2)}`);
+  set('dash-capital-usd-brl', `≈ ${fmtMoney(capUsdBrl)}`);
+
+  // Trade banner
+  set('trade-usd-rate-banner', rateStr);
+  set('trade-banner-brl',      fmtMoney(capBrl));
+  set('trade-banner-pct-brl',  `40% — ${fmtMoney(capBrl)}`);
+  set('trade-banner-usd',      `$ ${capUsd.toFixed(2)}`);
+  set('trade-banner-usd-brl',  `≈ ${fmtMoney(capUsdBrl)}`);
+}
+function round2(n) { return Math.round(n * 100) / 100; }
 
 async function loadMarketPrices() {
   const el = document.getElementById('dash-prices-table');
@@ -1290,6 +1323,8 @@ async function loadTradePage() {
     // Taxa de câmbio
     const usdRateEl = document.getElementById('trade-usd-rate');
     if (usdRateEl) usdRateEl.textContent = `R$ ${usdRate.toFixed(4).replace('.', ',')}`;
+    // Atualiza os banners de split (Dashboard + Trade)
+    renderCapitalSplitBanners(d);
 
 
     // ⚡ 5min

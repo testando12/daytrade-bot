@@ -188,6 +188,40 @@
           </div>
         </div>
 
+        <!-- ── Banner BRL / USD Split ────────────────────────────────── -->
+        <div class="card mb-16 mt-16" id="dash-split-banner" style="padding:14px 20px;background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(16,185,129,.08));border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <span style="font-size:13px;font-weight:700;color:var(--text-primary)">💼 Alocação de Capital</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-left:auto">USD/BRL: <span id="dash-usd-rate" style="font-weight:600;color:var(--text-primary)">R$ --</span></span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <!-- BRL -->
+            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span style="font-size:18px">🇧🇷</span>
+                <div>
+                  <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Bolsão BRL — B3</div>
+                  <div style="font-size:10px;color:var(--text-muted)">Ações brasileiras · 40%</div>
+                </div>
+              </div>
+              <div id="dash-capital-brl" style="font-size:22px;font-weight:800;color:var(--blue)">R$ --</div>
+              <div id="dash-pct-brl" style="font-size:11px;color:var(--text-muted);margin-top:2px">40% do capital efetivo</div>
+            </div>
+            <!-- USD -->
+            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span style="font-size:18px">🌍</span>
+                <div>
+                  <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Bolsão USD — Crypto/US</div>
+                  <div style="font-size:10px;color:var(--text-muted)">Crypto · Ações US · Forex · 60%</div>
+                </div>
+              </div>
+              <div id="dash-capital-usd" style="font-size:22px;font-weight:800;color:var(--green)">$ --</div>
+              <div id="dash-capital-usd-brl" style="font-size:11px;color:var(--text-muted);margin-top:2px">≈ R$ --</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Row: Momentum Chart + Risk Radar -->
         <div class="cards-grid cards-2-1 mt-16">
           <div class="card">
@@ -605,6 +639,40 @@
               <button class="btn btn-secondary" onclick="loadTradePage()">↻ Atualizar</button>
               <button id="trade-toggle-btn" class="btn btn-primary" onclick="toggleTrading()">▶ Iniciar Bot</button>
               <button class="btn btn-secondary" onclick="runTradeCycle()">🔄 Executar Ciclo</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Banner BRL / USD Split ────────────────────────────────── -->
+        <div class="card mb-16" id="trade-split-banner" style="padding:14px 20px;background:linear-gradient(135deg,rgba(59,130,246,.08),rgba(16,185,129,.08));border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <span style="font-size:13px;font-weight:700;color:var(--text-primary)">💼 Alocação de Capital</span>
+            <span style="font-size:11px;color:var(--text-muted);margin-left:auto">USD/BRL: <span id="trade-usd-rate-banner" style="font-weight:600;color:var(--text-primary)">R$ --</span></span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <!-- BRL -->
+            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span style="font-size:18px">🇧🇷</span>
+                <div>
+                  <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Bolsão BRL — B3</div>
+                  <div style="font-size:10px;color:var(--text-muted)">Ações brasileiras · 40%</div>
+                </div>
+              </div>
+              <div id="trade-banner-brl" style="font-size:22px;font-weight:800;color:var(--blue)">R$ --</div>
+              <div id="trade-banner-pct-brl" style="font-size:11px;color:var(--text-muted);margin-top:2px">40% do capital efetivo</div>
+            </div>
+            <!-- USD -->
+            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                <span style="font-size:18px">🌍</span>
+                <div>
+                  <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Bolsão USD — Crypto/US</div>
+                  <div style="font-size:10px;color:var(--text-muted)">Crypto · Ações US · Forex · 60%</div>
+                </div>
+              </div>
+              <div id="trade-banner-usd" style="font-size:22px;font-weight:800;color:var(--green)">$ --</div>
+              <div id="trade-banner-usd-brl" style="font-size:11px;color:var(--text-muted);margin-top:2px">≈ R$ --</div>
             </div>
           </div>
         </div>
