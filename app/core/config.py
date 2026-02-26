@@ -23,10 +23,45 @@ class Settings:
     INITIAL_CAPITAL: float = float(os.getenv("INITIAL_CAPITAL", "2000"))
     MAX_POSITION_PERCENTAGE: float = 0.30  # máximo 30% por ativo
     MIN_POSITION_AMOUNT: float = 10.0  # alocação mínima por ativo
-    STOP_LOSS_PERCENTAGE: float = 0.02  # 2% — rápido e agressivo
-    TAKE_PROFIT_PERCENTAGE: float = 0.015  # 1.5% — realiza cedo
+    STOP_LOSS_PERCENTAGE: float = 0.02  # 2% — fallback fixo (ATR sobrescreve)
+    TAKE_PROFIT_PERCENTAGE: float = 0.015  # 1.5% — fallback fixo (ATR sobrescreve)
     TRAILING_STOP_PERCENTAGE: float = 0.012  # 1.2% abaixo do pico — protege lucro sem cortar cedo
     REBALANCE_INTERVAL: int = 300  # segundos (5 minutos)
+
+    # ── ATR Adaptive SL/TP ─────────────────────────────────────────────
+    ATR_PERIOD: int = 14  # candles para calcular ATR
+    ATR_SL_MULTIPLIER: float = 1.5  # SL = ATR × 1.5
+    ATR_TP_MULTIPLIER: float = 2.0  # TP = ATR × 2.0 (risk:reward 1:1.33)
+    ATR_MIN_SL: float = 0.005  # SL mínimo 0.5% (para não ficar micro)
+    ATR_MAX_SL: float = 0.05  # SL máximo 5% (para não ficar absurdo)
+
+    # ── Grid Trading (mercado lateral) ─────────────────────────────────
+    GRID_ENABLED: bool = True
+    GRID_LEVELS: int = 5  # número de níveis de compra/venda
+    GRID_SPACING_PCT: float = 0.005  # 0.5% entre cada nível
+    GRID_CAPITAL_PCT: float = 0.20  # usa 20% do capital para grid
+    GRID_MIN_RANGE: float = 0.01  # volatilidade mínima para ativar grid (1%)
+
+    # ── Scalping Turbo ─────────────────────────────────────────────────
+    TURBO_ENABLED: bool = True
+    TURBO_VOL_THRESHOLD: float = 0.015  # volatilidade > 1.5% ativa turbo
+    TURBO_CYCLE_SECONDS: int = 120  # ciclos de 2min no turbo
+    TURBO_TP_PCT: float = 0.004  # take profit rápido 0.4% no turbo
+
+    # ── Volume Confirmation ────────────────────────────────────────────
+    VOLUME_CONFIRM_ENABLED: bool = True
+    VOLUME_CONFIRM_MULTIPLIER: float = 1.5  # volume > 1.5× média = confirmado
+    VOLUME_REJECT_MULTIPLIER: float = 0.5  # volume < 0.5× média = rejeitar
+
+    # ── Partial Take Profit ────────────────────────────────────────────
+    PARTIAL_TP_ENABLED: bool = True
+    PARTIAL_TP_FIRST_PCT: float = 0.50  # tira 50% no primeiro alvo
+    PARTIAL_TP_FIRST_TARGET: float = 0.007  # primeiro alvo = 0.7%
+
+    # ── Momentum Acceleration ──────────────────────────────────────────
+    MOMENTUM_ACCEL_ENABLED: bool = True
+    MOMENTUM_ACCEL_THRESHOLD: float = 0.02  # aceleração > 2% entre ciclos
+    MOMENTUM_ACCEL_BOOST: float = 1.5  # aumenta posição 50% quando acelerando
 
     # Limites operacionais (proteção inteligente — agressiva mas com pausa/retorno)
     MAX_DAILY_LOSS_PERCENTAGE: float = 0.08  # 8% perda diária → PAUSA (não trava, só pausa)
@@ -35,8 +70,8 @@ class Settings:
     RESUME_MOMENTUM_THRESHOLD: float = 0.60  # momentum > 0.60 → volta a operar após pausa
     CONSECUTIVE_LOSS_REDUCE: int = 3  # após 3 perdas seguidas, reduz tamanho 50%
     CONSECUTIVE_LOSS_RECOVERY: float = 0.50  # fator de redução após perdas consecutivas
-    MAX_TRADES_PER_HOUR: int = 60  # mais trades com scalping
-    MAX_TRADES_PER_DAY: int = 500  # mais trades com ciclos rápidos
+    MAX_TRADES_PER_HOUR: int = 120  # mais trades com scalping turbo
+    MAX_TRADES_PER_DAY: int = 1000  # mais trades com grid + turbo
 
     # Filtro de score mínimo (só opera se momentum > threshold)
     MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.35"))

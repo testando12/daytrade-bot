@@ -156,6 +156,9 @@ async def _auto_cycle_loop():
         else:
             interval_sec = settings.CRYPTO_CYCLE_MINUTES * 60  # 10min crypto
 
+        # ── Scalping Turbo: se mercado muito volátil, ciclo de 2min ──────
+        # (verificado após o ciclo executar, aplica ao próximo intervalo)
+
         # ── Proteção: se hard stopped, só verifica a cada 5min sem operar ──
         if _protection_state.get("hard_stopped", False):
             print(f"[scheduler] 🔴 HARD STOP ativo — drawdown máximo atingido. Aguardando /trade/unfreeze", flush=True)
@@ -167,6 +170,8 @@ async def _auto_cycle_loop():
             _scheduler_state["total_auto_cycles"] += 1
             pnl = result.get("cycle_pnl", 0)
             irq = result.get("irq", 0)
+            turbo = result.get("turbo_active", False)
+            grid_p = result.get("grid_pnl", 0)
             prot = result.get("protection", {})
             prot_info = ""
             if prot.get("paused"):
@@ -175,12 +180,18 @@ async def _auto_cycle_loop():
                 prot_info = f" | ⚠️ {prot['size_multiplier']*100:.0f}% tamanho"
             if prot.get("consecutive_losses", 0) > 0:
                 prot_info += f" | 🔻 {prot['consecutive_losses']}x perdas"
+            turbo_info = " | 🚀 TURBO" if turbo else ""
+            grid_info = f" | Grid: R${grid_p:+.2f}" if grid_p != 0 else ""
             print(
                 f"[scheduler] Ciclo #{_scheduler_state['total_auto_cycles']} [{session_label}] "
                 f"| P&L: R$ {pnl:.4f} (5m:{result.get('pnl_5m',0):.2f} 1h:{result.get('pnl_1h',0):.2f} 1d:{result.get('pnl_1d',0):.2f})"
-                f" | IRQ: {irq:.3f}{prot_info}",
+                f" | IRQ: {irq:.3f}{grid_info}{turbo_info}{prot_info}",
                 flush=True,
             )
+            # ── Scalping Turbo: se detectado, próximo ciclo será em 2min ──
+            if turbo and settings.TURBO_ENABLED:
+                interval_sec = settings.TURBO_CYCLE_SECONDS
+                print(f"[scheduler] 🚀 Turbo Mode! Próximo ciclo em {settings.TURBO_CYCLE_SECONDS}s", flush=True)
         except Exception as e:
             print(f"[scheduler] Erro no ciclo automático: {e}", flush=True)
 
@@ -1663,6 +1674,62 @@ async def get_protection_status():
     }
 
 
+@app.get("/trade/strategies")
+async def trade_strategies():
+    """Retorna status de todas as estratégias ativas com parâmetros."""
+    return {
+        "success": True,
+        "data": {
+            "atr_adaptive_sl_tp": {
+                "active": True,
+                "atr_period": settings.ATR_PERIOD,
+                "sl_multiplier": settings.ATR_SL_MULTIPLIER,
+                "tp_multiplier": settings.ATR_TP_MULTIPLIER,
+                "sl_range": f"{settings.ATR_MIN_SL*100:.1f}%-{settings.ATR_MAX_SL*100:.1f}%",
+                "cached_atr": {k: v for k, v in list(_atr_cache.items())[:10]},
+            },
+            "grid_trading": {
+                "active": settings.GRID_ENABLED,
+                "levels": settings.GRID_LEVELS,
+                "spacing_pct": settings.GRID_SPACING_PCT * 100,
+                "capital_pct": settings.GRID_CAPITAL_PCT * 100,
+            },
+            "scalping_turbo": {
+                "active": settings.TURBO_ENABLED,
+                "vol_threshold": settings.TURBO_VOL_THRESHOLD * 100,
+                "cycle_seconds": settings.TURBO_CYCLE_SECONDS,
+                "tp_pct": settings.TURBO_TP_PCT * 100,
+            },
+            "volume_confirmation": {
+                "active": settings.VOLUME_CONFIRM_ENABLED,
+                "confirm_mult": settings.VOLUME_CONFIRM_MULTIPLIER,
+                "reject_mult": settings.VOLUME_REJECT_MULTIPLIER,
+            },
+            "partial_take_profit": {
+                "active": settings.PARTIAL_TP_ENABLED,
+                "first_pct": settings.PARTIAL_TP_FIRST_PCT * 100,
+                "first_target": settings.PARTIAL_TP_FIRST_TARGET * 100,
+            },
+            "momentum_acceleration": {
+                "active": settings.MOMENTUM_ACCEL_ENABLED,
+                "threshold": settings.MOMENTUM_ACCEL_THRESHOLD * 100,
+                "boost": settings.MOMENTUM_ACCEL_BOOST,
+            },
+            # Estratégias anteriores
+            "kelly_criterion": {"active": True, "fraction": settings.KELLY_FRACTION},
+            "mean_reversion": {"active": True, "drop_trigger": "3%"},
+            "dca_intelligent": {"active": True, "dca_boost": "50%"},
+            "sentiment_analysis": {"active": True},
+            "cross_asset_momentum": {"active": True},
+            "orderbook_analysis": {"active": True},
+            "trailing_stop": {"active": True, "pct": settings.TRAILING_STOP_PERCENTAGE * 100},
+            "smart_protection": {"active": True, "daily_limit": settings.MAX_DAILY_LOSS_PERCENTAGE * 100,
+                                 "weekly_limit": settings.MAX_WEEKLY_LOSS_PERCENTAGE * 100,
+                                 "drawdown_floor": settings.MAX_DRAWDOWN_PERCENTAGE * 100},
+        },
+    }
+
+
 @app.post("/trade/cycle")
 async def run_trade_cycle():
     """
@@ -1896,6 +1963,185 @@ async def _refresh_signals(klines_5m: dict, top_assets: list):
             pass
 
 
+# ═══════════════════════════════════════════
+# ESTRATÉGIAS FASE 2: ATR, GRID, TURBO, VOLUME, PARTIAL TP, MOMENTUM ACCEL
+# ═══════════════════════════════════════════
+
+# Cache de ATR por ativo (atualiza a cada ciclo)
+_atr_cache: dict = {}
+
+# Cache de momentum anterior para detectar aceleração
+_prev_momentum_cache: dict = {}
+
+
+def _calculate_atr(prices: list, period: int = None) -> float:
+    """
+    Calcula Average True Range (ATR) a partir de lista de preços.
+    ATR mede volatilidade real — quanto maior, mais volátil o ativo.
+    """
+    period = period or settings.ATR_PERIOD
+    if len(prices) < period + 1:
+        return 0.0
+    true_ranges = []
+    for i in range(1, len(prices)):
+        high_low = abs(prices[i] - prices[i-1])  # simplificado (close-to-close)
+        true_ranges.append(high_low)
+    if len(true_ranges) < period:
+        return 0.0
+    # ATR = média dos últimos N true ranges
+    atr = sum(true_ranges[-period:]) / period
+    return atr
+
+
+def _atr_adaptive_sl_tp(prices: list, asset: str = "") -> tuple:
+    """
+    Retorna (stop_loss_pct, take_profit_pct) adaptados ao ATR do ativo.
+    Ativos voláteis → SL/TP mais largo;  estáveis → mais apertado.
+    Isso evita stops prematuros e maximiza ganhos.
+    """
+    atr = _calculate_atr(prices)
+    if atr <= 0 or not prices or prices[-1] <= 0:
+        return (settings.STOP_LOSS_PERCENTAGE, settings.TAKE_PROFIT_PERCENTAGE)
+    # Normalizar ATR como percentual do preço
+    atr_pct = atr / prices[-1]
+    # SL = ATR × multiplier, clampado entre min e max
+    sl = max(settings.ATR_MIN_SL, min(atr_pct * settings.ATR_SL_MULTIPLIER, settings.ATR_MAX_SL))
+    # TP = ATR × multiplier (sempre > SL para manter risk:reward positivo)
+    tp = max(sl * 1.2, atr_pct * settings.ATR_TP_MULTIPLIER)
+    # Cache para logs
+    _atr_cache[asset] = {"atr": round(atr, 6), "atr_pct": round(atr_pct, 6), "sl": round(sl, 6), "tp": round(tp, 6)}
+    return (sl, tp)
+
+
+def _grid_trading_pnl(klines: dict, capital_grid: float) -> tuple:
+    """
+    Grid Trading — lucra em mercado lateral (60% do tempo!).
+    Coloca ordens de compra/venda em níveis espaçados.
+    Cada oscilação dentro da faixa gera lucro.
+    Retorna (pnl, detalhes_dict).
+    """
+    if not settings.GRID_ENABLED or capital_grid <= 0:
+        return (0.0, {})
+    pnl = 0.0
+    details = {}
+    for asset, data in klines.items():
+        prices = data.get("prices", [])
+        if len(prices) < 10:
+            continue
+        # Verificar se mercado é lateral (ATR baixo)
+        atr = _calculate_atr(prices)
+        if atr <= 0 or prices[-1] <= 0:
+            continue
+        atr_pct = atr / prices[-1]
+        # Grid só ativa quando volatilidade está na faixa ideal (lateral)
+        if atr_pct > settings.GRID_MIN_RANGE * 2:
+            continue  # muito volátil — não é lateral
+        if atr_pct < settings.GRID_MIN_RANGE * 0.3:
+            continue  # morto — sem movimento
+        # Calcular grid levels
+        mid_price = prices[-1]
+        spacing = mid_price * settings.GRID_SPACING_PCT
+        per_level = capital_grid / (settings.GRID_LEVELS * len(klines)) if len(klines) > 0 else 0
+        if per_level < 1:
+            continue
+        # Simular oscilação: preço recente variou entre min e max
+        recent = prices[-10:]
+        low, high = min(recent), max(recent)
+        range_pct = (high - low) / mid_price if mid_price > 0 else 0
+        # Cada nível de grid que o preço cruzou gera profit = spacing
+        levels_crossed = int(range_pct / settings.GRID_SPACING_PCT)
+        levels_crossed = min(levels_crossed, settings.GRID_LEVELS)
+        if levels_crossed > 0:
+            grid_profit = per_level * settings.GRID_SPACING_PCT * levels_crossed
+            pnl += grid_profit
+            details[asset] = {"levels_crossed": levels_crossed, "pnl": round(grid_profit, 4)}
+    return (round(pnl, 4), details)
+
+
+def _is_turbo_mode(klines: dict) -> bool:
+    """
+    Detecta se o mercado está em modo alta-volatilidade (turbo).
+    Se sim, o bot deve usar ciclos de 2 minutos em vez de 10.
+    """
+    if not settings.TURBO_ENABLED:
+        return False
+    vol_count = 0
+    total = 0
+    for asset, data in klines.items():
+        prices = data.get("prices", [])
+        if len(prices) < 5:
+            continue
+        total += 1
+        # Volatilidade = amplitude recente / preço
+        recent = prices[-5:]
+        vol = (max(recent) - min(recent)) / recent[-1] if recent[-1] > 0 else 0
+        if vol > settings.TURBO_VOL_THRESHOLD:
+            vol_count += 1
+    # Turbo se > 30% dos ativos estão voláteis
+    return total > 0 and (vol_count / total) > 0.30
+
+
+def _volume_confirmed(asset: str, klines: dict) -> float:
+    """
+    Confirma se o volume suporta a entrada.
+    Volume alto → confirma (+boost); Volume baixo → rejeita (penaliza).
+    Retorna multiplicador: >1 = confirmado, <1 = fraco, 0 = rejeitar.
+    """
+    if not settings.VOLUME_CONFIRM_ENABLED:
+        return 1.0
+    data = klines.get(asset, {})
+    volumes = data.get("volumes", [])
+    if len(volumes) < 5:
+        return 1.0  # sem dados suficientes, neutra
+    avg_vol = sum(volumes[-10:]) / len(volumes[-10:]) if len(volumes) >= 10 else sum(volumes) / len(volumes)
+    if avg_vol <= 0:
+        return 1.0
+    current_vol = volumes[-1]
+    ratio = current_vol / avg_vol
+    if ratio >= settings.VOLUME_CONFIRM_MULTIPLIER:
+        return 1.15  # volume forte → +15% confiança
+    elif ratio <= settings.VOLUME_REJECT_MULTIPLIER:
+        return 0.50  # volume fraco → -50% tamanho (ou skip)
+    return 1.0
+
+
+def _partial_take_profit(ret: float, amt: float) -> tuple:
+    """
+    Take Profit parcial: realiza 50% no primeiro alvo (0.7%), deixa 50% correr.
+    Evita devolver todo o lucro, mas não corta o potencial upside.
+    Retorna (pnl_realizado, amt_restante).
+    """
+    if not settings.PARTIAL_TP_ENABLED:
+        return (0.0, amt)
+    if ret >= settings.PARTIAL_TP_FIRST_TARGET:
+        # Realiza PARTIAL_TP_FIRST_PCT no primeiro alvo
+        realized_amt = amt * settings.PARTIAL_TP_FIRST_PCT
+        realized_pnl = realized_amt * settings.PARTIAL_TP_FIRST_TARGET
+        remaining_amt = amt - realized_amt
+        return (realized_pnl, remaining_amt)
+    return (0.0, amt)
+
+
+def _momentum_acceleration(asset: str, current_score: float) -> float:
+    """
+    Detecta aceleração de momentum — quando a tendência está GANHANDO força.
+    Se momentum atual > anterior + threshold → boost de 50%.
+    Retorna multiplicador (1.0 = normal, 1.5 = acelerando).
+    """
+    global _prev_momentum_cache
+    if not settings.MOMENTUM_ACCEL_ENABLED:
+        return 1.0
+    prev_score = _prev_momentum_cache.get(asset, 0)
+    _prev_momentum_cache[asset] = current_score
+    if prev_score > 0:
+        accel = current_score - prev_score
+        if accel >= settings.MOMENTUM_ACCEL_THRESHOLD:
+            return settings.MOMENTUM_ACCEL_BOOST  # 1.5× — tendência acelerando
+        elif accel <= -settings.MOMENTUM_ACCEL_THRESHOLD:
+            return 0.7  # momentum desacelerando → reduz 30%
+    return 1.0
+
+
 async def _run_trade_cycle_internal(assets: list = None) -> dict:
     """Lógica interna de um ciclo de trading com alocação em 3 timeframes (20/35/45%)."""
     capital = _trade_state["capital"]
@@ -2011,7 +2257,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         if mc not in top_5m:
             top_5m.append(mc)
 
-    # ── 4. P&L por bucket (com Trailing Stop, Stop Loss, Take Profit, Kelly, DCA) ──
+    # ── 4. P&L por bucket (ATR SL/TP + Volume + Partial TP + Momentum Accel + Kelly + DCA) ──
     def _calc_pnl_bucket(top_list, klines, bucket_capital, mom_data=None):
         if not top_list:
             return 0.0, {}
@@ -2025,6 +2271,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             else:
                 ret = 0.0
 
+            # ── ATR Adaptive SL/TP — calcula limites dinâmicos por ativo ──
+            atr_sl, atr_tp = _atr_adaptive_sl_tp(prices, asset)
+
             # Kelly + sinais avançados: ajustar tamanho pelo score + sentiment/orderbook
             score = 0.5
             if mom_data and asset in mom_data:
@@ -2032,6 +2281,15 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             amt = _kelly_weight(score, per_asset, asset)
             # DCA: aumentar se já estava em posição perdedora
             amt = _dca_adjust(asset, amt, klines)
+
+            # ── Volume Confirmation — filtra entradas com volume fraco ────
+            vol_mult = _volume_confirmed(asset, klines)
+            amt = round(amt * vol_mult, 2)
+
+            # ── Momentum Acceleration — boost quando tendência acelera ────
+            mom_accel_mult = _momentum_acceleration(asset, score)
+            amt = round(amt * mom_accel_mult, 2)
+
             # Aplicar multiplicador de proteção (perdas consecutivas, pausa parcial)
             amt = round(amt * _protection_state["size_multiplier"], 2)
             # Clamp: não ultrapassa 30% do capital total
@@ -2057,30 +2315,47 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 # Sem dados suficientes, limpa trailing
                 _protection_state["trailing_highs"].pop(asset, None)
 
-            # Stop Loss: se queda > SL%, limita perda
-            if ret <= -settings.STOP_LOSS_PERCENTAGE:
-                ret = -settings.STOP_LOSS_PERCENTAGE
-                _trade_log("STOP_LOSS", asset, amt,
-                    f"🛑 Stop Loss {asset}: {ret*100:.2f}%")
-                # Limpar trailing high (posição encerrada)
+            # ── ATR Stop Loss (adaptativo) — substitui SL fixo ──────────
+            if ret <= -atr_sl:
+                ret = -atr_sl
+                _trade_log("STOP_LOSS_ATR", asset, amt,
+                    f"🛑 ATR Stop Loss {asset}: {ret*100:.2f}% (ATR SL={atr_sl*100:.2f}%)")
                 _protection_state["trailing_highs"].pop(asset, None)
 
-            # Take Profit: se subiu > TP%, trava ganho
-            if ret >= settings.TAKE_PROFIT_PERCENTAGE:
-                ret = settings.TAKE_PROFIT_PERCENTAGE
-                _trade_log("TAKE_PROFIT", asset, amt,
-                    f"💰 Take Profit {asset}: +{ret*100:.2f}%")
-                # Limpar trailing high (posição encerrada com lucro)
+            # ── Partial Take Profit — realiza 50% no primeiro alvo ───────
+            partial_pnl = 0.0
+            if ret >= settings.PARTIAL_TP_FIRST_TARGET and settings.PARTIAL_TP_ENABLED:
+                partial_pnl, amt_remaining = _partial_take_profit(ret, amt)
+                if partial_pnl > 0:
+                    _trade_log("PARTIAL_TP", asset, amt,
+                        f"💰 Partial TP {asset}: +{settings.PARTIAL_TP_FIRST_TARGET*100:.1f}% em {settings.PARTIAL_TP_FIRST_PCT*100:.0f}% da posição = R$ {partial_pnl:.4f}")
+                    amt = amt_remaining  # resto continua correndo
+
+            # ── ATR Take Profit (adaptativo) — substitui TP fixo ─────────
+            if ret >= atr_tp:
+                ret = atr_tp
+                _trade_log("TAKE_PROFIT_ATR", asset, amt,
+                    f"💰 ATR Take Profit {asset}: +{ret*100:.2f}% (ATR TP={atr_tp*100:.2f}%)")
                 _protection_state["trailing_highs"].pop(asset, None)
 
-            pnl += amt * ret
-            positions[asset] = {"amount": amt, "ret_pct": round(ret * 100, 3)}
+            pnl += (amt * ret) + partial_pnl
+            positions[asset] = {"amount": amt, "ret_pct": round(ret * 100, 3),
+                                "atr_sl": round(atr_sl * 100, 2), "atr_tp": round(atr_tp * 100, 2),
+                                "vol_mult": round(vol_mult, 2), "mom_accel": round(mom_accel_mult, 2)}
         return round(pnl, 4), positions
 
     pnl_5m, pos_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m, mom_5m)
     pnl_1h, pos_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h, mom_1h)
     pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, mom_1d)
-    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d, 4)
+
+    # ── 4a. Grid Trading — lucra com mercado lateral ─────────────────────
+    grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
+    grid_pnl, grid_details = _grid_trading_pnl(klines_by_tf["5m"], grid_capital)
+    if grid_pnl > 0:
+        _trade_log("GRID_PROFIT", "—", grid_pnl,
+            f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
+
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + grid_pnl, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
@@ -2162,8 +2437,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         print(f"[trade] Erro sync risk_manager: {e}", flush=True)
 
     # ── 6. Log e histórico ───────────────────────────────────────────────
+    turbo_active = _is_turbo_mode(klines_by_tf["5m"])
     _trade_log("CICLO", "—", capital,
-        f"🔄 [{session_label}] {data_source} | 5m(20%): R${pnl_5m:+.2f} | 1h(35%): R${pnl_1h:+.2f} | 1d(45%): R${pnl_1d:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f}")
+        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d)
 
@@ -2189,6 +2465,19 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "capital_5m":  capital_5m,
         "capital_1h":  capital_1h,
         "capital_1d":  capital_1d,
+        # Grid Trading
+        "grid_pnl":    grid_pnl,
+        "grid_assets":  len(grid_details),
+        # Turbo & Estratégias
+        "turbo_active": turbo_active,
+        "strategies_active": {
+            "atr_adaptive": True,
+            "grid_trading": settings.GRID_ENABLED,
+            "scalping_turbo": turbo_active,
+            "volume_confirm": settings.VOLUME_CONFIRM_ENABLED,
+            "partial_tp": settings.PARTIAL_TP_ENABLED,
+            "momentum_accel": settings.MOMENTUM_ACCEL_ENABLED,
+        },
         # Proteção inteligente
         "protection": {
             "paused": _protection_state["paused"],
