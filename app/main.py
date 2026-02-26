@@ -1560,6 +1560,23 @@ async def trade_status():
     pnl_today_live = round(sum(c.get("pnl", 0) for c in today_cycles), 2)
     capital_base = _trade_state["capital"]
     capital_efetivo = round(capital_base + pnl_today_live, 2)
+
+    # ── Capital Split BRL vs USD ─────────────────────────────────────────
+    # Tenta cotação live do USD/BRL via Yahoo Finance, cai no fallback se falhar
+    usd_rate = settings.USD_BRL_RATE
+    try:
+        import yfinance as _yf_rate
+        _ticker_usd = _yf_rate.Ticker("USDBRL=X")
+        _live_rate = _ticker_usd.fast_info.last_price
+        if _live_rate and float(_live_rate) > 0:
+            usd_rate = round(float(_live_rate), 4)
+    except Exception:
+        pass
+
+    capital_brl      = round(capital_efetivo * settings.CAPITAL_BRL_PCT, 2)   # ex: 40% em R$
+    capital_usd_brl  = round(capital_efetivo * settings.CAPITAL_USD_PCT, 2)   # ex: 60% ainda em R$
+    capital_usd      = round(capital_usd_brl / usd_rate, 2)                   # convertido para USD
+
     return {
         "success": True,
         "data": {
@@ -1573,6 +1590,11 @@ async def trade_status():
             "last_cycle":       _trade_state["last_cycle"],
             "b3_open":          _is_market_open(),
             "session":          session_label,
+            # ── Bolsões BRL / USD ──────────────────────────────────────
+            "capital_brl":      capital_brl,       # parcela B3 em R$
+            "capital_usd_brl":  capital_usd_brl,   # parcela crypto/US em R$
+            "capital_usd":      capital_usd,        # parcela crypto/US em USD
+            "usd_rate":         usd_rate,           # R$/USD usado na conversão
         },
     }
 

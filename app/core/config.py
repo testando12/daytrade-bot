@@ -193,6 +193,13 @@ class Settings:
     def ALL_ASSETS(self) -> List[str]:
         return self.ALLOWED_ASSETS + self.US_STOCKS + self.CRYPTO_ASSETS + self.FOREX_PAIRS + self.COMMODITIES
 
+    # ── Capital Split BRL / USD ────────────────────────────────────────────
+    # Bolsão BRL  → ações B3 (ALLOWED_ASSETS)
+    # Bolsão USD  → crypto, ações US, forex, commodities (tudo fora de B3)
+    CAPITAL_BRL_PCT: float = float(os.getenv("CAPITAL_BRL_PCT", "0.40"))   # 40 % do capital em R$ (B3)
+    CAPITAL_USD_PCT: float = float(os.getenv("CAPITAL_USD_PCT", "0.60"))   # 60 % do capital em USD (Crypto/US)
+    USD_BRL_RATE: float    = float(os.getenv("USD_BRL_RATE",    "5.75"))   # taxa de câmbio fallback
+
     # Logs
     LOG_LEVEL: str = "INFO"
 

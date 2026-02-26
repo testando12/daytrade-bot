@@ -1275,6 +1275,23 @@ async function loadTradePage() {
       tradeCapEfetivoEl.style.color = (d.pnl_hoje ?? todayPnl) >= 0 ? 'var(--green)' : 'var(--red)';
     }
 
+    // ── Bolsões BRL / USD ────────────────────────────────────────────────
+    const usdRate = d.usd_rate || 5.75;
+    // Bolsão BRL (B3 — 40%)
+    const capBrlEl = document.getElementById('trade-capital-brl');
+    if (capBrlEl) capBrlEl.textContent = fmtMoney(d.capital_brl ?? (d.capital_efetivo || d.capital) * 0.40);
+    // Bolsão USD (Crypto/US — 60%) — mostra em USD e equivalente em BRL
+    const capUsdEl    = document.getElementById('trade-capital-usd');
+    const capUsdBrlEl = document.getElementById('trade-capital-usd-brl');
+    const usdVal = d.capital_usd ?? ((d.capital_efetivo || d.capital) * 0.60 / usdRate);
+    const usdBrlVal = d.capital_usd_brl ?? ((d.capital_efetivo || d.capital) * 0.60);
+    if (capUsdEl)    capUsdEl.textContent    = `$ ${usdVal.toFixed(2)}`;
+    if (capUsdBrlEl) capUsdBrlEl.textContent = `≈ ${fmtMoney(usdBrlVal)}`;
+    // Taxa de câmbio
+    const usdRateEl = document.getElementById('trade-usd-rate');
+    if (usdRateEl) usdRateEl.textContent = `R$ ${usdRate.toFixed(4).replace('.', ',')}`;
+
+
     // ⚡ 5min
     const gain5mEl = document.getElementById('trade-gain-5m');
     if (gain5mEl) {
