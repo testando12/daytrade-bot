@@ -73,9 +73,10 @@ _scheduler_state = {
 # Controle de reinvestimento diário
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 
-# Alocação por timeframe: SHORT 20%, MEDIUM 35%, LONG 45%
-_TIMEFRAME_ALLOC = {"5m": 0.20, "1h": 0.35, "1d": 0.45}
-_TIMEFRAME_N_ASSETS = {"5m": 5, "1h": 7, "1d": 9}  # top N ativos por bucket
+# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 65%
+# Otimizado com base em dados reais: 1d gerou 99% do lucro
+_TIMEFRAME_ALLOC = {"5m": 0.10, "1h": 0.25, "1d": 0.65}
+_TIMEFRAME_N_ASSETS = {"5m": 3, "1h": 6, "1d": 12}  # top N ativos por bucket
 
 def _is_market_open() -> bool:
     """Verifica se o mercado B3 está aberto (seg-sex 10:00-17:00 BRT = UTC-3)."""
@@ -2228,7 +2229,7 @@ def _momentum_acceleration(asset: str, current_score: float) -> float:
 
 
 async def _run_trade_cycle_internal(assets: list = None) -> dict:
-    """Lógica interna de um ciclo de trading com alocação em 3 timeframes (20/35/45%)."""
+    """Lógica interna de um ciclo de trading com alocação em 3 timeframes (10/25/65%)."""
     capital = _trade_state["capital"]
     all_assets = assets if assets is not None else settings.ALL_ASSETS
     b3_open = _is_market_open()
