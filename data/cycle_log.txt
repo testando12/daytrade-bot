@@ -37,3 +37,7 @@
 [2026-02-26T16:08:26] Dados obtidos: 105 ativos via yahoo.finance
 [2026-02-26T16:08:26] Ciclo concluído | IRQ: 0.161 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 15.6109 | Total P&L: R$ 15.6109
 [2026-02-26T16:08:26] Top posições: OIL=R$6.08 | SILVER=R$3.54 | CVX=R$3.22 | CVS=R$2.76
+[2026-02-26T19:14:09] Iniciando ciclo — capital: R$ 150.00
+[2026-02-26T19:14:10] Dados obtidos: 105 ativos via yahoo.finance
+[2026-02-26T19:14:10] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 9.8283 | Total P&L: R$ 9.8283
+[2026-02-26T19:14:10] Top posições: FLOKI=R$2.48 | WIF=R$2.46 | NEAR=R$2.45 | BONK=R$2.44
