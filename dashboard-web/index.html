@@ -649,49 +649,10 @@
           </div>
         </div>
 
-        <!-- ── Banner BRL / USD redesigned ────────────────────────── -->
-        <div class="card mb-16" id="trade-split-banner" style="padding:16px 20px">
-          <!-- Cabeçalho -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px">💼 Alocação de Capital</span>
-            <span style="font-size:11px;color:var(--text-muted)">USD/BRL&nbsp;<span id="trade-usd-rate-banner" style="font-weight:700;color:var(--text-primary)">R$ --</span></span>
-          </div>
-          <!-- Barra de split 40 / 60 -->
-          <div style="height:6px;border-radius:4px;overflow:hidden;display:flex;margin-bottom:16px;gap:2px">
-            <div style="width:40%;background:#3b82f6;border-radius:4px 0 0 4px"></div>
-            <div style="width:60%;background:#10b981;border-radius:0 4px 4px 0"></div>
-          </div>
-          <!-- Dois painéis -->
-          <div style="display:grid;grid-template-columns:1fr 1px 1fr;gap:0;align-items:start">
-            <!-- BRL -->
-            <div style="padding-right:16px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6;flex-shrink:0"></span>
-                <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Bolsão BRL · B3</span>
-                <span style="margin-left:auto;font-size:10px;font-weight:700;color:#3b82f6;background:rgba(59,130,246,.12);padding:1px 7px;border-radius:10px">40%</span>
-              </div>
-              <div id="trade-banner-brl" style="font-size:26px;font-weight:800;color:#3b82f6;line-height:1.1">R$ --</div>
-              <div style="font-size:10px;color:var(--text-muted);margin-top:4px">🇧🇷 Ações brasileiras</div>
-            </div>
-            <!-- Divisor -->
-            <div style="background:var(--border);margin:0 4px"></div>
-            <!-- USD -->
-            <div style="padding-left:16px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#10b981;flex-shrink:0"></span>
-                <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Bolsão USD · Intl</span>
-                <span style="margin-left:auto;font-size:10px;font-weight:700;color:#10b981;background:rgba(16,185,129,.12);padding:1px 7px;border-radius:10px">60%</span>
-              </div>
-              <div id="trade-banner-usd" style="font-size:26px;font-weight:800;color:#10b981;line-height:1.1">$ --</div>
-              <div id="trade-banner-usd-brl" style="font-size:10px;color:var(--text-muted);margin-top:4px">🌍 ≈ R$ --</div>
-            </div>
-          </div>
-        </div>
+        <!-- Row 1: Capital + Bolsão BRL + Bolsão USD -->
+        <div class="cards-grid cards-3 mb-16" id="trade-split-banner">
 
-        <!-- Row 1: Capital deposit + Summary cards -->
-        <div class="cards-grid cards-3 mb-16">
-
-          <!-- Depositar Capital -->
+          <!-- 1. Capital do Bot -->
           <div class="card">
             <div class="card-header">
               <span class="card-title">💰 Capital do Bot</span>
@@ -723,51 +684,61 @@
                 <span style="font-size:12px;color:var(--text-muted)">P&L Total acumulado</span>
                 <span id="trade-total-pnl" style="font-size:13px;font-weight:700">R$ 0,00</span>
               </div>
-              <!-- ── Bolsões BRL / USD ─────────────────────────────────── -->
-              <div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--border)">
-                <!-- Mini split bar -->
-                <div style="height:3px;border-radius:3px;overflow:hidden;display:flex;margin-bottom:9px;gap:1px">
-                  <div style="width:40%;background:#3b82f6;border-radius:3px 0 0 3px"></div>
-                  <div style="width:60%;background:#10b981;border-radius:0 3px 3px 0"></div>
-                </div>
-                <!-- BRL row -->
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-                  <div style="display:flex;align-items:center;gap:5px">
-                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3b82f6;flex-shrink:0"></span>
-                    <span style="font-size:11px;color:var(--text-muted)">BRL · B3</span>
-                    <span style="font-size:9px;color:#3b82f6;font-weight:700">40%</span>
-                  </div>
-                  <span id="trade-capital-brl" style="font-size:13px;font-weight:700;color:#3b82f6">R$ --</span>
-                </div>
-                <!-- USD row -->
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                  <div style="display:flex;align-items:center;gap:5px">
-                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;flex-shrink:0"></span>
-                    <span style="font-size:11px;color:var(--text-muted)">USD · Crypto/US</span>
-                    <span style="font-size:9px;color:#10b981;font-weight:700">60%</span>
-                  </div>
-                  <div style="text-align:right">
-                    <div id="trade-capital-usd" style="font-size:13px;font-weight:700;color:#10b981">$ --</div>
-                    <div id="trade-capital-usd-brl" style="font-size:10px;color:var(--text-muted)">≈ R$ --</div>
-                  </div>
-                </div>
-                <!-- Câmbio -->
-                <div style="display:flex;justify-content:space-between;margin-top:7px;padding-top:6px;border-top:1px solid var(--border)">
-                  <span style="font-size:10px;color:var(--text-muted)">Câmbio USD/BRL</span>
-                  <span id="trade-usd-rate" style="font-size:10px;font-weight:600;color:var(--text-secondary)">R$ 5,75</span>
-                </div>
-              </div>
             </div>
           </div>
 
-          <!-- Posições Ativas -->
-          <div class="card">
+          <!-- 2. Bolsão BRL -->
+          <div class="card" style="border-top:3px solid #3b82f6">
+            <div class="card-header">
+              <span class="card-title">🇧🇷 Bolsão BRL</span>
+              <span style="font-size:10px;font-weight:700;color:#3b82f6;background:rgba(59,130,246,.13);padding:2px 9px;border-radius:10px">B3 · 40%</span>
+            </div>
+            <div style="height:4px;border-radius:4px;background:rgba(59,130,246,.15);margin-bottom:20px;overflow:hidden">
+              <div style="width:40%;height:100%;background:#3b82f6;border-radius:4px"></div>
+            </div>
+            <div id="trade-capital-brl" style="font-size:30px;font-weight:800;color:#3b82f6;line-height:1;margin-bottom:6px">R$ --</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:20px">Ações brasileiras listadas na B3</div>
+            <div style="border-top:1px solid var(--border);padding-top:12px">
+              <div style="font-size:10px;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">Ativos elegíveis</div>
+              <div style="font-size:11px;color:var(--text-secondary);line-height:1.6">PETR4 · VALE3 · ITUB4 · BBDC4 · ABEV3 · WEGE3 · RENT3...</div>
+            </div>
+          </div>
+
+          <!-- 3. Bolsão USD -->
+          <div class="card" style="border-top:3px solid #10b981">
+            <div class="card-header">
+              <span class="card-title">🌍 Bolsão USD</span>
+              <span style="font-size:10px;font-weight:700;color:#10b981;background:rgba(16,185,129,.13);padding:2px 9px;border-radius:10px">Intl · 60%</span>
+            </div>
+            <div style="height:4px;border-radius:4px;background:rgba(16,185,129,.15);margin-bottom:20px;overflow:hidden">
+              <div style="width:60%;height:100%;background:#10b981;border-radius:4px"></div>
+            </div>
+            <div id="trade-banner-usd" style="font-size:30px;font-weight:800;color:#10b981;line-height:1;margin-bottom:4px">$ --</div>
+            <div id="trade-banner-usd-brl" style="font-size:12px;color:var(--text-muted);margin-bottom:4px">≈ R$ --</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:20px">Crypto · Ações US · Forex · Commodities</div>
+            <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+              <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Câmbio USD/BRL</span>
+              <span id="trade-usd-rate-banner" style="font-size:13px;font-weight:700;color:var(--text-primary)">R$ --</span>
+            </div>
+            <!-- hidden aliases for JS compat -->
+            <div id="trade-capital-usd" style="display:none"></div>
+            <div id="trade-capital-usd-brl" style="display:none"></div>
+            <div id="trade-usd-rate" style="display:none"></div>
+          </div>
+
+        </div>
+
+        <!-- Row 2: Posições Ativas + Distribuição -->
+        <div class="cards-grid cards-3 mb-16">
+
+          <!-- Posições Ativas (ocupa 2 colunas) -->
+          <div class="card" style="grid-column:span 2">
             <div class="card-header">
               <span class="card-title">📊 Posições Ativas</span>
               <span id="trade-positions-count" class="badge badge-gray">0 ativos</span>
             </div>
             <div id="trade-positions-mini"
-              style="display:flex;flex-direction:column;gap:6px;max-height:120px;overflow-y:auto">
+              style="display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto">
               <div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posições</p></div>
             </div>
           </div>
@@ -777,7 +748,7 @@
             <div class="card-header">
               <span class="card-title">🥧 Distribuição</span>
             </div>
-            <div class="chart-container" style="height:140px">
+            <div class="chart-container" style="height:160px">
               <canvas id="chart-trade-donut"></canvas>
             </div>
           </div>

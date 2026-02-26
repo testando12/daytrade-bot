@@ -452,11 +452,11 @@ function renderCapitalSplitBanners(td) {
   set('dash-capital-usd',     `$ ${capUsd.toFixed(2)}`);
   set('dash-capital-usd-brl', `🌍 ≈ ${fmtMoney(capUsdBrl)}`);
 
-  // Trade banner
+  // Trade banner / cards
   set('trade-usd-rate-banner', rateStr);
-  set('trade-banner-brl',      fmtMoney(capBrl));
+  set('trade-capital-brl',     fmtMoney(capBrl));
   set('trade-banner-usd',      `$ ${capUsd.toFixed(2)}`);
-  set('trade-banner-usd-brl',  `🌍 ≈ ${fmtMoney(capUsdBrl)}`);
+  set('trade-banner-usd-brl',  `≈ ${fmtMoney(capUsdBrl)}`);
 }
 function round2(n) { return Math.round(n * 100) / 100; }
 
