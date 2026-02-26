@@ -133,10 +133,11 @@ async def _auto_cycle_loop():
                 today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str)]
                 today_pnl = round(sum(c.get("pnl", 0) for c in today_cycles), 2)
                 if today_pnl != 0:
-                    _trade_state["capital"] = round(_trade_state["capital"] + today_pnl, 2)
+                    reinvest = round(today_pnl * settings.COMPOUNDING_RATE, 2)
+                    _trade_state["capital"] = round(_trade_state["capital"] + reinvest, 2)
                     sinal = "⬆ Lucro" if today_pnl > 0 else "⬇ Prejuízo"
-                    _trade_log("REINVESTIMENTO", "—", today_pnl,
-                        f"💰 {sinal} do dia R$ {today_pnl:+.2f} reinvestido. Novo capital: R$ {_trade_state['capital']:.2f}")
+                    _trade_log("REINVESTIMENTO", "—", reinvest,
+                        f"💰 {sinal} do dia R$ {today_pnl:+.2f} → reinvestido {settings.COMPOUNDING_RATE*100:.0f}%: R$ {reinvest:+.2f}. Capital: R$ {_trade_state['capital']:.2f}")
                     print(f"[scheduler] Reinvestimento: R$ {today_pnl:+.2f} -> capital agora R$ {_trade_state['capital']:.2f}", flush=True)
                 _last_reinvestment_date = today_str
             except Exception as e:
@@ -149,11 +150,11 @@ async def _auto_cycle_loop():
         active_assets, session_label = _current_session()
         _scheduler_state["session"] = session_label
 
-        # Intervalo maior fora do horário B3 (crypto é menos volátil à noite)
+        # Intervalo dinâmico: mais rápido para crypto, mais lento para B3
         if _is_market_open():
-            interval_sec = _scheduler_state["interval_minutes"] * 60
+            interval_sec = settings.B3_CYCLE_MINUTES * 60
         else:
-            interval_sec = max(_scheduler_state["interval_minutes"], 60) * 60  # mín 1h fora do B3
+            interval_sec = settings.CRYPTO_CYCLE_MINUTES * 60  # 10min crypto
 
         try:
             result = await _run_trade_cycle_internal(assets=active_assets)
@@ -1608,6 +1609,107 @@ async def run_trade_cycle():
     }
 
 
+# ═══════════════════════════════════════════
+# ESTRATÉGIAS AVANÇADAS
+# ═══════════════════════════════════════════
+
+def _sentiment_boost(asset: str) -> float:
+    """
+    Analisa sentimento via CryptoPanic/RSS (simplificado).
+    Retorna multiplicador: >1 = positivo, <1 = negativo, 1 = neutro.
+    """
+    try:
+        import requests as _req
+        # CryptoPanic API gratuita para crypto
+        if asset in settings.CRYPTO_ASSETS:
+            url = f"https://cryptopanic.com/api/v1/posts/?auth_token=free&currencies={asset}&kind=news&filter=important"
+            resp = _req.get(url, timeout=3)
+            if resp.status_code == 200:
+                results = resp.json().get("results", [])
+                if not results:
+                    return 1.0
+                # Contar positivos vs negativos
+                pos = sum(1 for r in results[:5] if r.get("votes", {}).get("positive", 0) > 0)
+                neg = sum(1 for r in results[:5] if r.get("votes", {}).get("negative", 0) > 0)
+                if pos > neg:
+                    return 1.15  # +15% de peso
+                elif neg > pos:
+                    return 0.85  # -15% de peso
+    except Exception:
+        pass
+    return 1.0
+
+
+def _cross_asset_momentum(klines: dict) -> dict:
+    """
+    Detecta momentum cruzado: se BTC sobe forte, altcoins seguem.
+    Retorna boost multiplicador por ativo.
+    """
+    boosts = {}
+    btc_data = klines.get("BTC", {})
+    btc_prices = btc_data.get("prices", [])
+    if len(btc_prices) >= 3:
+        btc_move = (btc_prices[-1] - btc_prices[-3]) / btc_prices[-3] if btc_prices[-3] > 0 else 0
+        if btc_move > 0.005:  # BTC subiu > 0.5% em 3 candles
+            for asset in klines:
+                if asset != "BTC" and asset in settings.CRYPTO_ASSETS:
+                    boosts[asset] = 1.10  # +10% para altcoins
+        elif btc_move < -0.005:  # BTC caiu forte
+            for asset in klines:
+                if asset != "BTC" and asset in settings.CRYPTO_ASSETS:
+                    boosts[asset] = 0.90  # -10% para altcoins
+    return boosts
+
+
+def _orderbook_signal(asset: str) -> float:
+    """
+    Analisa profundidade de ordem (simplificado via Binance API).
+    Retorna multiplicador: >1 = mais bids que asks, <1 = mais asks.
+    """
+    try:
+        if asset not in settings.CRYPTO_ASSETS:
+            return 1.0
+        symbol = f"{asset}USDT"
+        import requests as _req
+        resp = _req.get(f"https://api.binance.com/api/v3/depth?symbol={symbol}&limit=20", timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            total_bids = sum(float(b[1]) for b in data.get("bids", []))
+            total_asks = sum(float(a[1]) for a in data.get("asks", []))
+            if total_asks > 0:
+                ratio = total_bids / total_asks
+                if ratio > 1.5:    return 1.10   # muita demanda
+                elif ratio < 0.6:  return 0.90   # muita oferta
+    except Exception:
+        pass
+    return 1.0
+
+
+# Cache para não chamar sentimento/orderbook a cada ciclo (a cada 5 min)
+_signal_cache: dict = {"ts": "", "sentiment": {}, "orderbook": {}, "cross_mom": {}}
+
+
+async def _refresh_signals(klines_5m: dict, top_assets: list):
+    """Atualiza cache de sinais avançados (sentimento, orderbook, cross-momentum)."""
+    from datetime import timezone as _tzs, timedelta as _tds
+    now_str = datetime.now(_tzs(_tds(hours=-3))).strftime("%H:%M")
+    # Atualizar a cada 5 minutos
+    if _signal_cache.get("ts") == now_str[:4]:
+        return
+    _signal_cache["ts"] = now_str[:4]
+    _signal_cache["cross_mom"] = _cross_asset_momentum(klines_5m)
+    # Sentimento e orderbook — limitar a top 5 por performance
+    for asset in top_assets[:5]:
+        try:
+            _signal_cache["sentiment"][asset] = _sentiment_boost(asset)
+        except Exception:
+            pass
+        try:
+            _signal_cache["orderbook"][asset] = _orderbook_signal(asset)
+        except Exception:
+            pass
+
+
 async def _run_trade_cycle_internal(assets: list = None) -> dict:
     """Lógica interna de um ciclo de trading com alocação em 3 timeframes (20/35/45%)."""
     capital = _trade_state["capital"]
@@ -1632,10 +1734,16 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         if not klines_by_tf[tf]:
             klines_by_tf[tf] = test_assets_data
 
-    # ── 2. Top N ativos por momentum em cada timeframe ───────────────────
+    # ── 2. Top N ativos por momentum (com filtro de score mínimo) ────────
+    min_score = settings.MIN_MOMENTUM_SCORE
+
     def _top_assets(klines, n):
         mom = MomentumAnalyzer.calculate_multiple_assets(klines)
-        sorted_assets = sorted(mom.items(), key=lambda x: x[1].get("momentum_score", 0), reverse=True)
+        # Filtra score mínimo — só opera quando vale a pena
+        filtered = {a: m for a, m in mom.items()
+                    if m.get("momentum_score", 0) >= min_score}
+        sorted_assets = sorted(filtered.items(),
+                               key=lambda x: x[1].get("momentum_score", 0), reverse=True)
         return [a for a, _ in sorted_assets[:n]], mom
 
     capital_5m = round(capital * _TIMEFRAME_ALLOC["5m"], 2)
@@ -1646,6 +1754,13 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     top_1h, mom_1h = _top_assets(klines_by_tf["1h"], _TIMEFRAME_N_ASSETS["1h"])
     top_1d, mom_1d = _top_assets(klines_by_tf["1d"], _TIMEFRAME_N_ASSETS["1d"])
 
+    # ── 2b. Atualizar sinais avançados (sentimento, orderbook, cross-momentum)
+    try:
+        all_top = list(set(top_5m + top_1h + top_1d))
+        await _refresh_signals(klines_by_tf["5m"], all_top)
+    except Exception:
+        pass
+
     # ── 3. Risco (referência via 5m) ─────────────────────────────────────
     ref_asset = top_5m[0] if top_5m else list(klines_by_tf["5m"].keys())[0]
     ref_data  = klines_by_tf["5m"].get(ref_asset, {})
@@ -1653,8 +1768,65 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     irq_score  = risk_analysis["irq_score"]
     protection = RiskAnalyzer.get_protection_level(irq_score)
 
-    # ── 4. P&L por bucket ────────────────────────────────────────────────
-    def _calc_pnl_bucket(top_list, klines, bucket_capital):
+    # ── 3b. Kelly Criterion + sinais avançados ─────────────────────────
+    def _kelly_weight(score: float, base_amount: float, asset: str = "") -> float:
+        """Retorna alocação ajustada via Kelly fracionário + sinais avançados.
+        Score alto → mais capital; score baixo → menos capital."""
+        if score <= 0:
+            return base_amount
+        # Estima win_rate ≈ score (simplificado), b ≈ 1
+        p = min(score, 0.85)
+        q = 1.0 - p
+        b = 1.0  # reward/risk ≈ 1
+        kelly_f = (p * b - q) / b if b > 0 else 0
+        kelly_f = max(0.05, min(kelly_f, 0.60))  # clamp 5%-60%
+        adjusted = base_amount * (1.0 + kelly_f * settings.KELLY_FRACTION)
+        # Aplicar boosts de sinais avançados (sentiment, order book, cross-momentum)
+        if asset:
+            sentiment = _signal_cache.get("sentiment", {}).get(asset, 1.0)
+            orderbook = _signal_cache.get("orderbook", {}).get(asset, 1.0)
+            cross_mom = _signal_cache.get("cross_mom", {}).get(asset, 1.0)
+            adjusted = adjusted * sentiment * orderbook * cross_mom
+        return round(adjusted, 2)
+
+    # ── 3c. Mean Reversion — detecta ativos com queda brusca ────────────
+    def _mean_reversion_candidates(klines: dict, n: int = 3) -> list:
+        """Retorna ativos que caíram muito rápido e tendem a reverter."""
+        candidates = []
+        for asset, data in klines.items():
+            prices = data.get("prices", [])
+            if len(prices) < 10:
+                continue
+            recent_avg = sum(prices[-10:]) / 10
+            current    = prices[-1]
+            if recent_avg > 0:
+                drop_pct = (current - recent_avg) / recent_avg
+                # Queda > 3% = candidato a reversão
+                if drop_pct < -0.03:
+                    candidates.append((asset, drop_pct))
+        candidates.sort(key=lambda x: x[1])  # mais caiu primeiro
+        return [a for a, _ in candidates[:n]]
+
+    # ── 3d. DCA inteligente — acumula em posições perdedoras ─────────────
+    def _dca_adjust(asset: str, current_amount: float, klines: dict) -> float:
+        """Se ativo já está em posição e caiu, aumenta posição (DCA)."""
+        prev_pos = _trade_state.get("positions", {}).get(asset)
+        if not prev_pos:
+            return current_amount
+        prev_change = prev_pos.get("change_pct", 0)
+        # Se caiu entre -1% e -3%, aloca 50% a mais (DCA)
+        if -3.0 < prev_change < -1.0:
+            return round(current_amount * 1.5, 2)
+        return current_amount
+
+    # Adicionar candidatos de mean reversion ao 5m bucket
+    mr_candidates = _mean_reversion_candidates(klines_by_tf["5m"])
+    for mc in mr_candidates:
+        if mc not in top_5m:
+            top_5m.append(mc)
+
+    # ── 4. P&L por bucket (com Stop Loss, Take Profit, Kelly, DCA) ──────
+    def _calc_pnl_bucket(top_list, klines, bucket_capital, mom_data=None):
         if not top_list:
             return 0.0, {}
         per_asset = round(bucket_capital / len(top_list), 2)
@@ -1666,14 +1838,51 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 ret = (prices[-1] - prices[-2]) / prices[-2]
             else:
                 ret = 0.0
-            pnl += per_asset * ret
-            positions[asset] = {"amount": per_asset, "ret_pct": round(ret * 100, 3)}
+
+            # Kelly + sinais avançados: ajustar tamanho pelo score + sentiment/orderbook
+            score = 0.5
+            if mom_data and asset in mom_data:
+                score = mom_data[asset].get("momentum_score", 0.5)
+            amt = _kelly_weight(score, per_asset, asset)
+            # DCA: aumentar se já estava em posição perdedora
+            amt = _dca_adjust(asset, amt, klines)
+            # Clamp: não ultrapassa 30% do capital total
+            amt = min(amt, capital * settings.MAX_POSITION_PERCENTAGE)
+
+            # Stop Loss: se queda > SL%, limita perda
+            if ret <= -settings.STOP_LOSS_PERCENTAGE:
+                ret = -settings.STOP_LOSS_PERCENTAGE
+                _trade_log("STOP_LOSS", asset, amt,
+                    f"🛑 Stop Loss {asset}: {ret*100:.2f}%")
+
+            # Take Profit: se subiu > TP%, trava ganho
+            if ret >= settings.TAKE_PROFIT_PERCENTAGE:
+                ret = settings.TAKE_PROFIT_PERCENTAGE
+                _trade_log("TAKE_PROFIT", asset, amt,
+                    f"💰 Take Profit {asset}: +{ret*100:.2f}%")
+
+            pnl += amt * ret
+            positions[asset] = {"amount": amt, "ret_pct": round(ret * 100, 3)}
         return round(pnl, 4), positions
 
-    pnl_5m, pos_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m)
-    pnl_1h, pos_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h)
-    pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d)
+    pnl_5m, pos_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m, mom_5m)
+    pnl_1h, pos_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h, mom_1h)
+    pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, mom_1d)
     cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d, 4)
+
+    # ── 4b. Daily loss limit check ──────────────────────────────────────
+    from datetime import timezone as _tz2, timedelta as _td2
+    _brt2 = _tz2(_td2(hours=-3))
+    _today2 = datetime.now(_brt2).strftime("%Y-%m-%d")
+    _today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(_today2)]
+    _today_pnl = sum(c.get("pnl", 0) for c in _today_cycles) + cycle_pnl
+    max_daily_loss = capital * settings.MAX_DAILY_LOSS_PERCENTAGE
+    if _today_pnl < -max_daily_loss:
+        _trade_log("DAILY_STOP", "—", _today_pnl,
+            f"🚨 Perda diária R$ {_today_pnl:.2f} excedeu limite -R$ {max_daily_loss:.2f}. Ciclo reduzido.")
+        # Reduz o ciclo para zero ao exceder perda diária
+        cycle_pnl = 0.0
+        pnl_5m = pnl_1h = pnl_1d = 0.0
 
     # ── 5. Montar posições unificadas ────────────────────────────────────
     new_positions = {}

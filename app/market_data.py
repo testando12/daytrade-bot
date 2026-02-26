@@ -66,7 +66,23 @@ _YF_RANGE = {
 
 _CRYPTO_SYMBOLS = {
     "BTC","ETH","BNB","SOL","ADA","XRP","DOGE",
-    "DOT","AVAX","MATIC","LINK","LTC","UNI","ATOM","TRX"
+    "DOT","AVAX","MATIC","LINK","LTC","UNI","ATOM","TRX",
+    "SHIB","FIL","NEAR","APT","ARB","OP","INJ","SUI","SEI","TIA",
+    "PEPE","WIF","FLOKI","BONK","RENDER","FET",
+}
+
+# Forex pairs — Yahoo Finance format: EURUSD → EURUSD=X
+_FOREX_SYMBOLS = {
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",
+    "USDCAD", "USDCHF", "NZDUSD", "EURGBP",
+}
+
+# Commodities — Yahoo Finance futures symbols
+_COMMODITY_YF_MAP = {
+    "GOLD":   "GC=F",
+    "SILVER": "SI=F",
+    "OIL":    "CL=F",
+    "NATGAS": "NG=F",
 }
 
 # US stocks set — populated at import time from settings (lazy to avoid circular import)
@@ -76,9 +92,11 @@ _US_STOCK_SYMBOLS: set = set()
 class BrapiMarketData:
     """
     Cliente multi-fonte de dados de mercado.
-    - Crypto:    Binance (tempo real) → fallback Yahoo
-    - B3:        BRAPI (token grátis) → fallback Yahoo
-    - US Stocks: Yahoo Finance
+    - Crypto:      Binance (tempo real) → fallback Yahoo
+    - B3:          BRAPI (token grátis) → fallback Yahoo
+    - US Stocks:   Yahoo Finance
+    - Forex:       Yahoo Finance (EURUSD=X)
+    - Commodities: Yahoo Finance (GC=F, CL=F...)
     """
 
     VALID_INTERVALS = ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "1d"]
@@ -93,8 +111,8 @@ class BrapiMarketData:
         global _US_STOCK_SYMBOLS
         _US_STOCK_SYMBOLS = {s.upper() for s in getattr(settings, "US_STOCKS", [])}
         brapi_src = "BRAPI+token" if self.token else "BRAPI free (4 ativos)"
-        print(f"[market] Crypto=Binance(RT) | B3={brapi_src}>Yahoo | US=Yahoo", flush=True)
-        print(f"[market] US stocks carregadas: {len(_US_STOCK_SYMBOLS)}", flush=True)
+        print(f"[market] Crypto=Binance(RT) | B3={brapi_src}>Yahoo | US=Yahoo | Forex=Yahoo | Commodities=Yahoo", flush=True)
+        print(f"[market] US stocks: {len(_US_STOCK_SYMBOLS)} | Crypto: {len(_CRYPTO_SYMBOLS)} | Forex: {len(_FOREX_SYMBOLS)} | Commodities: {len(_COMMODITY_YF_MAP)}", flush=True)
 
     # ── helpers de símbolo ────────────────────────────────────────────────────
 
@@ -104,23 +122,37 @@ class BrapiMarketData:
     def _is_us_stock(self, asset: str) -> bool:
         return asset.upper() in _US_STOCK_SYMBOLS
 
+    def _is_forex(self, asset: str) -> bool:
+        return asset.upper() in _FOREX_SYMBOLS
+
+    def _is_commodity(self, asset: str) -> bool:
+        return asset.upper() in _COMMODITY_YF_MAP
+
     def _yf_symbol(self, asset: str) -> str:
         s = asset.upper()
-        if s.endswith(".SA") or s.endswith("-USD"):
+        if s.endswith(".SA") or s.endswith("-USD") or s.endswith("=X") or s.endswith("=F"):
             return s
         if self._is_crypto(s):
             return f"{s}-USD"
+        if self._is_forex(s):
+            return f"{s}=X"           # EURUSD → EURUSD=X
+        if s in _COMMODITY_YF_MAP:
+            return _COMMODITY_YF_MAP[s]  # GOLD → GC=F
         if self._is_us_stock(s):
-            return s          # US stocks: AAPL, MSFT — no suffix
-        return f"{s}.SA"      # B3: PETR4 → PETR4.SA
+            return s                  # US stocks: AAPL, MSFT — no suffix
+        return f"{s}.SA"              # B3: PETR4 → PETR4.SA
 
     def _brapi_supported(self, asset: str) -> bool:
         """BRAPI suporta o ativo? (com token: só B3; sem token: só free set)"""
         s = asset.upper()
         if self._is_crypto(s):
-            return False  # BRAPI foca em B3; criptos vão para Yahoo
+            return False  # BRAPI foca em B3; criptos vão para Binance/Yahoo
         if self._is_us_stock(s):
             return False  # US stocks via Yahoo Finance direto
+        if self._is_forex(s):
+            return False  # Forex via Yahoo Finance
+        if self._is_commodity(s):
+            return False  # Commodities via Yahoo Finance
         return bool(self.token) or s in _BRAPI_FREE_SYMBOLS
 
     def _brapi_params(self, extra: dict = None) -> dict:

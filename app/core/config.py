@@ -23,14 +23,27 @@ class Settings:
     INITIAL_CAPITAL: float = float(os.getenv("INITIAL_CAPITAL", "2000"))
     MAX_POSITION_PERCENTAGE: float = 0.30  # máximo 30% por ativo
     MIN_POSITION_AMOUNT: float = 10.0  # alocação mínima por ativo
-    STOP_LOSS_PERCENTAGE: float = 0.05  # 5%
-    TAKE_PROFIT_PERCENTAGE: float = 0.10  # 10%
+    STOP_LOSS_PERCENTAGE: float = 0.02  # 2% — rápido e agressivo
+    TAKE_PROFIT_PERCENTAGE: float = 0.015  # 1.5% — realiza cedo
     REBALANCE_INTERVAL: int = 300  # segundos (5 minutos)
 
-    # Limites operacionais (proteção obrigatória - spec custo.md)
-    MAX_DAILY_LOSS_PERCENTAGE: float = 0.10  # 10% perda máxima diária
-    MAX_TRADES_PER_HOUR: int = 20  # limite de operações por hora
-    MAX_TRADES_PER_DAY: int = 100  # limite diário
+    # Limites operacionais (proteção obrigatória)
+    MAX_DAILY_LOSS_PERCENTAGE: float = 0.05  # 5% perda máxima diária (apertado)
+    MAX_TRADES_PER_HOUR: int = 60  # mais trades com scalping
+    MAX_TRADES_PER_DAY: int = 500  # mais trades com ciclos rápidos
+
+    # Filtro de score mínimo (só opera se momentum > threshold)
+    MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.35"))
+
+    # Kelly Criterion — multiplier conservador
+    KELLY_FRACTION: float = 0.25  # usa 25% do Kelly real (Kelly fracionário)
+
+    # Compounding: reinveste % do lucro diário (0.0 = não, 1.0 = 100%)
+    COMPOUNDING_RATE: float = float(os.getenv("COMPOUNDING_RATE", "1.0"))
+
+    # Ciclos rápidos: intervalo em minutos para crypto fora do horário B3
+    CRYPTO_CYCLE_MINUTES: int = int(os.getenv("CRYPTO_CYCLE_MINUTES", "10"))
+    B3_CYCLE_MINUTES: int = int(os.getenv("B3_CYCLE_MINUTES", "30"))
 
     # Banco de Dados
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/daytrade.db")
@@ -87,10 +100,27 @@ class Settings:
         "RDOR3",
     ]
 
-    # Criptomoedas (Yahoo Finance: BTC-USD, ETH-USD, ...)
+    # Criptomoedas (Binance: BTC, ETH, ...) — 30 assets 24h
     CRYPTO_ASSETS: List[str] = [
+        # Top 10 (originais)
         "BTC", "ETH", "BNB", "SOL", "ADA",
         "XRP", "DOGE", "AVAX", "DOT", "LINK",
+        # Altcoins voláteis (NOVAS)
+        "MATIC", "SHIB", "UNI", "LTC", "ATOM",
+        "FIL", "NEAR", "APT", "ARB", "OP",
+        "INJ", "SUI", "SEI", "TIA", "PEPE",
+        "WIF", "FLOKI", "BONK", "RENDER", "FET",
+    ]
+
+    # Forex (via Yahoo Finance: EURUSD=X, etc.)
+    FOREX_PAIRS: List[str] = [
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",
+        "USDCAD", "USDCHF", "NZDUSD", "EURGBP",
+    ]
+
+    # Commodities (via Yahoo Finance: GC=F gold, SI=F silver, CL=F oil)
+    COMMODITIES: List[str] = [
+        "GOLD", "SILVER", "OIL", "NATGAS",
     ]
 
     # Ações dos EUA — NYSE / NASDAQ (Yahoo Finance sem sufixo)
@@ -117,10 +147,10 @@ class Settings:
         "KO", "PEP", "MCD",
     ]
 
-    # Todos os ativos (B3 + US + Crypto)
+    # Todos os ativos (B3 + US + Crypto + Forex + Commodities)
     @property
     def ALL_ASSETS(self) -> List[str]:
-        return self.ALLOWED_ASSETS + self.US_STOCKS + self.CRYPTO_ASSETS
+        return self.ALLOWED_ASSETS + self.US_STOCKS + self.CRYPTO_ASSETS + self.FOREX_PAIRS + self.COMMODITIES
 
     # Logs
     LOG_LEVEL: str = "INFO"
