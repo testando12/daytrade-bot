@@ -156,15 +156,29 @@ async def _auto_cycle_loop():
         else:
             interval_sec = settings.CRYPTO_CYCLE_MINUTES * 60  # 10min crypto
 
+        # ── Proteção: se hard stopped, só verifica a cada 5min sem operar ──
+        if _protection_state.get("hard_stopped", False):
+            print(f"[scheduler] 🔴 HARD STOP ativo — drawdown máximo atingido. Aguardando /trade/unfreeze", flush=True)
+            await asyncio.sleep(300)  # verifica a cada 5min
+            continue
+
         try:
             result = await _run_trade_cycle_internal(assets=active_assets)
             _scheduler_state["total_auto_cycles"] += 1
             pnl = result.get("cycle_pnl", 0)
             irq = result.get("irq", 0)
+            prot = result.get("protection", {})
+            prot_info = ""
+            if prot.get("paused"):
+                prot_info = " | ⏸️ PAUSADO"
+            elif prot.get("size_multiplier", 1.0) < 1.0:
+                prot_info = f" | ⚠️ {prot['size_multiplier']*100:.0f}% tamanho"
+            if prot.get("consecutive_losses", 0) > 0:
+                prot_info += f" | 🔻 {prot['consecutive_losses']}x perdas"
             print(
                 f"[scheduler] Ciclo #{_scheduler_state['total_auto_cycles']} [{session_label}] "
                 f"| P&L: R$ {pnl:.4f} (5m:{result.get('pnl_5m',0):.2f} 1h:{result.get('pnl_1h',0):.2f} 1d:{result.get('pnl_1d',0):.2f})"
-                f" | IRQ: {irq:.3f}",
+                f" | IRQ: {irq:.3f}{prot_info}",
                 flush=True,
             )
         except Exception as e:
@@ -1593,7 +1607,60 @@ async def reset_trade_state():
     _perf_state["best_day_pnl"] = 0.0
     _perf_state["worst_day_pnl"] = 0.0
     db_state.save_state("performance", _perf_state)
-    return {"success": True, "message": f"Histórico zerado — capital restaurado para R$ {settings.INITIAL_CAPITAL:.2f}"}
+    # Reset proteção inteligente também
+    _protection_state["paused"] = False
+    _protection_state["hard_stopped"] = False
+    _protection_state["consecutive_losses"] = 0
+    _protection_state["size_multiplier"] = 1.0
+    _protection_state["peak_capital"] = settings.INITIAL_CAPITAL
+    _protection_state["pause_reason"] = ""
+    _protection_state["trailing_highs"] = {}
+    return {"success": True, "message": f"Histórico zerado — capital restaurado para R$ {settings.INITIAL_CAPITAL:.2f}. Proteções resetadas."}
+
+
+@app.get("/trade/unfreeze")
+@app.post("/trade/unfreeze")
+async def unfreeze_bot():
+    """Desbloqueia o bot após Hard Stop (drawdown máximo). Reseta proteção mas mantém capital atual."""
+    was_stopped = _protection_state["hard_stopped"]
+    _protection_state["paused"] = False
+    _protection_state["hard_stopped"] = False
+    _protection_state["consecutive_losses"] = 0
+    _protection_state["size_multiplier"] = 1.0
+    _protection_state["peak_capital"] = _trade_state["capital"]  # novo pico = capital atual
+    _protection_state["pause_reason"] = ""
+    _protection_state["trailing_highs"] = {}
+    status = "desbloqueado" if was_stopped else "já estava ativo"
+    _trade_log("UNFREEZE", "—", _trade_state["capital"],
+        f"🔓 Bot {status}. Novo pico: R$ {_trade_state['capital']:.2f}")
+    return {
+        "success": True,
+        "was_frozen": was_stopped,
+        "message": f"Bot {status}. Capital atual: R$ {_trade_state['capital']:.2f}. Proteções resetadas.",
+    }
+
+
+@app.get("/trade/protection")
+async def get_protection_status():
+    """Retorna o estado atual do sistema de proteção inteligente."""
+    capital = _trade_state["capital"]
+    peak = _protection_state["peak_capital"]
+    dd = ((peak - capital) / peak * 100) if peak > 0 else 0
+    return {
+        "paused": _protection_state["paused"],
+        "hard_stopped": _protection_state["hard_stopped"],
+        "pause_reason": _protection_state["pause_reason"],
+        "consecutive_losses": _protection_state["consecutive_losses"],
+        "size_multiplier": _protection_state["size_multiplier"],
+        "peak_capital": round(peak, 2),
+        "current_capital": round(capital, 2),
+        "drawdown_pct": round(dd, 2),
+        "drawdown_limit_pct": settings.MAX_DRAWDOWN_PERCENTAGE * 100,
+        "daily_loss_limit_pct": settings.MAX_DAILY_LOSS_PERCENTAGE * 100,
+        "weekly_loss_limit_pct": settings.MAX_WEEKLY_LOSS_PERCENTAGE * 100,
+        "resume_momentum": settings.RESUME_MOMENTUM_THRESHOLD,
+        "trailing_stop_pct": settings.TRAILING_STOP_PERCENTAGE * 100,
+    }
 
 
 @app.post("/trade/cycle")
@@ -1687,6 +1754,125 @@ def _orderbook_signal(asset: str) -> float:
 
 # Cache para não chamar sentimento/orderbook a cada ciclo (a cada 5 min)
 _signal_cache: dict = {"ts": "", "sentiment": {}, "orderbook": {}, "cross_mom": {}}
+
+# ═══════════════════════════════════════════
+# PROTEÇÃO INTELIGENTE (pausa/retorno automático)
+# ═══════════════════════════════════════════
+_protection_state: dict = {
+    "paused": False,                # bot está em pausa?
+    "pause_reason": "",             # motivo da pausa
+    "consecutive_losses": 0,        # perdas seguidas
+    "size_multiplier": 1.0,         # fator de redução (1.0 = 100%, 0.5 = 50%)
+    "peak_capital": settings.INITIAL_CAPITAL,  # pico do capital (p/ drawdown)
+    "hard_stopped": False,          # drawdown extremo — só reset manual
+    "trailing_highs": {},           # {asset: highest_price} para trailing stop
+}
+
+
+def _update_protection(cycle_pnl: float, capital: float, mom_scores: dict):
+    """
+    Atualiza o estado de proteção após cada ciclo.
+    Lógica:
+    - Ganhou? reseta perdas consecutivas, volta tamanho 100%, despausa
+    - Perdeu? incrementa consecutivas, reduz tamanho progressivamente
+    - Perda diária > 8%? pausa smart (verifica signals antes de voltar)
+    - Perda semanal > 15%? opera com 25% do tamanho
+    - Drawdown > 40% do pico? HARD STOP (só reset manual)
+    """
+    state = _protection_state
+
+    # Atualizar pico de capital
+    if capital > state["peak_capital"]:
+        state["peak_capital"] = capital
+
+    # ── Drawdown absoluto (40% do pico = HARD STOP) ─────────
+    drawdown_pct = (state["peak_capital"] - capital) / state["peak_capital"] if state["peak_capital"] > 0 else 0
+    if drawdown_pct >= settings.MAX_DRAWDOWN_PERCENTAGE:
+        state["hard_stopped"] = True
+        state["paused"] = True
+        state["pause_reason"] = f"HARD STOP: drawdown {drawdown_pct*100:.1f}% do pico R$ {state['peak_capital']:.2f}"
+        _trade_log("HARD_STOP", "—", capital,
+            f"🔴 {state['pause_reason']} — necessário reset manual")
+        return
+
+    # ── Ciclo com ganho → recuperação ─────────────────────────
+    if cycle_pnl > 0:
+        if state["consecutive_losses"] > 0:
+            prev_losses = state["consecutive_losses"]
+            state["consecutive_losses"] = 0
+            state["size_multiplier"] = 1.0
+            _trade_log("RECOVERY", "—", capital,
+                f"✅ Recuperação! {prev_losses} perdas seguidas → volta 100% tamanho")
+        # Se estava pausado, despausa
+        if state["paused"] and not state["hard_stopped"]:
+            state["paused"] = False
+            state["pause_reason"] = ""
+            _trade_log("RESUME", "—", capital,
+                f"▶️ Bot retomou operação normal — ciclo lucrativo detectado")
+        return
+
+    # ── Ciclo com perda → proteção progressiva ────────────────
+    if cycle_pnl < 0:
+        state["consecutive_losses"] += 1
+        n = state["consecutive_losses"]
+
+        # Redução progressiva: 3 perdas → 50%, 5 perdas → 25%, 7+ → 10%
+        if n >= 7:
+            state["size_multiplier"] = 0.10
+        elif n >= 5:
+            state["size_multiplier"] = 0.25
+        elif n >= settings.CONSECUTIVE_LOSS_REDUCE:
+            state["size_multiplier"] = settings.CONSECUTIVE_LOSS_RECOVERY
+        else:
+            state["size_multiplier"] = 1.0
+
+        if n >= settings.CONSECUTIVE_LOSS_REDUCE:
+            _trade_log("LOSS_REDUCE", "—", capital,
+                f"⚠️ {n} perdas seguidas → tamanho reduzido para {state['size_multiplier']*100:.0f}%")
+
+
+def _check_smart_pause(today_pnl: float, week_pnl: float, capital: float, top_scores: dict) -> float:
+    """
+    Verifica se deve pausar ou retomar. Retorna o multiplier de tamanho (0.0 = pausado total).
+    Lógica inteligente: pausa → verifica signals → se bons, volta parcial → se ganha, volta total.
+    """
+    state = _protection_state
+
+    # Hard stop — nada funciona até reset manual
+    if state["hard_stopped"]:
+        return 0.0
+
+    max_daily = capital * settings.MAX_DAILY_LOSS_PERCENTAGE
+    max_weekly = capital * settings.MAX_WEEKLY_LOSS_PERCENTAGE
+
+    # ── Perda diária excessiva → Smart Pause ─────────────────
+    if today_pnl < -max_daily:
+        # Verificar se signals melhoraram (momentum forte pode justificar volta)
+        best_scores = sorted(top_scores.values(), reverse=True)[:5] if top_scores else []
+        avg_top_score = sum(best_scores) / len(best_scores) if best_scores else 0
+
+        if avg_top_score >= settings.RESUME_MOMENTUM_THRESHOLD:
+            # Signals fortes! Volta com tamanho reduzido (50%)
+            if state["paused"]:
+                state["paused"] = False
+                state["pause_reason"] = ""
+                _trade_log("SMART_RESUME", "—", capital,
+                    f"🔄 Momentum forte ({avg_top_score:.2f}) detectado — retomando com 50% do tamanho")
+            return 0.50 * state["size_multiplier"]
+        else:
+            # Signals fracos → mantém pausa
+            state["paused"] = True
+            state["pause_reason"] = f"Perda diária R$ {today_pnl:.2f} > limite R$ {max_daily:.2f} (avg momentum: {avg_top_score:.2f})"
+            return 0.0
+
+    # ── Perda semanal excessiva → Opera com 25% ──────────────
+    if week_pnl < -max_weekly:
+        _trade_log("WEEKLY_REDUCE", "—", capital,
+            f"📉 Perda semanal R$ {week_pnl:.2f} > limite R$ {max_weekly:.2f} → opera com 25%")
+        return 0.25 * state["size_multiplier"]
+
+    # ── Normal → aplica apenas redutor de perdas consecutivas ─
+    return state["size_multiplier"]
 
 
 async def _refresh_signals(klines_5m: dict, top_assets: list):
@@ -1825,7 +2011,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         if mc not in top_5m:
             top_5m.append(mc)
 
-    # ── 4. P&L por bucket (com Stop Loss, Take Profit, Kelly, DCA) ──────
+    # ── 4. P&L por bucket (com Trailing Stop, Stop Loss, Take Profit, Kelly, DCA) ──
     def _calc_pnl_bucket(top_list, klines, bucket_capital, mom_data=None):
         if not top_list:
             return 0.0, {}
@@ -1846,20 +2032,46 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             amt = _kelly_weight(score, per_asset, asset)
             # DCA: aumentar se já estava em posição perdedora
             amt = _dca_adjust(asset, amt, klines)
+            # Aplicar multiplicador de proteção (perdas consecutivas, pausa parcial)
+            amt = round(amt * _protection_state["size_multiplier"], 2)
             # Clamp: não ultrapassa 30% do capital total
             amt = min(amt, capital * settings.MAX_POSITION_PERCENTAGE)
+
+            # ── Trailing Stop: protege lucro parcial ─────────────
+            if prices and len(prices) >= 2:
+                current_price = prices[-1]
+                prev_high = _protection_state["trailing_highs"].get(asset, current_price)
+                # Atualiza pico
+                if current_price > prev_high:
+                    _protection_state["trailing_highs"][asset] = current_price
+                    prev_high = current_price
+                # Se caiu X% do pico → trailing stop ativado
+                if prev_high > 0:
+                    drop_from_peak = (prev_high - current_price) / prev_high
+                    if drop_from_peak >= settings.TRAILING_STOP_PERCENTAGE and ret > 0:
+                        # Tinha lucro mas devolveu — trava no trailing
+                        ret = max(ret * 0.3, 0.001)  # retém 30% do lucro + mínimo
+                        _trade_log("TRAILING_STOP", asset, amt,
+                            f"📊 Trailing Stop {asset}: pico R$ {prev_high:.4f} → atual {current_price:.4f} (-{drop_from_peak*100:.2f}%)")
+            else:
+                # Sem dados suficientes, limpa trailing
+                _protection_state["trailing_highs"].pop(asset, None)
 
             # Stop Loss: se queda > SL%, limita perda
             if ret <= -settings.STOP_LOSS_PERCENTAGE:
                 ret = -settings.STOP_LOSS_PERCENTAGE
                 _trade_log("STOP_LOSS", asset, amt,
                     f"🛑 Stop Loss {asset}: {ret*100:.2f}%")
+                # Limpar trailing high (posição encerrada)
+                _protection_state["trailing_highs"].pop(asset, None)
 
             # Take Profit: se subiu > TP%, trava ganho
             if ret >= settings.TAKE_PROFIT_PERCENTAGE:
                 ret = settings.TAKE_PROFIT_PERCENTAGE
                 _trade_log("TAKE_PROFIT", asset, amt,
                     f"💰 Take Profit {asset}: +{ret*100:.2f}%")
+                # Limpar trailing high (posição encerrada com lucro)
+                _protection_state["trailing_highs"].pop(asset, None)
 
             pnl += amt * ret
             positions[asset] = {"amount": amt, "ret_pct": round(ret * 100, 3)}
@@ -1870,19 +2082,45 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, mom_1d)
     cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d, 4)
 
-    # ── 4b. Daily loss limit check ──────────────────────────────────────
+    # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
     _brt2 = _tz2(_td2(hours=-3))
-    _today2 = datetime.now(_brt2).strftime("%Y-%m-%d")
+    _now_brt2 = datetime.now(_brt2)
+    _today2 = _now_brt2.strftime("%Y-%m-%d")
+
+    # Calcular PnL diário
     _today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(_today2)]
     _today_pnl = sum(c.get("pnl", 0) for c in _today_cycles) + cycle_pnl
-    max_daily_loss = capital * settings.MAX_DAILY_LOSS_PERCENTAGE
-    if _today_pnl < -max_daily_loss:
-        _trade_log("DAILY_STOP", "—", _today_pnl,
-            f"🚨 Perda diária R$ {_today_pnl:.2f} excedeu limite -R$ {max_daily_loss:.2f}. Ciclo reduzido.")
-        # Reduz o ciclo para zero ao exceder perda diária
+
+    # Calcular PnL semanal (últimos 7 dias)
+    _week_ago = (_now_brt2 - _td2(days=7)).strftime("%Y-%m-%d")
+    _week_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "") >= _week_ago]
+    _week_pnl = sum(c.get("pnl", 0) for c in _week_cycles) + cycle_pnl
+
+    # Coletar scores de momentum para decisão de resume
+    _all_mom_scores = {}
+    for m in (mom_5m, mom_1h, mom_1d):
+        for a, d in m.items():
+            s = d.get("momentum_score", 0)
+            if a not in _all_mom_scores or s > _all_mom_scores[a]:
+                _all_mom_scores[a] = s
+
+    # Atualizar estado de proteção (consecutivas, drawdown, etc.)
+    _update_protection(cycle_pnl, capital, _all_mom_scores)
+
+    # Verificar pausa inteligente (pode retornar 0.0 = pausado, ou fator parcial)
+    _pause_mult = _check_smart_pause(_today_pnl, _week_pnl, capital, _all_mom_scores)
+
+    if _pause_mult <= 0.0:
+        # Bot PAUSADO — não conta o PnL desse ciclo
+        _trade_log("PAUSED", "—", capital,
+            f"⏸️ Bot pausado: {_protection_state['pause_reason']} | Aguardando sinais fortes para retomar...")
         cycle_pnl = 0.0
         pnl_5m = pnl_1h = pnl_1d = 0.0
+    elif _pause_mult < 1.0:
+        # Operando com tamanho reduzido (já aplicado via size_multiplier no _calc_pnl_bucket)
+        _trade_log("REDUCED", "—", capital,
+            f"📉 Operando com {_pause_mult*100:.0f}% do tamanho | Diário: R$ {_today_pnl:.2f} | Semanal: R$ {_week_pnl:.2f}")
 
     # ── 5. Montar posições unificadas ────────────────────────────────────
     new_positions = {}
@@ -1951,6 +2189,18 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "capital_5m":  capital_5m,
         "capital_1h":  capital_1h,
         "capital_1d":  capital_1d,
+        # Proteção inteligente
+        "protection": {
+            "paused": _protection_state["paused"],
+            "hard_stopped": _protection_state["hard_stopped"],
+            "consecutive_losses": _protection_state["consecutive_losses"],
+            "size_multiplier": _protection_state["size_multiplier"],
+            "peak_capital": _protection_state["peak_capital"],
+            "pause_reason": _protection_state.get("pause_reason", ""),
+            "daily_pnl": round(_today_pnl, 2),
+            "weekly_pnl": round(_week_pnl, 2),
+            "drawdown_pct": round(((_protection_state["peak_capital"] - capital) / _protection_state["peak_capital"]) * 100, 2) if _protection_state["peak_capital"] > 0 else 0,
+        },
     }
 
 

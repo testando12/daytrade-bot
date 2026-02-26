@@ -25,10 +25,16 @@ class Settings:
     MIN_POSITION_AMOUNT: float = 10.0  # alocação mínima por ativo
     STOP_LOSS_PERCENTAGE: float = 0.02  # 2% — rápido e agressivo
     TAKE_PROFIT_PERCENTAGE: float = 0.015  # 1.5% — realiza cedo
+    TRAILING_STOP_PERCENTAGE: float = 0.012  # 1.2% abaixo do pico — protege lucro sem cortar cedo
     REBALANCE_INTERVAL: int = 300  # segundos (5 minutos)
 
-    # Limites operacionais (proteção obrigatória)
-    MAX_DAILY_LOSS_PERCENTAGE: float = 0.05  # 5% perda máxima diária (apertado)
+    # Limites operacionais (proteção inteligente — agressiva mas com pausa/retorno)
+    MAX_DAILY_LOSS_PERCENTAGE: float = 0.08  # 8% perda diária → PAUSA (não trava, só pausa)
+    MAX_WEEKLY_LOSS_PERCENTAGE: float = 0.15  # 15% semanal → opera 25% do tamanho
+    MAX_DRAWDOWN_PERCENTAGE: float = 0.40  # 40% do capital inicial → HARD STOP (piso absoluto)
+    RESUME_MOMENTUM_THRESHOLD: float = 0.60  # momentum > 0.60 → volta a operar após pausa
+    CONSECUTIVE_LOSS_REDUCE: int = 3  # após 3 perdas seguidas, reduz tamanho 50%
+    CONSECUTIVE_LOSS_RECOVERY: float = 0.50  # fator de redução após perdas consecutivas
     MAX_TRADES_PER_HOUR: int = 60  # mais trades com scalping
     MAX_TRADES_PER_DAY: int = 500  # mais trades com ciclos rápidos
 
