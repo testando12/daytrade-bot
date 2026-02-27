@@ -49,3 +49,7 @@
 [2026-02-26T21:46:54] Dados obtidos: 105 ativos via yahoo.finance
 [2026-02-26T21:46:54] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 18.5759 | Total P&L: R$ 18.5759
 [2026-02-26T21:46:54] Top posições: AVGO=R$5.67 | SNAP=R$5.50 | ORCL=R$3.87 | ATOM=R$3.55
+[2026-02-27T15:05:38] Iniciando ciclo — capital: R$ 150.00
+[2026-02-27T15:05:39] Dados obtidos: 105 ativos via yahoo.finance
+[2026-02-27T15:05:39] Ciclo concluído | IRQ: 0.080 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 24.0919 | Total P&L: R$ 24.0919
+[2026-02-27T15:05:39] Top posições: INTC=R$8.01 | MU=R$6.02 | VIVT3=R$5.94 | WMT=R$4.13
