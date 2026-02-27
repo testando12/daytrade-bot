@@ -65,3 +65,7 @@
 [2026-02-27T20:02:44] Dados obtidos: 105 ativos via yahoo.finance
 [2026-02-27T20:02:44] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 20.7761 | Total P&L: R$ 20.7761
 [2026-02-27T20:02:44] Top posições: INTC=R$7.49 | DOT=R$5.08 | NKE=R$4.61 | AMD=R$3.59
+[2026-02-27T20:58:01] Iniciando ciclo — capital: R$ 150.00
+[2026-02-27T20:58:02] Dados obtidos: 105 ativos via yahoo.finance
+[2026-02-27T20:58:02] Ciclo concluído | IRQ: 0.077 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 14.5115 | Total P&L: R$ 14.5115
+[2026-02-27T20:58:02] Top posições: GOOGL=R$3.82 | META=R$3.77 | PRIO3=R$3.48 | ORCL=R$3.44
