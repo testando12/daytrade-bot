@@ -57,3 +57,7 @@
 [2026-02-27T17:08:01] Dados obtidos: 105 ativos via yahoo.finance
 [2026-02-27T17:08:01] Ciclo concluído | IRQ: 0.084 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 15.4297 | Total P&L: R$ 15.4297
 [2026-02-27T17:08:01] Top posições: AMZN=R$4.85 | QCOM=R$4.09 | LYFT=R$3.83 | XOM=R$2.67
+[2026-02-27T19:23:51] Iniciando ciclo — capital: R$ 150.00
+[2026-02-27T19:24:02] Dados obtidos: 105 ativos via yahoo.finance
+[2026-02-27T19:24:02] Ciclo concluído | IRQ: 0.085 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 21.1530 | Total P&L: R$ 21.1530
+[2026-02-27T19:24:02] Top posições: RDOR3=R$9.30 | GOLD=R$5.42 | VIVT3=R$3.43 | NFLX=R$3.00
