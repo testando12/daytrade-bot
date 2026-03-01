@@ -374,6 +374,12 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     _scheduler_state["running"] = False
+    try:
+        db_state.save_state("trade_state", _trade_state)
+        db_state.save_state("performance", _perf_state)
+        _persist_scheduler_state()
+    except Exception:
+        pass
     _persist_scheduler_state()
     task.cancel()
     keep_alive_task.cancel()
@@ -1968,6 +1974,11 @@ async def run_trade_cycle():
     Registra cada decisão no log de trading.
     """
     result = await _run_trade_cycle_internal()
+    try:
+        db_state.save_state("trade_state", _trade_state)
+        db_state.save_state("performance", _perf_state)
+    except Exception:
+        pass
     return {
         "success": True,
         "data": result,
