@@ -18,7 +18,12 @@ log = logging.getLogger("db_state")
 
 _DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data"
 _STATE_DIR_ENV = os.getenv("STATE_DIR") or os.getenv("RENDER_DISK_PATH")
-_DATA_DIR = Path(_STATE_DIR_ENV) if _STATE_DIR_ENV else _DEFAULT_DATA_DIR
+if _STATE_DIR_ENV:
+    _DATA_DIR = Path(_STATE_DIR_ENV)
+elif Path("/var/data").exists():
+    _DATA_DIR = Path("/var/data/daytrade")
+else:
+    _DATA_DIR = _DEFAULT_DATA_DIR
 
 # Normaliza URL do Render (postgres:// → postgresql://)
 _DB_URL = os.getenv("DATABASE_URL", "")
