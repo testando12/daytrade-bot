@@ -99,6 +99,7 @@ const PAGE_NAMES = {
   events: 'Eventos & Dividendos',
   security: 'Segurança & Compliance',
   settings: 'Configurações',
+  leverage: 'Simulador de Alavanca',
 };
 
 function navigate(page) {
@@ -137,6 +138,7 @@ function loadPage(page) {
     case 'events':    loadEvents(); break;
     case 'security':  loadSecurity(); break;
     case 'settings':  loadSettings(); break;
+    case 'leverage':  loadLeverage(); break;
   }
 }
 
@@ -2268,4 +2270,310 @@ function switchTab(el, paneId) {
   // Lazy load
   if (paneId === 'tab-trades') loadHistoryTrades();
   if (paneId === 'tab-dbstats') loadDbStats();
+}
+
+
+// ═══════════════════════════════════════════════════
+// PAGE: ALAVANCA — Simulador com Custos de Corretora
+// ═══════════════════════════════════════════════════
+
+/**
+ * Custos reais Binance Futures (valores médios 2025-2026):
+ * - Funding Rate: 0.01% a cada 8h = 3x por dia = 0.03%/dia sobre posição total
+ * - Trading Fee (taker): 0.04% por trade (entrada + saída = 0.08% por operação)
+ * - Trading Fee (maker): 0.02% por trade (entrada + saída = 0.04% por operação)
+ * - Assumimos 2 operações/dia (média do bot), mix maker/taker
+ */
+const LEV_COSTS = {
+  fundingRatePerDay: 0.0003,    // 0.03%/dia (3 cobranças de 0.01%)
+  tradingFeePerTrade: 0.0004,   // 0.04% taker (ida)
+  tradingFeeClose: 0.0004,      // 0.04% taker (volta)
+  tradesPerDay: 2,              // média de operações/dia
+};
+
+const LEV_SAFE   = [2, 3, 5];
+const LEV_RISKY  = [8, 10, 50];
+const LEV_ALL    = [1, ...LEV_SAFE, ...LEV_RISKY]; // 1 = sem alavanca
+
+function _levDailyCost(capital, leverage) {
+  /** Retorna custo diário em R$ para uma posição alavancada */
+  const borrowed = capital * (leverage - 1);  // valor emprestado
+  const position = capital * leverage;         // posição total
+  const funding  = position * LEV_COSTS.fundingRatePerDay;
+  const trading  = LEV_COSTS.tradesPerDay * position * (LEV_COSTS.tradingFeePerTrade + LEV_COSTS.tradingFeeClose);
+  return funding + trading;
+}
+
+function _levLiquidationPct(leverage) {
+  /** % de queda que causa liquidação (simplificado) */
+  return leverage <= 1 ? 100 : Math.round(100 / leverage * 100) / 100;
+}
+
+async function loadLeverage() {
+  const capital = 2000;
+
+  // Buscar dados reais do bot
+  let perfData;
+  try {
+    const r = await fetch(`${API}/performance`);
+    perfData = (await r.json()).data;
+  } catch(e) {
+    perfData = null;
+  }
+
+  // Buscar histórico por dia
+  let historyData;
+  try {
+    const r2 = await fetch(`${API}/performance/history`);
+    historyData = await r2.json();
+  } catch(e) {
+    historyData = null;
+  }
+
+  if (!perfData) {
+    document.getElementById('lev-verdict').innerHTML = '<span style="color:var(--danger)">Erro ao conectar com o bot. Verifique se está online.</span>';
+    return;
+  }
+
+  const totalPnl   = perfData.total_pnl || 0;
+  const totalCycles = perfData.total_cycles || 0;
+  const winRate     = perfData.win_rate_pct || 0;
+  const bestCycle   = perfData.best_cycle_pnl || 0;
+  const worstCycle  = perfData.worst_cycle_pnl || 0;
+  const pnlReturnPct = totalPnl / capital * 100;
+
+  // Dias de operação (usar history se possível, senão estimar)
+  let days = [];
+  if (historyData && historyData.success && historyData.days && historyData.days.length > 0) {
+    days = historyData.days;
+  }
+  const numDays = days.length || Math.max(1, Math.round(totalCycles / 20));
+
+  // Cabeçalho
+  document.getElementById('lev-capital').textContent = `R$${capital.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+  document.getElementById('lev-period').textContent  = days.length > 0 ? `${days[0].date} → ${days[days.length-1].date}` : `~${numDays} dias`;
+  document.getElementById('lev-cycles').textContent  = `${totalCycles} (${winRate.toFixed(1)}% win rate)`;
+
+  // ── Simulação por alavanca ──
+  function simulate(lev) {
+    const position = capital * lev;
+    const dailyCost = _levDailyCost(capital, lev);
+    const totalCostDays = dailyCost * numDays;
+
+    // PnL bruto = pnl original * alavancagem
+    const grossPnl = totalPnl * lev;
+    // PnL líquido = bruto - custos
+    const netPnl = grossPnl - totalCostDays;
+    const capitalFinal = capital + netPnl;
+    const returnPct = netPnl / capital * 100;
+
+    // Drawdown máximo: simular ciclo a ciclo
+    let equityCurve = capital;
+    let peakEquity  = capital;
+    let maxDrawdownPct = 0;
+    let liquidations = 0;
+    const liqThreshold = _levLiquidationPct(lev);
+    let dayEquities = [];
+
+    if (days.length > 0) {
+      let runningCapital = capital;
+      for (const day of days) {
+        const dayPnlLev = (day.pnl || 0) * lev;
+        const dayCost   = _levDailyCost(capital, lev);
+        const dayNet    = dayPnlLev - dayCost;
+        runningCapital += dayNet;
+
+        if (runningCapital < 0) runningCapital = 0;
+
+        // Checar liquidação
+        const dropPct = (capital - runningCapital) / capital * 100;
+        if (dropPct >= liqThreshold && lev > 1) {
+          liquidations++;
+          runningCapital = 0; // liquidado
+        }
+
+        if (runningCapital > peakEquity) peakEquity = runningCapital;
+        const dd = peakEquity > 0 ? (runningCapital - peakEquity) / peakEquity * 100 : 0;
+        if (dd < maxDrawdownPct) maxDrawdownPct = dd;
+
+        dayEquities.push({ date: day.date, equity: runningCapital });
+      }
+    } else {
+      // Sem dados diários, usar worst cycle
+      const worstDayImpact = (worstCycle || 0) * lev;
+      const dropFromWorst = Math.abs(worstDayImpact) / capital * 100;
+      maxDrawdownPct = -dropFromWorst;
+      liquidations = dropFromWorst >= liqThreshold && lev > 1 ? 1 : 0;
+    }
+
+    return {
+      leverage: lev,
+      position,
+      grossPnl,
+      dailyCost,
+      totalCost: totalCostDays,
+      netPnl,
+      capitalFinal: Math.max(0, capital + netPnl),
+      returnPct,
+      maxDrawdownPct,
+      liquidations,
+      dayEquities,
+    };
+  }
+
+  const allResults = LEV_ALL.map(l => simulate(l));
+  const safeResults  = allResults.filter(r => LEV_SAFE.includes(r.leverage));
+  const riskyResults = allResults.filter(r => LEV_RISKY.includes(r.leverage));
+  const noLev = allResults.find(r => r.leverage === 1);
+
+  // ── Render Cards Safe ──
+  function renderCard(res, type) {
+    const color = type === 'safe' ? 'var(--success)' : 'var(--danger)';
+    const bgColor = type === 'safe' ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)';
+    const typeLabel = type === 'safe' ? '🛡️ Segura' : '⚠️ Arriscada';
+    const liqColor = res.liquidations > 0 ? 'var(--danger)' : 'var(--success)';
+    const pnlColor = res.netPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+    const pnlSign  = res.netPnl >= 0 ? '+' : '';
+
+    return `
+      <div style="background:${bgColor};border:1px solid var(--border);border-radius:12px;padding:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <span style="font-size:24px;font-weight:800;color:${color}">${res.leverage}x</span>
+          <span style="font-size:11px;color:var(--text-muted)">${typeLabel}</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:12px">
+          <div>
+            <div style="color:var(--text-muted)">Posição Total</div>
+            <div style="font-weight:700">R$${res.position.toLocaleString('pt-BR',{minimumFractionDigits:0})}</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted)">Custo Corretora</div>
+            <div style="font-weight:600;color:var(--warning)">-R$${res.totalCost.toFixed(2)}</div>
+          </div>
+        </div>
+
+        <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:10px">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Lucro Líquido</div>
+          <div style="font-size:22px;font-weight:800;color:${pnlColor}">${pnlSign}R$${res.netPnl.toFixed(2)}</div>
+          <div style="font-size:12px;color:${pnlColor}">${pnlSign}${res.returnPct.toFixed(1)}% sobre capital</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
+          <div>
+            <div style="color:var(--text-muted)">Drawdown Máx</div>
+            <div style="font-weight:600;color:var(--warning)">${res.maxDrawdownPct.toFixed(1)}%</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted)">Liquidações</div>
+            <div style="font-weight:700;color:${liqColor}">${res.liquidations > 0 ? res.liquidations + 'x ❌' : '0 ✅'}</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted)">Capital Final</div>
+            <div style="font-weight:700;color:${res.capitalFinal > capital ? 'var(--success)' : 'var(--danger)'}">R$${res.capitalFinal.toFixed(2)}</div>
+          </div>
+          <div>
+            <div style="color:var(--text-muted)">Custo/dia</div>
+            <div style="font-weight:600;color:var(--text-muted)">R$${res.dailyCost.toFixed(2)}</div>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)">
+          Liquidação se cair <b>${_levLiquidationPct(res.leverage)}%</b> do capital
+        </div>
+      </div>
+    `;
+  }
+
+  document.getElementById('lev-safe-cards').innerHTML  = safeResults.map(r => renderCard(r, 'safe')).join('');
+  document.getElementById('lev-risky-cards').innerHTML  = riskyResults.map(r => renderCard(r, 'risky')).join('');
+
+  // ── Tabela Comparativa ──
+  const fmtBRL = (v) => `R$${v.toFixed(2)}`;
+  const fmtPct = (v) => `${v.toFixed(1)}%`;
+
+  document.getElementById('lev-table-body').innerHTML = allResults.map(res => {
+    const type = res.leverage === 1 ? '—' : (LEV_SAFE.includes(res.leverage) ? '🛡️ Segura' : '⚠️ Arriscada');
+    const pnlColor = res.netPnl >= 0 ? 'var(--success)' : 'var(--danger)';
+    const liqColor = res.liquidations > 0 ? 'var(--danger)' : 'var(--success)';
+    return `<tr>
+      <td>${type}</td>
+      <td style="font-weight:700">${res.leverage}x</td>
+      <td>${fmtBRL(res.position)}</td>
+      <td>${fmtBRL(res.grossPnl)}</td>
+      <td style="color:var(--warning)">-${fmtBRL(res.totalCost)}</td>
+      <td style="color:${pnlColor};font-weight:700">${res.netPnl >= 0 ? '+' : ''}${fmtBRL(res.netPnl)}</td>
+      <td style="color:var(--warning)">${fmtPct(res.maxDrawdownPct)}</td>
+      <td style="color:${liqColor};font-weight:700">${res.liquidations}</td>
+      <td style="font-weight:700;color:${res.capitalFinal >= capital ? 'var(--success)' : 'var(--danger)'}">${fmtBRL(res.capitalFinal)}</td>
+    </tr>`;
+  }).join('');
+
+  // ── Timeline por dia ──
+  if (days.length > 0) {
+    const levs = [1, 2, 3, 5, 10, 50];
+    const timelines = {};
+    levs.forEach(l => {
+      timelines[l] = [];
+      let eq = capital;
+      for (const day of days) {
+        const dayPnlLev = (day.pnl || 0) * l;
+        const dayCost = _levDailyCost(capital, l);
+        eq += dayPnlLev - dayCost;
+        if (eq < 0) eq = 0;
+        // Check liquidation
+        const drop = (capital - eq) / capital * 100;
+        if (drop >= _levLiquidationPct(l) && l > 1) eq = 0;
+        timelines[l].push(eq);
+      }
+    });
+
+    document.getElementById('lev-timeline-body').innerHTML = days.map((day, i) => {
+      const cells = levs.map(l => {
+        const eq = timelines[l][i];
+        const color = eq >= capital ? 'var(--success)' : eq > 0 ? 'var(--warning)' : 'var(--danger)';
+        const display = eq <= 0 ? '<span style="color:var(--danger);font-weight:700">LIQUIDADO</span>' :
+                        `<span style="color:${color}">R$${eq.toFixed(0)}</span>`;
+        return `<td>${display}</td>`;
+      }).join('');
+      return `<tr><td style="font-weight:600">${day.date}</td>${cells}</tr>`;
+    }).join('');
+  } else {
+    document.getElementById('lev-timeline-body').innerHTML =
+      '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Dados diários insuficientes — aguardando mais ciclos do bot</td></tr>';
+  }
+
+  // ── Veredicto ──
+  const best3x = allResults.find(r => r.leverage === 3);
+  const best10x = allResults.find(r => r.leverage === 10);
+  const best50x = allResults.find(r => r.leverage === 50);
+
+  let verdictHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+      <div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:10px;padding:16px">
+        <div style="font-weight:700;color:var(--success);margin-bottom:8px">✅ Recomendação: 2x ou 3x</div>
+        <div style="font-size:13px">
+          Com <b>3x</b>, seu lucro líquido seria <b>R$${best3x.netPnl.toFixed(2)}</b> vs R$${noLev.netPnl.toFixed(2)} sem alavanca.
+          O custo da corretora é R$${best3x.totalCost.toFixed(2)} (${(best3x.totalCost/capital*100).toFixed(1)}% do capital).
+          ${best3x.liquidations === 0 ? 'Nenhuma liquidação no período!' : `Atenção: ${best3x.liquidations} liquidação(ões)!`}
+        </div>
+      </div>
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:16px">
+        <div style="font-weight:700;color:var(--warning);margin-bottom:8px">⚠️ 10x: Risco Moderado-Alto</div>
+        <div style="font-size:13px">
+          Lucro líquido: <b>R$${best10x.netPnl.toFixed(2)}</b>, mas custo de R$${best10x.totalCost.toFixed(2)} e
+          ${best10x.liquidations} liquidação(ões). Só para quem aceita perder tudo em um dia ruim.
+        </div>
+      </div>
+      <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:16px">
+        <div style="font-weight:700;color:var(--danger);margin-bottom:8px">❌ 50x: Quase Certo Perder Tudo</div>
+        <div style="font-size:13px">
+          Posição de R$${best50x.position.toLocaleString('pt-BR')} com custo de R$${best50x.totalCost.toFixed(2)}.
+          ${best50x.liquidations} liquidação(ões). Basta 2% de queda para liquidar.
+          <b>Não recomendado.</b>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('lev-verdict').innerHTML = verdictHtml;
 }

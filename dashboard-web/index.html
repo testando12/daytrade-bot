@@ -42,6 +42,11 @@
           <span class="nav-label">Trade</span>
           <span class="nav-tooltip">Trade</span>
         </a>
+        <a class="nav-item" data-page="leverage" onclick="navigate('leverage')">
+          <span class="nav-icon">⚖️</span>
+          <span class="nav-label">Alavanca</span>
+          <span class="nav-tooltip">Simulador de Alavanca</span>
+        </a>
       </div>
 
       <div class="nav-section">
@@ -895,6 +900,154 @@
                 <tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text-muted)">Nenhum evento registrado</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- =========================================
+           PAGE: ALAVANCA
+           ========================================= -->
+      <div id="page-leverage" class="page">
+        <div class="page-title">⚖️ Simulador de Alavanca</div>
+        <div class="page-subtitle">Simule operações alavancadas com dados reais do bot — custos de corretora incluídos</div>
+
+        <!-- ── COMO FUNCIONA ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <span style="font-size:22px">📖</span>
+            <h3 style="margin:0;font-size:16px">Como Funciona a Alavanca (Empréstimo)</h3>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;font-size:13px;color:var(--text-muted)">
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--accent);margin-bottom:6px">1. O que é?</div>
+              A corretora te "empresta" dinheiro pra operar com mais capital do que você tem. Com 10x, seus R$2.000 viram R$20.000 de poder de compra.
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--accent);margin-bottom:6px">2. Custo do Empréstimo</div>
+              <b>Funding Rate:</b> ~0,01% a cada 8h (Binance Futures) = ~0,03%/dia.<br>
+              <b>Taxa de Trading:</b> 0,02% (maker) / 0,04% (taker) por ordem.<br>
+              <b>Margin Interest:</b> 0,02-0,05%/dia sobre o valor emprestado.
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--warning);margin-bottom:6px">3. Risco de Liquidação</div>
+              Se a perda chegar a <b>100% ÷ alavanca</b>, a corretora fecha sua posição automaticamente.<br>
+              <span style="color:var(--success)">2x → queda de 50% liquida</span><br>
+              <span style="color:var(--warning)">10x → queda de 10% liquida</span><br>
+              <span style="color:var(--danger)">50x → queda de 2% liquida</span>
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--danger);margin-bottom:6px">4. Custo Real no Mês (30 dias)</div>
+              <table style="width:100%;font-size:12px">
+                <tr><td>2x</td><td>~0,9% (~R$18)</td></tr>
+                <tr><td>3x</td><td>~1,8% (~R$36)</td></tr>
+                <tr><td>5x</td><td>~3,6% (~R$72)</td></tr>
+                <tr><td>10x</td><td>~8,1% (~R$162)</td></tr>
+                <tr><td>50x</td><td>~44,1% (~R$882)</td></tr>
+              </table>
+              <div style="margin-top:6px;font-size:11px;color:var(--text-muted)">Funding 3x/dia + 2 trades/dia (maker+taker)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── CAPITAL E CONTROLES ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="font-size:13px;color:var(--text-muted)">Capital Base:</span>
+              <span id="lev-capital" style="font-size:18px;font-weight:700;color:var(--accent)">R$2.000,00</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:13px;color:var(--text-muted)">Período:</span>
+              <span id="lev-period" style="font-weight:600">—</span>
+              <span style="font-size:13px;color:var(--text-muted);margin-left:8px">Ciclos:</span>
+              <span id="lev-cycles" style="font-weight:600">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ALAVANCA SEGURA ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <span style="font-size:22px">🛡️</span>
+            <h3 style="margin:0;font-size:16px">Alavanca Segura</h3>
+            <span class="badge badge-green" style="font-size:11px">Recomendado</span>
+          </div>
+          <div class="grid-3" id="lev-safe-cards"><!-- JS preenche --></div>
+        </div>
+
+        <!-- ── ALAVANCA ARRISCADA ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <span style="font-size:22px">⚠️</span>
+            <h3 style="margin:0;font-size:16px">Alavanca Arriscada</h3>
+            <span class="badge badge-red" style="font-size:11px">Alto Risco</span>
+          </div>
+          <div class="grid-3" id="lev-risky-cards"><!-- JS preenche --></div>
+        </div>
+
+        <!-- ── TABELA COMPARATIVA ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <span style="font-size:22px">📊</span>
+            <h3 style="margin:0;font-size:16px">Comparativo Detalhado</h3>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>TIPO</th>
+                  <th>ALAV.</th>
+                  <th>POSIÇÃO</th>
+                  <th>LUCRO BRUTO</th>
+                  <th>CUSTO CORRETORA</th>
+                  <th>LUCRO LÍQUIDO</th>
+                  <th>DRAWDOWN MÁX</th>
+                  <th>LIQUIDAÇÕES</th>
+                  <th>CAPITAL FINAL</th>
+                </tr>
+              </thead>
+              <tbody id="lev-table-body">
+                <tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando dados reais do bot...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── LINHA DO TEMPO ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <span style="font-size:22px">📈</span>
+            <h3 style="margin:0;font-size:16px">Evolução do Capital (por Dia)</h3>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>DIA</th>
+                  <th>SEM ALAV.</th>
+                  <th>2x</th>
+                  <th>3x</th>
+                  <th>5x</th>
+                  <th>10x</th>
+                  <th>50x</th>
+                </tr>
+              </thead>
+              <tbody id="lev-timeline-body">
+                <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── VEREDICTO ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <span style="font-size:22px">🎯</span>
+            <h3 style="margin:0;font-size:16px">Veredicto</h3>
+          </div>
+          <div id="lev-verdict" style="font-size:14px;color:var(--text-muted);line-height:1.7">
+            Aguardando dados...
           </div>
         </div>
 
