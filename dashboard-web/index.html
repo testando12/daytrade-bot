@@ -912,41 +912,14 @@
         <div class="page-title">⚖️ Simulador de Alavanca</div>
         <div class="page-subtitle">Simule operações alavancadas com dados reais do bot — custos de corretora incluídos</div>
 
-        <!-- ── COMO FUNCIONA ── -->
+        <!-- ── VEREDICTO ── -->
         <div class="card mb-16" style="padding:20px">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-            <span style="font-size:22px">📖</span>
-            <h3 style="margin:0;font-size:16px">Como Funciona a Alavanca (Empréstimo)</h3>
+            <span style="font-size:22px">🎯</span>
+            <h3 style="margin:0;font-size:16px">Veredicto</h3>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;font-size:13px;color:var(--text-muted)">
-            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
-              <div style="font-weight:600;color:var(--accent);margin-bottom:6px">1. O que é?</div>
-              A corretora te "empresta" dinheiro pra operar com mais capital do que você tem. Com 10x, seus R$2.000 viram R$20.000 de poder de compra.
-            </div>
-            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
-              <div style="font-weight:600;color:var(--accent);margin-bottom:6px">2. Custo do Empréstimo</div>
-              <b>Funding Rate:</b> ~0,01% a cada 8h (Binance Futures) = ~0,03%/dia.<br>
-              <b>Taxa de Trading:</b> 0,02% (maker) / 0,04% (taker) por ordem.<br>
-              <b>Margin Interest:</b> 0,02-0,05%/dia sobre o valor emprestado.
-            </div>
-            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
-              <div style="font-weight:600;color:var(--warning);margin-bottom:6px">3. Risco de Liquidação</div>
-              Se a perda chegar a <b>100% ÷ alavanca</b>, a corretora fecha sua posição automaticamente.<br>
-              <span style="color:var(--success)">2x → queda de 50% liquida</span><br>
-              <span style="color:var(--warning)">10x → queda de 10% liquida</span><br>
-              <span style="color:var(--danger)">50x → queda de 2% liquida</span>
-            </div>
-            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
-              <div style="font-weight:600;color:var(--danger);margin-bottom:6px">4. Custo Real no Mês (30 dias)</div>
-              <table style="width:100%;font-size:12px">
-                <tr><td>2x</td><td>~0,9% (~R$18)</td></tr>
-                <tr><td>3x</td><td>~1,8% (~R$36)</td></tr>
-                <tr><td>5x</td><td>~3,6% (~R$72)</td></tr>
-                <tr><td>10x</td><td>~8,1% (~R$162)</td></tr>
-                <tr><td>50x</td><td>~44,1% (~R$882)</td></tr>
-              </table>
-              <div style="margin-top:6px;font-size:11px;color:var(--text-muted)">Funding 3x/dia + 2 trades/dia (maker+taker)</div>
-            </div>
+          <div id="lev-verdict" style="font-size:14px;color:var(--text-muted);line-height:1.7">
+            Aguardando dados...
           </div>
         </div>
 
@@ -1040,14 +1013,41 @@
           </div>
         </div>
 
-        <!-- ── VEREDICTO ── -->
+        <!-- ── COMO FUNCIONA ── -->
         <div class="card mb-16" style="padding:20px">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-            <span style="font-size:22px">🎯</span>
-            <h3 style="margin:0;font-size:16px">Veredicto</h3>
+            <span style="font-size:22px">📖</span>
+            <h3 style="margin:0;font-size:16px">Como Funciona a Alavanca (Empréstimo)</h3>
           </div>
-          <div id="lev-verdict" style="font-size:14px;color:var(--text-muted);line-height:1.7">
-            Aguardando dados...
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;font-size:13px;color:var(--text-muted)">
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--accent);margin-bottom:6px">1. O que é?</div>
+              A corretora te "empresta" dinheiro pra operar com mais capital do que você tem. Com 10x, seus R$2.000 viram R$20.000 de poder de compra.
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--accent);margin-bottom:6px">2. Custo do Empréstimo</div>
+              <b>Funding Rate:</b> ~0,01% a cada 8h (Binance Futures) = ~0,03%/dia.<br>
+              <b>Taxa de Trading:</b> 0,02% (maker) / 0,04% (taker) por ordem.<br>
+              <b>Margin Interest:</b> 0,02-0,05%/dia sobre o valor emprestado.
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--warning);margin-bottom:6px">3. Risco de Liquidação</div>
+              Se a perda chegar a <b>100% ÷ alavanca</b>, a corretora fecha sua posição automaticamente.<br>
+              <span style="color:var(--success)">2x → queda de 50% liquida</span><br>
+              <span style="color:var(--warning)">10x → queda de 10% liquida</span><br>
+              <span style="color:var(--danger)">50x → queda de 2% liquida</span>
+            </div>
+            <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:14px">
+              <div style="font-weight:600;color:var(--danger);margin-bottom:6px">4. Custo Real no Mês (30 dias)</div>
+              <table style="width:100%;font-size:12px">
+                <tr><td>2x</td><td>~0,9% (~R$18)</td></tr>
+                <tr><td>3x</td><td>~1,8% (~R$36)</td></tr>
+                <tr><td>5x</td><td>~3,6% (~R$72)</td></tr>
+                <tr><td>10x</td><td>~8,1% (~R$162)</td></tr>
+                <tr><td>50x</td><td>~44,1% (~R$882)</td></tr>
+              </table>
+              <div style="margin-top:6px;font-size:11px;color:var(--text-muted)">Funding 3x/dia + 2 trades/dia (maker+taker)</div>
+            </div>
           </div>
         </div>
 
