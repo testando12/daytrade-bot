@@ -431,6 +431,7 @@ function renderPreRealPanel(tradeData, perfData) {
 
   const gate = evaluatePreRealGate(perfData || {}, tradeData || {});
   _preRealGate = gate;
+  const totalPnl = Number((perfData && perfData.total_pnl) ?? (tradeData && tradeData.total_pnl) ?? 0);
 
   statusBadge.textContent = gate.passed ? '✅ APROVADO' : '⛔ BLOQUEADO';
   statusBadge.className = `badge ${gate.passed ? 'badge-green' : 'badge-red'}`;
@@ -439,6 +440,7 @@ function renderPreRealPanel(tradeData, perfData) {
   summaryEl.innerHTML = `
     Métricas atuais: <b>${m.cycles}</b> ciclos · <b>${m.winRate.toFixed(1)}%</b> win rate ·
     <b>${m.drawdownAbs.toFixed(2)}%</b> drawdown · <b>${m.sharpe.toFixed(2)}</b> Sharpe ·
+    Lucro total: <b>${fmtMoney(totalPnl)}</b> ·
     Fase: <b>${gate.cfg.phase}</b>.
     ${mode === 'LIVE'
       ? (gate.passed ? '<span style="color:var(--green)">LIVE liberado.</span>' : '<span style="color:var(--red)">LIVE bloqueado até passar no pré-real.</span>')
