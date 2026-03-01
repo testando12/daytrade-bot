@@ -536,40 +536,30 @@ body {
 }
 
 /* =============================================
-   SCROLLBARS (discretas)
+   SCROLLBARS (discretas - global)
    ============================================= */
 
-.sidebar-nav,
-.page-content,
-.table-wrap {
+* {
   scrollbar-width: thin;
-  scrollbar-color: rgba(139, 148, 158, 0.22) transparent;
+  scrollbar-color: rgba(139, 148, 158, 0.14) transparent;
 }
 
-.sidebar-nav::-webkit-scrollbar,
-.page-content::-webkit-scrollbar,
-.table-wrap::-webkit-scrollbar {
+*::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-.sidebar-nav::-webkit-scrollbar-track,
-.page-content::-webkit-scrollbar-track,
-.table-wrap::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.sidebar-nav::-webkit-scrollbar-thumb,
-.page-content::-webkit-scrollbar-thumb,
-.table-wrap::-webkit-scrollbar-thumb {
-  background: rgba(139, 148, 158, 0.18);
+*::-webkit-scrollbar-thumb {
+  background: rgba(139, 148, 158, 0.12);
   border-radius: 999px;
 }
 
-.sidebar-nav:hover::-webkit-scrollbar-thumb,
-.page-content:hover::-webkit-scrollbar-thumb,
-.table-wrap:hover::-webkit-scrollbar-thumb {
-  background: rgba(139, 148, 158, 0.36);
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(139, 148, 158, 0.28);
 }
 
 table {
