@@ -678,7 +678,15 @@
 
           <div class="cards-grid cards-2" style="gap:12px">
             <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:12px">
-              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Limites de Segurança (LIVE)</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+                <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Limites de Segurança (LIVE)</div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span id="pre-real-phase" class="badge badge-gray">Fase: —</span>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-muted)">
+                    <input id="pre-auto-mode" type="checkbox" /> Auto
+                  </label>
+                </div>
+              </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Alavanca Máx</span>
