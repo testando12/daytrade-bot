@@ -2320,6 +2320,20 @@ function _levLiquidationPct(leverage) {
 async function loadLeverage() {
   const capital = 2000;
 
+  const levTableBody = document.getElementById('lev-table-body');
+  const levTimelineBody = document.getElementById('lev-timeline-body');
+  const levVerdict = document.getElementById('lev-verdict');
+
+  if (levTableBody) {
+    levTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:18px;color:var(--text-muted)">⏳ Atualizando comparativo detalhado...</td></tr>';
+  }
+  if (levTimelineBody) {
+    levTimelineBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--text-muted)">⏳ Atualizando timeline...</td></tr>';
+  }
+  if (levVerdict) {
+    levVerdict.innerHTML = '<span style="color:var(--text-muted)">⏳ Atualizando dados do bot...</span>';
+  }
+
   // Buscar dados reais do bot (paralelo + cache simples)
   let perfData = null;
   let historyData = null;
