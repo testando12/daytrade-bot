@@ -2631,6 +2631,13 @@ const LEV_TF_MODEL = {
   '1d': { label: '📅 1d', tradesPerDay: 1, fundingMultiplier: 1.00, borrowMultiplier: 1.00 },
 };
 
+// Perfil da página Alavanca (somente simulação, não altera o Trade real)
+const LEV_PROFIT_ALLOC = {
+  '5m': 0.20,
+  '1h': 0.50,
+  '1d': 0.30,
+};
+
 const LEV_SAFE   = [2, 3, 5];
 const LEV_RISKY  = [8, 10, 50];
 const LEV_ALL    = [1, ...LEV_SAFE, ...LEV_RISKY]; // 1 = sem alavanca
@@ -2735,17 +2742,10 @@ async function loadLeverage() {
   const winRate = perfData.win_rate_pct || 0;
 
   const allocPct = {
-    '5m': Math.max(0, Number(perfData.alloc_5m_pct ?? 10)) / 100,
-    '1h': Math.max(0, Number(perfData.alloc_1h_pct ?? 25)) / 100,
-    '1d': Math.max(0, Number(perfData.alloc_1d_pct ?? 65)) / 100,
+    '5m': LEV_PROFIT_ALLOC['5m'],
+    '1h': LEV_PROFIT_ALLOC['1h'],
+    '1d': LEV_PROFIT_ALLOC['1d'],
   };
-
-  const allocSum = allocPct['5m'] + allocPct['1h'] + allocPct['1d'];
-  if (allocSum > 0) {
-    allocPct['5m'] /= allocSum;
-    allocPct['1h'] /= allocSum;
-    allocPct['1d'] /= allocSum;
-  }
 
   // Dias de operação
   let days = [];
@@ -2759,9 +2759,7 @@ async function loadLeverage() {
   document.getElementById('lev-period').textContent  = days.length > 0 ? `${days[0].date} → ${days[days.length - 1].date}` : `~${simulatedDays} dias`;
   document.getElementById('lev-cycles').textContent  = `${totalCycles} (${winRate.toFixed(1)}% win rate)`;
   if (levModelSource) {
-    levModelSource.textContent = tradeData
-      ? `Fonte: Trade + Performance (${Math.round((allocPct['5m'] || 0) * 100)}/${Math.round((allocPct['1h'] || 0) * 100)}/${Math.round((allocPct['1d'] || 0) * 100)})`
-      : `Fonte: Performance (${Math.round((allocPct['5m'] || 0) * 100)}/${Math.round((allocPct['1h'] || 0) * 100)}/${Math.round((allocPct['1d'] || 0) * 100)})`;
+    levModelSource.textContent = `Fonte: Trade + Performance | Perfil lucro (5m/1h/1d): ${Math.round((allocPct['5m'] || 0) * 100)}/${Math.round((allocPct['1h'] || 0) * 100)}/${Math.round((allocPct['1d'] || 0) * 100)}`;
   }
   _loadPreRealConfig();
   const leverageGate = evaluatePreRealGate(perfData || {}, tradeData || {});
