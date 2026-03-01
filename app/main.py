@@ -384,20 +384,51 @@ async def _keep_alive_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicia o scheduler automático quando o servidor sobe."""
-    # ── Recarregar estado do DB (garante persistência entre deploys/restarts) ──
+    # ── Recarregar estado do DB com retry (garante persistência entre deploys) ──
     global _perf_state, _trade_state, _scheduler_state
+
+    async def _load_with_retry(key: str, default: dict, label: str, retries: int = 4, delay: float = 2.5) -> dict:
+        """Tenta carregar estado do DB até `retries` vezes com `delay` segundos entre tentativas."""
+        for attempt in range(1, retries + 1):
+            try:
+                data = db_state.load_state(key, {})
+                if data:
+                    print(f"[lifespan] '{key}' carregado do DB (tentativa {attempt})", flush=True)
+                    return data
+                if attempt < retries:
+                    print(f"[lifespan] '{key}' vazio — aguardando DB... (tentativa {attempt}/{retries})", flush=True)
+                    await asyncio.sleep(delay)
+            except Exception as e:
+                print(f"[lifespan] '{key}' erro na tentativa {attempt}: {e}", flush=True)
+                if attempt < retries:
+                    await asyncio.sleep(delay)
+        print(f"[lifespan] AVISO: '{key}' não carregado após {retries} tentativas — usando estado em memória.", flush=True)
+        return {}
+
     try:
-        saved_perf = db_state.load_state("performance", {})
-        if saved_perf:
-            _perf_state.update(saved_perf)
+        saved_perf = await _load_with_retry("performance", {}, "performance")
+        if saved_perf and "cycles" in saved_perf:
+            # Preserva ciclos existentes em memória se o DB retornou menos (evita regressão)
+            mem_cycles = len(_perf_state.get("cycles", []))
+            db_cycles  = len(saved_perf.get("cycles", []))
+            if db_cycles >= mem_cycles:
+                _perf_state.update(saved_perf)
+            else:
+                # Mantém ciclos em memória mas atualiza os demais campos do DB
+                saved_perf_no_cycles = {k: v for k, v in saved_perf.items() if k != "cycles"}
+                _perf_state.update(saved_perf_no_cycles)
             print(f"[lifespan] Perf state recarregado: {len(_perf_state.get('cycles', []))} ciclos, "
                   f"win={_perf_state.get('win_count',0)}, loss={_perf_state.get('loss_count',0)}", flush=True)
-        saved_trade = db_state.load_state("trade_state", {})
+        elif saved_perf:
+            _perf_state.update(saved_perf)
+
+        saved_trade = await _load_with_retry("trade_state", {}, "trade_state")
         if saved_trade and saved_trade.get("capital"):
-            # Preservar apenas capital e posições; auto_trading será forçado abaixo
+            # Preservar capital e posições; auto_trading será forçado abaixo
             _trade_state.update(saved_trade)
             print(f"[lifespan] Trade state recarregado: capital=R${_trade_state.get('capital',0):.2f}", flush=True)
-        saved_scheduler = db_state.load_state("scheduler_state", {})
+
+        saved_scheduler = await _load_with_retry("scheduler_state", {}, "scheduler_state")
         if saved_scheduler:
             for key in _SCHEDULER_PERSIST_KEYS:
                 if key in saved_scheduler:
