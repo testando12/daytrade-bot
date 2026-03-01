@@ -1622,22 +1622,15 @@ async function loadTradePage() {
     }
     const gainTodayCyclesEl = document.getElementById('trade-gain-today-cycles');
     if (gainTodayCyclesEl) gainTodayCyclesEl.textContent = `${perf.today_cycles ?? todayCycles.length} ciclo${(perf.today_cycles ?? todayCycles.length) !== 1 ? 's' : ''} hoje`;
-    // Ganho Total + Perda Total
+    // Ganho Total (resultado líquido)
     const gainTotalEl = document.getElementById('trade-gain-total');
     const lossTotalEl = document.getElementById('trade-loss-total');
-    const totalGainVal = perf.total_gain ?? Math.max(0, totalPnl);
-    const totalLossVal = perf.total_loss ?? 0;
     if (gainTotalEl) {
-      gainTotalEl.textContent = fmtMoney(totalGainVal);
-      gainTotalEl.style.color = 'var(--green)';
+      gainTotalEl.textContent = fmtMoney(totalPnl);
+      gainTotalEl.style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
     }
     if (lossTotalEl) {
-      if (totalLossVal > 0) {
-        lossTotalEl.style.display = 'block';
-        lossTotalEl.textContent = '-' + fmtMoney(totalLossVal);
-      } else {
-        lossTotalEl.style.display = 'none';
-      }
+      lossTotalEl.style.display = 'none';
     }
     const gainTotalCyclesEl = document.getElementById('trade-gain-total-cycles');
     if (gainTotalCyclesEl) gainTotalCyclesEl.textContent = `${totalCycles} ciclo${totalCycles !== 1 ? 's' : ''} no total`;
