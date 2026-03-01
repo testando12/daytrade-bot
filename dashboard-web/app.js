@@ -2295,6 +2295,14 @@ const LEV_SAFE   = [2, 3, 5];
 const LEV_RISKY  = [8, 10, 50];
 const LEV_ALL    = [1, ...LEV_SAFE, ...LEV_RISKY]; // 1 = sem alavanca
 
+const LEV_CACHE_MS = {
+  performance: 15000,
+  history: 60000,
+};
+
+let _levPerfCache = { ts: 0, data: null };
+let _levHistoryCache = { ts: 0, data: null };
+
 function _levDailyCost(capital, leverage) {
   /** Retorna custo diário em R$ para uma posição alavancada */
   const borrowed = capital * (leverage - 1);  // valor emprestado
@@ -2312,22 +2320,41 @@ function _levLiquidationPct(leverage) {
 async function loadLeverage() {
   const capital = 2000;
 
-  // Buscar dados reais do bot
-  let perfData;
-  try {
-    const r = await fetch(`${API}/performance`);
-    perfData = (await r.json()).data;
-  } catch(e) {
-    perfData = null;
-  }
+  // Buscar dados reais do bot (paralelo + cache simples)
+  let perfData = null;
+  let historyData = null;
+  const now = Date.now();
 
-  // Buscar histórico por dia
-  let historyData;
-  try {
-    const r2 = await fetch(`${API}/performance/history`);
-    historyData = await r2.json();
-  } catch(e) {
-    historyData = null;
+  const perfCacheValid = _levPerfCache.data && (now - _levPerfCache.ts) < LEV_CACHE_MS.performance;
+  const historyCacheValid = _levHistoryCache.data && (now - _levHistoryCache.ts) < LEV_CACHE_MS.history;
+
+  if (perfCacheValid) perfData = _levPerfCache.data;
+  if (historyCacheValid) historyData = _levHistoryCache.data;
+
+  const pending = [];
+  if (!perfCacheValid) pending.push({ key: 'performance', promise: fetch(`${API}/performance`) });
+  if (!historyCacheValid) pending.push({ key: 'history', promise: fetch(`${API}/performance/history`) });
+
+  if (pending.length > 0) {
+    const settled = await Promise.allSettled(pending.map(p => p.promise));
+
+    for (let i = 0; i < settled.length; i++) {
+      const result = settled[i];
+      const key = pending[i].key;
+      if (result.status !== 'fulfilled') continue;
+
+      try {
+        const json = await result.value.json();
+        if (key === 'performance') {
+          perfData = json?.data || null;
+          if (perfData) _levPerfCache = { ts: Date.now(), data: perfData };
+        } else if (key === 'history') {
+          historyData = json || null;
+          if (historyData) _levHistoryCache = { ts: Date.now(), data: historyData };
+        }
+      } catch (e) {
+      }
+    }
   }
 
   if (!perfData) {
