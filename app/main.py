@@ -70,6 +70,22 @@ _scheduler_state = {
     "session": "",             # sessão atual: "B3+Crypto" ou "Crypto24/7"
 }
 
+_SCHEDULER_PERSIST_KEYS = ("interval_minutes", "only_market_hours", "next_run", "total_auto_cycles", "session")
+
+
+def _persist_scheduler_state():
+    try:
+        payload = {k: _scheduler_state.get(k) for k in _SCHEDULER_PERSIST_KEYS}
+        db_state.save_state("scheduler_state", payload)
+    except Exception:
+        pass
+
+
+def _effective_total_cycles() -> int:
+    perf_cycles = len(_perf_state.get("cycles", [])) if isinstance(_perf_state, dict) else 0
+    sched_cycles = int(_scheduler_state.get("total_auto_cycles", 0) or 0)
+    return max(sched_cycles, perf_cycles)
+
 # Controle de reinvestimento diário
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 
@@ -249,6 +265,7 @@ async def _auto_cycle_loop():
         try:
             result = await _run_trade_cycle_internal(assets=active_assets)
             _scheduler_state["total_auto_cycles"] += 1
+            _persist_scheduler_state()
             pnl = result.get("cycle_pnl", 0)
             irq = result.get("irq", 0)
             turbo = result.get("turbo_active", False)
@@ -310,10 +327,10 @@ async def _keep_alive_loop():
 async def lifespan(app: FastAPI):
     """Inicia o scheduler automático quando o servidor sobe."""
     # ── Recarregar estado do DB (garante persistência entre deploys/restarts) ──
-    global _perf_state, _trade_state
+    global _perf_state, _trade_state, _scheduler_state
     try:
         saved_perf = db_state.load_state("performance", {})
-        if saved_perf and len(saved_perf.get("cycles", [])) > len(_perf_state.get("cycles", [])):
+        if saved_perf:
             _perf_state.update(saved_perf)
             print(f"[lifespan] Perf state recarregado: {len(_perf_state.get('cycles', []))} ciclos, "
                   f"win={_perf_state.get('win_count',0)}, loss={_perf_state.get('loss_count',0)}", flush=True)
@@ -322,6 +339,20 @@ async def lifespan(app: FastAPI):
             # Preservar apenas capital e posições; auto_trading será forçado abaixo
             _trade_state.update(saved_trade)
             print(f"[lifespan] Trade state recarregado: capital=R${_trade_state.get('capital',0):.2f}", flush=True)
+        saved_scheduler = db_state.load_state("scheduler_state", {})
+        if saved_scheduler:
+            for key in _SCHEDULER_PERSIST_KEYS:
+                if key in saved_scheduler:
+                    _scheduler_state[key] = saved_scheduler.get(key)
+            print(
+                f"[lifespan] Scheduler recarregado: ciclos={_scheduler_state.get('total_auto_cycles', 0)} "
+                f"intervalo={_scheduler_state.get('interval_minutes', 30)}min",
+                flush=True,
+            )
+
+        # Evita regressão de contador quando houver histórico de performance maior
+        _scheduler_state["total_auto_cycles"] = _effective_total_cycles()
+        _persist_scheduler_state()
     except Exception as _e:
         print(f"[lifespan] Aviso ao recarregar estado: {_e}", flush=True)
     # ── Inicializar alertas Telegram/Discord (se configurados) ─────────
@@ -343,6 +374,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     _scheduler_state["running"] = False
+    _persist_scheduler_state()
     task.cancel()
     keep_alive_task.cancel()
     try:
@@ -539,7 +571,7 @@ async def health_check():
         "timestamp": datetime.now(_brt).isoformat(),
         "auto_trading": _trade_state.get("auto_trading", False),
         "scheduler_running": _scheduler_state.get("running", False),
-        "total_cycles": _scheduler_state.get("total_auto_cycles", 0),
+        "total_cycles": _effective_total_cycles(),
         "last_cycle": _trade_state.get("last_cycle"),
         "uptime_session": _scheduler_state.get("session", ""),
     }
@@ -2799,7 +2831,7 @@ async def scheduler_status():
             "running":            _scheduler_state["running"],
             "interval_minutes":   _scheduler_state["interval_minutes"],
             "only_market_hours":  _scheduler_state["only_market_hours"],
-            "total_auto_cycles":  _scheduler_state["total_auto_cycles"],
+            "total_auto_cycles":  _effective_total_cycles(),
             "market_open_now":    _is_market_open(),
             "session":            _scheduler_state.get("session", _current_session()[1]),
             "b3_open":            _is_market_open(),
@@ -2832,6 +2864,7 @@ async def scheduler_start(body: dict = None):
 
     task = asyncio.create_task(_auto_cycle_loop())
     _scheduler_state["task"] = task
+    _persist_scheduler_state()
     _trade_log("SCHEDULER", "—", 0,
         f"▶️ Scheduler INICIADO — ciclo a cada {_scheduler_state['interval_minutes']} min")
     return {
@@ -2852,6 +2885,7 @@ async def scheduler_stop():
             await task
         except asyncio.CancelledError:
             pass
+    _persist_scheduler_state()
     _trade_log("SCHEDULER", "—", 0, "⏹️ Scheduler PARADO")
     return {"success": True, "message": "Scheduler parado", "running": False}
 
@@ -2872,6 +2906,7 @@ async def scheduler_config(body: dict):
         _scheduler_state["interval_minutes"] = minutes
     if "only_market_hours" in body:
         _scheduler_state["only_market_hours"] = bool(body["only_market_hours"])
+    _persist_scheduler_state()
     return {
         "success": True,
         "data": {

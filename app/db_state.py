@@ -16,7 +16,9 @@ from pathlib import Path
 
 log = logging.getLogger("db_state")
 
-_DATA_DIR = Path(__file__).parent.parent / "data"
+_DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data"
+_STATE_DIR_ENV = os.getenv("STATE_DIR") or os.getenv("RENDER_DISK_PATH")
+_DATA_DIR = Path(_STATE_DIR_ENV) if _STATE_DIR_ENV else _DEFAULT_DATA_DIR
 
 # Normaliza URL do Render (postgres:// → postgresql://)
 _DB_URL = os.getenv("DATABASE_URL", "")
@@ -111,3 +113,11 @@ def save_state(key: str, obj: dict):
 
 def is_using_postgres() -> bool:
     return _USE_PG
+
+
+def storage_info() -> dict:
+    return {
+        "backend": "postgres" if _USE_PG else "json",
+        "data_dir": str(_DATA_DIR),
+        "database_url_configured": bool(_DB_URL),
+    }
