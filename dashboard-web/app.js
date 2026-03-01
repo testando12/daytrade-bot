@@ -16,6 +16,25 @@ let API_BASE = (window.location.hostname === 'localhost' || window.location.host
 let currentPage = 'dashboard';
 let autoRefreshInterval = null;
 let charts = {};
+let _tradeStatusSnapshot = null;
+let _perfSnapshot = null;
+
+const PRE_REAL_STORAGE_KEY = 'pre_real_gate_v1';
+const PRE_REAL_DEFAULT = {
+  maxLeverageLive: 3,
+  dailyLossStop: 120,
+  maxRiskPct: 5,
+  minCycles: 200,
+  minWinRate: 55,
+  maxDrawdownPct: 12,
+  minSharpe: 1,
+  ackLiquidation: false,
+  ackPaper: false,
+  ackSmall: false,
+};
+
+let _preRealConfig = { ...PRE_REAL_DEFAULT };
+let _preRealGate = { passed: false, reasons: [], checks: [] };
 
 // Auto-refresh por página (segundos)
 const PAGE_REFRESH = {
@@ -227,6 +246,130 @@ function setLastUpdate() {
   pill.style.display = 'flex';
   const now = new Date();
   time.textContent = now.toLocaleTimeString('pt-BR');
+}
+
+function _loadPreRealConfig() {
+  try {
+    const raw = localStorage.getItem(PRE_REAL_STORAGE_KEY);
+    if (!raw) {
+      _preRealConfig = { ...PRE_REAL_DEFAULT };
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    _preRealConfig = { ...PRE_REAL_DEFAULT, ...(parsed || {}) };
+  } catch (e) {
+    _preRealConfig = { ...PRE_REAL_DEFAULT };
+  }
+}
+
+function _persistPreRealConfig() {
+  try {
+    localStorage.setItem(PRE_REAL_STORAGE_KEY, JSON.stringify(_preRealConfig));
+  } catch (e) {
+  }
+}
+
+function evaluatePreRealGate(perf = {}) {
+  const cfg = _preRealConfig || PRE_REAL_DEFAULT;
+  const cycles = Number(perf.total_cycles || 0);
+  const winRate = Number(perf.win_rate_pct || 0);
+  const drawdownAbs = Math.abs(Number(perf.max_drawdown_pct || 0));
+  const sharpe = Number(perf.sharpe_ratio || 0);
+
+  const checks = [
+    { key: 'cycles', label: `Ciclos >= ${cfg.minCycles}`, pass: cycles >= cfg.minCycles },
+    { key: 'winrate', label: `Win Rate >= ${cfg.minWinRate}%`, pass: winRate >= cfg.minWinRate },
+    { key: 'drawdown', label: `Drawdown <= ${cfg.maxDrawdownPct}%`, pass: drawdownAbs <= cfg.maxDrawdownPct },
+    { key: 'sharpe', label: `Sharpe >= ${cfg.minSharpe}`, pass: sharpe >= cfg.minSharpe },
+    { key: 'ack1', label: 'Checklist risco marcado', pass: !!cfg.ackLiquidation },
+    { key: 'ack2', label: 'Checklist paper marcado', pass: !!cfg.ackPaper },
+    { key: 'ack3', label: 'Checklist início reduzido marcado', pass: !!cfg.ackSmall },
+  ];
+
+  const reasons = checks.filter(c => !c.pass).map(c => c.label);
+  const passed = reasons.length === 0;
+
+  return { passed, reasons, checks, metrics: { cycles, winRate, drawdownAbs, sharpe } };
+}
+
+function renderPreRealPanel(tradeData, perfData) {
+  const statusBadge = document.getElementById('pre-real-status-badge');
+  const modeBadge = document.getElementById('pre-real-mode');
+  const summaryEl = document.getElementById('pre-real-summary');
+  const checksEl = document.getElementById('pre-real-checks');
+  if (!statusBadge || !summaryEl || !checksEl || !modeBadge) return;
+
+  _loadPreRealConfig();
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+  const setChecked = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.checked = !!val;
+  };
+
+  setVal('pre-max-lev', _preRealConfig.maxLeverageLive);
+  setVal('pre-daily-stop', _preRealConfig.dailyLossStop);
+  setVal('pre-max-risk-pct', _preRealConfig.maxRiskPct);
+  setVal('pre-min-cycles', _preRealConfig.minCycles);
+  setVal('pre-min-winrate', _preRealConfig.minWinRate);
+  setVal('pre-max-dd', _preRealConfig.maxDrawdownPct);
+  setChecked('pre-ack-liquidation', _preRealConfig.ackLiquidation);
+  setChecked('pre-ack-paper', _preRealConfig.ackPaper);
+  setChecked('pre-ack-small', _preRealConfig.ackSmall);
+
+  const mode = (tradeData?.trading_mode || 'paper').toUpperCase();
+  modeBadge.textContent = mode === 'LIVE' ? '🔴 LIVE' : '📝 PAPER';
+  modeBadge.className = `badge ${mode === 'LIVE' ? 'badge-red' : 'badge-yellow'}`;
+
+  const gate = evaluatePreRealGate(perfData || {});
+  _preRealGate = gate;
+
+  statusBadge.textContent = gate.passed ? '✅ APROVADO' : '⛔ BLOQUEADO';
+  statusBadge.className = `badge ${gate.passed ? 'badge-green' : 'badge-red'}`;
+
+  const m = gate.metrics;
+  summaryEl.innerHTML = `
+    Métricas atuais: <b>${m.cycles}</b> ciclos · <b>${m.winRate.toFixed(1)}%</b> win rate ·
+    <b>${m.drawdownAbs.toFixed(2)}%</b> drawdown · <b>${m.sharpe.toFixed(2)}</b> Sharpe.
+    ${mode === 'LIVE'
+      ? (gate.passed ? '<span style="color:var(--green)">LIVE liberado.</span>' : '<span style="color:var(--red)">LIVE bloqueado até passar no pré-real.</span>')
+      : '<span style="color:var(--text-muted)">Em PAPER, sem bloqueio operacional.</span>'}
+  `;
+
+  checksEl.innerHTML = gate.checks.map(c =>
+    `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+      <span class="badge ${c.pass ? 'badge-green' : 'badge-red'}" style="font-size:10px">${c.pass ? 'OK' : 'FALHA'}</span>
+      <span style="font-size:12px;color:var(--text-secondary)">${c.label}</span>
+    </div>`
+  ).join('');
+}
+
+function savePreRealConfig() {
+  const readNum = (id, fallback) => {
+    const v = Number(document.getElementById(id)?.value);
+    return Number.isFinite(v) ? v : fallback;
+  };
+
+  _preRealConfig = {
+    ..._preRealConfig,
+    maxLeverageLive: Math.max(1, Math.min(10, readNum('pre-max-lev', PRE_REAL_DEFAULT.maxLeverageLive))),
+    dailyLossStop: Math.max(10, readNum('pre-daily-stop', PRE_REAL_DEFAULT.dailyLossStop)),
+    maxRiskPct: Math.max(0.5, Math.min(20, readNum('pre-max-risk-pct', PRE_REAL_DEFAULT.maxRiskPct))),
+    minCycles: Math.max(20, readNum('pre-min-cycles', PRE_REAL_DEFAULT.minCycles)),
+    minWinRate: Math.max(40, Math.min(90, readNum('pre-min-winrate', PRE_REAL_DEFAULT.minWinRate))),
+    maxDrawdownPct: Math.max(2, Math.min(40, readNum('pre-max-dd', PRE_REAL_DEFAULT.maxDrawdownPct))),
+    minSharpe: PRE_REAL_DEFAULT.minSharpe,
+    ackLiquidation: !!document.getElementById('pre-ack-liquidation')?.checked,
+    ackPaper: !!document.getElementById('pre-ack-paper')?.checked,
+    ackSmall: !!document.getElementById('pre-ack-small')?.checked,
+  };
+
+  _persistPreRealConfig();
+  renderPreRealPanel(_tradeStatusSnapshot, _perfSnapshot);
+  toast('Pré-Real salvo e revalidado', 'success');
 }
 
 // =============================================
@@ -1283,9 +1426,11 @@ async function loadTradePage() {
     ]);
     if (!res.success) return;
     const d = res.data;
+    _tradeStatusSnapshot = d;
 
     // Valor Total card — 3 timeframes + hoje + total
     const perf = perfRes?.data || {};
+    _perfSnapshot = perf;
     const today = new Date().toISOString().slice(0, 10);
     const todayCycles = (perf.recent_cycles || []).filter(c => (c.timestamp || '').startsWith(today));
     const todayPnl  = perf.pnl_today   != null ? perf.pnl_today   : todayCycles.reduce((s, c) => s + (c.pnl || 0), 0);
@@ -1550,6 +1695,8 @@ async function loadTradePage() {
     _tradeLogCache = d.log || [];
     renderTradeLog(_tradeLogCache);
 
+    renderPreRealPanel(d, perf);
+
   } catch (e) {
     toast('Erro ao carregar Trade', 'error');
   }
@@ -1655,6 +1802,24 @@ async function toggleTrading() {
   try {
     const badge = document.getElementById('trade-bot-badge');
     const isActive = badge?.textContent?.includes('ATIVO');
+
+    if (!isActive) {
+      const mode = (_tradeStatusSnapshot?.trading_mode || 'paper').toUpperCase();
+      if (mode === 'LIVE') {
+        if (!_perfSnapshot) {
+          await loadTradePage();
+        }
+        const gate = evaluatePreRealGate(_perfSnapshot || {});
+        _preRealGate = gate;
+        if (!gate.passed) {
+          toast('⛔ LIVE bloqueado: Pré-Real não aprovado', 'warning');
+          const panel = document.getElementById('pre-real-card');
+          if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
+    }
+
     const endpoint = isActive ? '/trade/stop' : '/trade/start';
     const res = await api(endpoint, { method: 'POST' });
     if (res.success) {
@@ -2431,8 +2596,10 @@ async function loadLeverage() {
       ? `Fonte: Trade + Performance (${Math.round((allocPct['5m'] || 0) * 100)}/${Math.round((allocPct['1h'] || 0) * 100)}/${Math.round((allocPct['1d'] || 0) * 100)})`
       : `Fonte: Performance (${Math.round((allocPct['5m'] || 0) * 100)}/${Math.round((allocPct['1h'] || 0) * 100)}/${Math.round((allocPct['1d'] || 0) * 100)})`;
   }
+  _loadPreRealConfig();
+  const leverageGate = evaluatePreRealGate(perfData || {});
   if (levModelAssumptions) {
-    levModelAssumptions.textContent = 'Modelo: custos por timeframe (taxa + funding + juros), liquidação e alocação real';
+    levModelAssumptions.textContent = `Modelo: custos por timeframe (taxa + funding + juros), liquidação e alocação real · Pré-Real ${leverageGate.passed ? 'APROVADO' : 'PENDENTE'}`;
   }
 
   const tfTotalPnl = {

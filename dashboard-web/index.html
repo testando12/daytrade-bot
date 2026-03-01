@@ -658,6 +658,73 @@
           </div>
         </div>
 
+        <!-- Pré-Real Gate -->
+        <div class="card mb-16" id="pre-real-card" style="padding:16px 18px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:20px">🧪</span>
+              <span style="font-size:15px;font-weight:700">Modo Pré-Real (Trava de Segurança)</span>
+              <span id="pre-real-status-badge" class="badge badge-gray">Aguardando</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;color:var(--text-muted)">MODO ATUAL:</span>
+              <span id="pre-real-mode" class="badge badge-gray">—</span>
+            </div>
+          </div>
+
+          <div id="pre-real-summary" style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+            Carregando validação pré-real...
+          </div>
+
+          <div class="cards-grid cards-2" style="gap:12px">
+            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:12px">
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Limites de Segurança (LIVE)</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11px;color:var(--text-muted)">Alavanca Máx</span>
+                  <input id="pre-max-lev" type="number" min="1" max="10" step="1" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:13px" />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11px;color:var(--text-muted)">Stop Diário (R$)</span>
+                  <input id="pre-daily-stop" type="number" min="10" step="10" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:13px" />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11px;color:var(--text-muted)">Risco Máx por Trade (%)</span>
+                  <input id="pre-max-risk-pct" type="number" min="0.5" max="20" step="0.5" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:13px" />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11px;color:var(--text-muted)">Ciclos mínimos (paper)</span>
+                  <input id="pre-min-cycles" type="number" min="20" step="10" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:13px" />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11px;color:var(--text-muted)">Win Rate mínimo (%)</span>
+                  <input id="pre-min-winrate" type="number" min="40" max="90" step="0.5" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:13px" />
+                </label>
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11px;color:var(--text-muted)">Drawdown máx (%)</span>
+                  <input id="pre-max-dd" type="number" min="2" max="40" step="0.5" style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:13px" />
+                </label>
+              </div>
+            </div>
+
+            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:12px">
+              <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Checklist Obrigatório</div>
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text-primary)">
+                <label style="display:flex;align-items:center;gap:8px"><input id="pre-ack-liquidation" type="checkbox" /> Entendo risco de liquidação e vou respeitar stop diário</label>
+                <label style="display:flex;align-items:center;gap:8px"><input id="pre-ack-paper" type="checkbox" /> Validei em paper por período suficiente</label>
+                <label style="display:flex;align-items:center;gap:8px"><input id="pre-ack-small" type="checkbox" /> Início em capital reduzido e sem alavanca alta</label>
+              </div>
+
+              <div id="pre-real-checks" style="margin-top:10px;font-size:12px;color:var(--text-muted)">Aguardando métricas...</div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+            <button class="btn btn-secondary" onclick="loadTradePage()">↻ Revalidar</button>
+            <button class="btn btn-primary" onclick="savePreRealConfig()">💾 Salvar Pré-Real</button>
+          </div>
+        </div>
+
         <!-- Row 1: Capital + Bolsão BRL + Bolsão USD -->
         <div class="cards-grid cards-3 mb-16" id="trade-split-banner">
 
