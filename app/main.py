@@ -2842,6 +2842,69 @@ async def get_performance():
     }
 
 
+@app.get("/performance/history")
+async def get_performance_history():
+    """
+    Retorna PnL agrupado por dia (BRT), com todos os ciclos históricos.
+    """
+    from datetime import timezone as _tz, timedelta as _td
+    from collections import defaultdict
+    _brt = _tz(_td(hours=-3))
+
+    cycles = _perf_state.get("cycles", [])
+
+    by_day: dict = defaultdict(lambda: {
+        "pnl": 0.0, "pnl_5m": 0.0, "pnl_1h": 0.0, "pnl_1d": 0.0,
+        "cycles": 0, "wins": 0, "losses": 0,
+        "best_cycle": 0.0, "worst_cycle": 0.0,
+    })
+
+    for c in cycles:
+        ts = c.get("timestamp", "")
+        if not ts:
+            continue
+        day = ts[:10]
+        pnl = c.get("pnl", 0) or 0.0
+        by_day[day]["pnl"]     += pnl
+        by_day[day]["pnl_5m"]  += c.get("pnl_5m", 0) or 0.0
+        by_day[day]["pnl_1h"]  += c.get("pnl_1h", 0) or 0.0
+        by_day[day]["pnl_1d"]  += c.get("pnl_1d", 0) or 0.0
+        by_day[day]["cycles"]  += 1
+        if pnl > 0:
+            by_day[day]["wins"] += 1
+            if pnl > by_day[day]["best_cycle"]:
+                by_day[day]["best_cycle"] = pnl
+        elif pnl < 0:
+            by_day[day]["losses"] += 1
+            if pnl < by_day[day]["worst_cycle"]:
+                by_day[day]["worst_cycle"] = pnl
+
+    daily = []
+    for day in sorted(by_day.keys()):
+        d = by_day[day]
+        daily.append({
+            "date":        day,
+            "pnl":         round(d["pnl"], 2),
+            "pnl_5m":      round(d["pnl_5m"], 4),
+            "pnl_1h":      round(d["pnl_1h"], 4),
+            "pnl_1d":      round(d["pnl_1d"], 4),
+            "cycles":      d["cycles"],
+            "wins":        d["wins"],
+            "losses":      d["losses"],
+            "win_rate_pct": round(d["wins"] / d["cycles"] * 100, 1) if d["cycles"] > 0 else 0,
+            "best_cycle":  round(d["best_cycle"], 2),
+            "worst_cycle": round(d["worst_cycle"], 2),
+        })
+
+    total_pnl = sum(c.get("pnl", 0) or 0 for c in cycles)
+    return {
+        "success": True,
+        "total_cycles": len(cycles),
+        "total_pnl": round(total_pnl, 2),
+        "days": daily,
+    }
+
+
 # ═══════════════════════════════════════════
 # ENDPOINTS: SIMULAÇÃO & TESTES
 # ═══════════════════════════════════════════
