@@ -937,6 +937,10 @@
               <span id="lev-cycles" style="font-weight:600">—</span>
             </div>
           </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:12px;color:var(--text-muted)">
+            <span id="lev-model-source" class="badge badge-gray">Fonte: aguardando...</span>
+            <span id="lev-model-assumptions" class="badge badge-blue">Modelo realista: aguardando...</span>
+          </div>
         </div>
 
         <!-- ── ALAVANCA SEGURA ── -->
@@ -957,6 +961,34 @@
             <span class="badge badge-red" style="font-size:11px">Alto Risco</span>
           </div>
           <div class="grid-3" id="lev-risky-cards"><!-- JS preenche --></div>
+        </div>
+
+        <!-- ── RESULTADO POR TIMEFRAME ── -->
+        <div class="card mb-16" style="padding:20px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+            <span style="font-size:22px">🧠</span>
+            <h3 style="margin:0;font-size:16px">Simulação Realista por Timeframe (5m / 1h / 1d)</h3>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>TIMEFRAME</th>
+                  <th>ALOC.</th>
+                  <th>PNL REAL</th>
+                  <th>1x</th>
+                  <th>2x</th>
+                  <th>3x</th>
+                  <th>5x</th>
+                  <th>10x</th>
+                  <th>MELHOR</th>
+                </tr>
+              </thead>
+              <tbody id="lev-tf-body">
+                <tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text-muted)">Carregando simulação por timeframe...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <!-- ── TABELA COMPARATIVA ── -->
