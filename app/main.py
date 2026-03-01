@@ -78,6 +78,85 @@ _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM
 _TIMEFRAME_ALLOC = {"5m": 0.10, "1h": 0.25, "1d": 0.65}
 _TIMEFRAME_N_ASSETS = {"5m": 3, "1h": 6, "1d": 12}  # top N ativos por bucket
 
+# Estratégia adaptativa (paper-first): alocação dinâmica + filtro de regime + risco por timeframe
+_strategy_state = {
+    "dynamic_alloc_enabled": True,
+    "regime_filter_enabled": True,
+    "tf_risk_tuning_enabled": True,
+    "alloc_dominance_threshold": 0.75,
+    "alloc_lookback_cycles": 60,
+    "min_cycles_for_realloc": 20,
+    "high_irq_threshold": 0.12,
+    "extreme_irq_threshold": 0.18,
+    "tf_sl_mult": {"5m": 0.75, "1h": 1.0, "1d": 1.20},
+    "tf_tp_mult": {"5m": 0.80, "1h": 1.0, "1d": 1.25},
+    "regime": "normal",
+    "last_effective_alloc": dict(_TIMEFRAME_ALLOC),
+    "last_reason": "base",
+    "last_recent_tf_pnl": {"5m": 0.0, "1h": 0.0, "1d": 0.0},
+}
+
+
+def _normalize_alloc(alloc: dict) -> dict:
+    total = sum(max(0.0, float(v)) for v in alloc.values())
+    if total <= 0:
+        return dict(_TIMEFRAME_ALLOC)
+    return {k: max(0.0, float(v)) / total for k, v in alloc.items()}
+
+
+def _effective_timeframe_alloc(irq_score: float) -> tuple:
+    """Retorna alocação efetiva por timeframe com base em dominância + regime."""
+    alloc = dict(_TIMEFRAME_ALLOC)
+    reasons = []
+    regime = "normal"
+
+    recent = _perf_state.get("cycles", [])[-int(_strategy_state.get("alloc_lookback_cycles", 60)):]
+    tf_recent = {
+        "5m": round(sum((c.get("pnl_5m", 0) or 0) for c in recent), 4),
+        "1h": round(sum((c.get("pnl_1h", 0) or 0) for c in recent), 4),
+        "1d": round(sum((c.get("pnl_1d", 0) or 0) for c in recent), 4),
+    }
+
+    if _strategy_state.get("dynamic_alloc_enabled", True) and len(recent) >= int(_strategy_state.get("min_cycles_for_realloc", 20)):
+        total_abs = abs(tf_recent["5m"]) + abs(tf_recent["1h"]) + abs(tf_recent["1d"])
+        dom_1d = (abs(tf_recent["1d"]) / total_abs) if total_abs > 0 else 0.0
+        if tf_recent["1d"] > 0 and dom_1d >= float(_strategy_state.get("alloc_dominance_threshold", 0.75)):
+            alloc = {"5m": 0.05, "1h": 0.20, "1d": 0.75}
+            reasons.append(f"1d dominante ({dom_1d*100:.1f}%)")
+        elif (tf_recent["5m"] + tf_recent["1h"]) > max(tf_recent["1d"], 0):
+            alloc = {"5m": 0.15, "1h": 0.35, "1d": 0.50}
+            reasons.append("curto prazo dominante")
+
+    if _strategy_state.get("regime_filter_enabled", True):
+        high_irq = float(_strategy_state.get("high_irq_threshold", 0.12))
+        extreme_irq = float(_strategy_state.get("extreme_irq_threshold", 0.18))
+        loss_streak = int(_protection_state.get("consecutive_losses", 0))
+
+        if irq_score >= extreme_irq or loss_streak >= 4:
+            regime = "extreme"
+            alloc = {
+                "5m": alloc["5m"] * 0.10,
+                "1h": alloc["1h"] * 0.50,
+                "1d": alloc["1d"] * 1.35,
+            }
+            reasons.append("regime extremo: reduz curto prazo")
+        elif irq_score >= high_irq or loss_streak >= 2:
+            regime = "cautious"
+            alloc = {
+                "5m": alloc["5m"] * 0.35,
+                "1h": alloc["1h"] * 0.80,
+                "1d": alloc["1d"] * 1.15,
+            }
+            reasons.append("regime cauteloso")
+
+    alloc = _normalize_alloc(alloc)
+    _strategy_state["regime"] = regime
+    _strategy_state["last_effective_alloc"] = alloc
+    _strategy_state["last_reason"] = " | ".join(reasons) if reasons else "base"
+    _strategy_state["last_recent_tf_pnl"] = tf_recent
+
+    return alloc, regime, _strategy_state["last_reason"], tf_recent
+
 def _is_market_open() -> bool:
     """Verifica se o mercado B3 está aberto (seg-sex 10:00-17:00 BRT = UTC-3)."""
     from datetime import timezone, timedelta
@@ -1668,6 +1747,24 @@ async def trade_status():
             # ── Broker info ────────────────────────────────────────────
             "trading_mode":     getattr(settings, "TRADING_MODE", "paper"),
             "broker_status":    market_data_service.broker_status() if market_data_service else {},
+            "strategy": {
+                "regime": _strategy_state.get("regime", "normal"),
+                "dynamic_alloc_enabled": _strategy_state.get("dynamic_alloc_enabled", True),
+                "regime_filter_enabled": _strategy_state.get("regime_filter_enabled", True),
+                "tf_risk_tuning_enabled": _strategy_state.get("tf_risk_tuning_enabled", True),
+                "last_reason": _strategy_state.get("last_reason", "base"),
+                "alloc_base_pct": {
+                    "5m": round(_TIMEFRAME_ALLOC["5m"] * 100, 1),
+                    "1h": round(_TIMEFRAME_ALLOC["1h"] * 100, 1),
+                    "1d": round(_TIMEFRAME_ALLOC["1d"] * 100, 1),
+                },
+                "alloc_effective_pct": {
+                    "5m": round(_strategy_state.get("last_effective_alloc", _TIMEFRAME_ALLOC).get("5m", 0) * 100, 1),
+                    "1h": round(_strategy_state.get("last_effective_alloc", _TIMEFRAME_ALLOC).get("1h", 0) * 100, 1),
+                    "1d": round(_strategy_state.get("last_effective_alloc", _TIMEFRAME_ALLOC).get("1d", 0) * 100, 1),
+                },
+                "recent_tf_pnl": _strategy_state.get("last_recent_tf_pnl", {"5m": 0.0, "1h": 0.0, "1d": 0.0}),
+            },
         },
     }
 
@@ -2279,10 +2376,6 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                                key=lambda x: x[1].get("momentum_score", 0), reverse=True)
         return [a for a, _ in sorted_assets[:n]], mom
 
-    capital_5m = round(capital * _TIMEFRAME_ALLOC["5m"], 2)
-    capital_1h = round(capital * _TIMEFRAME_ALLOC["1h"], 2)
-    capital_1d = round(capital * _TIMEFRAME_ALLOC["1d"], 2)
-
     top_5m, mom_5m = _top_assets(klines_by_tf["5m"], _TIMEFRAME_N_ASSETS["5m"])
     top_1h, mom_1h = _top_assets(klines_by_tf["1h"], _TIMEFRAME_N_ASSETS["1h"])
     top_1d, mom_1d = _top_assets(klines_by_tf["1d"], _TIMEFRAME_N_ASSETS["1d"])
@@ -2300,6 +2393,11 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     risk_analysis = RiskAnalyzer.calculate_irq(ref_data.get("prices", []), ref_data.get("volumes", []))
     irq_score  = risk_analysis["irq_score"]
     protection = RiskAnalyzer.get_protection_level(irq_score)
+
+    effective_alloc, strategy_regime, strategy_reason, strategy_tf_recent = _effective_timeframe_alloc(irq_score)
+    capital_5m = round(capital * effective_alloc["5m"], 2)
+    capital_1h = round(capital * effective_alloc["1h"], 2)
+    capital_1d = round(capital * effective_alloc["1d"], 2)
 
     # ── 3b. Kelly Criterion + sinais avançados ─────────────────────────
     def _kelly_weight(score: float, base_amount: float, asset: str = "") -> float:
@@ -2359,7 +2457,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             top_5m.append(mc)
 
     # ── 4. P&L por bucket (ATR SL/TP + Volume + Partial TP + Momentum Accel + Kelly + DCA) ──
-    def _calc_pnl_bucket(top_list, klines, bucket_capital, mom_data=None):
+    def _calc_pnl_bucket(top_list, klines, bucket_capital, tf_name: str, mom_data=None):
         if not top_list:
             return 0.0, {}
         per_asset = round(bucket_capital / len(top_list), 2)
@@ -2374,6 +2472,11 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
             # ── ATR Adaptive SL/TP — calcula limites dinâmicos por ativo ──
             atr_sl, atr_tp = _atr_adaptive_sl_tp(prices, asset)
+            if _strategy_state.get("tf_risk_tuning_enabled", True):
+                sl_mult = _strategy_state.get("tf_sl_mult", {}).get(tf_name, 1.0)
+                tp_mult = _strategy_state.get("tf_tp_mult", {}).get(tf_name, 1.0)
+                atr_sl = max(0.002, min(atr_sl * sl_mult, 0.08))
+                atr_tp = max(0.003, min(atr_tp * tp_mult, 0.12))
 
             # Kelly + sinais avançados: ajustar tamanho pelo score + sentiment/orderbook
             score = 0.5
@@ -2445,9 +2548,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                                 "vol_mult": round(vol_mult, 2), "mom_accel": round(mom_accel_mult, 2)}
         return round(pnl, 4), positions
 
-    pnl_5m, pos_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m, mom_5m)
-    pnl_1h, pos_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h, mom_1h)
-    pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, mom_1d)
+    pnl_5m, pos_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m, "5m", mom_5m)
+    pnl_1h, pos_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h, "1h", mom_1h)
+    pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, "1d", mom_1d)
 
     # ── 4a. Grid Trading — lucra com mercado lateral ─────────────────────
     grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
@@ -2647,6 +2750,24 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             "volume_confirm": settings.VOLUME_CONFIRM_ENABLED,
             "partial_tp": settings.PARTIAL_TP_ENABLED,
             "momentum_accel": settings.MOMENTUM_ACCEL_ENABLED,
+            "adaptive_alloc": _strategy_state.get("dynamic_alloc_enabled", False),
+            "regime_filter": _strategy_state.get("regime_filter_enabled", False),
+            "tf_risk_tuning": _strategy_state.get("tf_risk_tuning_enabled", False),
+        },
+        "strategy": {
+            "regime": strategy_regime,
+            "reason": strategy_reason,
+            "alloc_base_pct": {
+                "5m": round(_TIMEFRAME_ALLOC["5m"] * 100, 1),
+                "1h": round(_TIMEFRAME_ALLOC["1h"] * 100, 1),
+                "1d": round(_TIMEFRAME_ALLOC["1d"] * 100, 1),
+            },
+            "alloc_effective_pct": {
+                "5m": round(effective_alloc["5m"] * 100, 1),
+                "1h": round(effective_alloc["1h"] * 100, 1),
+                "1d": round(effective_alloc["1d"] * 100, 1),
+            },
+            "recent_tf_pnl": strategy_tf_recent,
         },
         # Proteção inteligente
         "protection": {
