@@ -2346,8 +2346,8 @@ async function loadLeverage() {
   if (historyCacheValid) historyData = _levHistoryCache.data;
 
   const pending = [];
-  if (!perfCacheValid) pending.push({ key: 'performance', promise: fetch(`${API}/performance`) });
-  if (!historyCacheValid) pending.push({ key: 'history', promise: fetch(`${API}/performance/history`) });
+  if (!perfCacheValid) pending.push({ key: 'performance', promise: fetch(`${API_BASE}/performance`) });
+  if (!historyCacheValid) pending.push({ key: 'history', promise: fetch(`${API_BASE}/performance/history`) });
 
   if (pending.length > 0) {
     const settled = await Promise.allSettled(pending.map(p => p.promise));
