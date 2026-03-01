@@ -230,6 +230,21 @@ async def _keep_alive_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicia o scheduler automático quando o servidor sobe."""
+    # ── Recarregar estado do DB (garante persistência entre deploys/restarts) ──
+    global _perf_state, _trade_state
+    try:
+        saved_perf = db_state.load_state("performance", {})
+        if saved_perf and len(saved_perf.get("cycles", [])) > len(_perf_state.get("cycles", [])):
+            _perf_state.update(saved_perf)
+            print(f"[lifespan] Perf state recarregado: {len(_perf_state.get('cycles', []))} ciclos, "
+                  f"win={_perf_state.get('win_count',0)}, loss={_perf_state.get('loss_count',0)}", flush=True)
+        saved_trade = db_state.load_state("trade_state", {})
+        if saved_trade and saved_trade.get("capital"):
+            # Preservar apenas capital e posições; auto_trading será forçado abaixo
+            _trade_state.update(saved_trade)
+            print(f"[lifespan] Trade state recarregado: capital=R${_trade_state.get('capital',0):.2f}", flush=True)
+    except Exception as _e:
+        print(f"[lifespan] Aviso ao recarregar estado: {_e}", flush=True)
     # ── Inicializar alertas Telegram/Discord (se configurados) ─────────
     if ALERTS_AVAILABLE and alert_manager:
         if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:

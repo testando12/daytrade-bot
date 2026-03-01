@@ -1,67 +1,42 @@
 import httpx
-from collections import defaultdict
 
 url = "https://daytrade-bot.onrender.com"
-r = httpx.get(f"{url}/performance", timeout=30).json()
-data = r.get("data", {})
+r = httpx.get(f"{url}/performance/history", timeout=30).json()
 
-cycles = data.get("recent_cycles", [])
-total_cycles = data.get("total_cycles", 0)
-total_pnl = data.get("total_pnl", 0)
-win_rate = data.get("win_rate_pct", 0)
-best_cycle = data.get("best_cycle_pnl", 0)
-worst_cycle = data.get("worst_cycle_pnl", 0)
-
-print("=" * 55)
-print("  RESUMO GERAL DO BOT")
-print("=" * 55)
-print(f"  Total ciclos:       {total_cycles}")
-print(f"  Win rate:           {win_rate:.1f}%")
-print(f"  Melhor ciclo:       R${best_cycle:.2f}")
-print(f"  Pior ciclo:         R${worst_cycle:.2f}")
-print(f"  PnL TOTAL:          R${total_pnl:.2f}")
-print("=" * 55)
-print()
-
-# Agrupar ciclos recentes por dia
-by_day = defaultdict(lambda: {"pnl": 0, "pnl_5m": 0, "pnl_1h": 0, "pnl_1d": 0,
-                               "cycles": 0, "wins": 0, "losses": 0, "best": 0, "worst": 0})
-
-for c in cycles:
-    ts = c.get("timestamp", "")
-    if not ts:
-        continue
-    day = ts[:10]  # YYYY-MM-DD
-    pnl = c.get("pnl", 0) or 0
-    by_day[day]["pnl"]    += pnl
-    by_day[day]["pnl_5m"] += c.get("pnl_5m", 0) or 0
-    by_day[day]["pnl_1h"] += c.get("pnl_1h", 0) or 0
-    by_day[day]["pnl_1d"] += c.get("pnl_1d", 0) or 0
-    by_day[day]["cycles"] += 1
-    if pnl > 0:
-        by_day[day]["wins"] += 1
-        if pnl > by_day[day]["best"]:
-            by_day[day]["best"] = pnl
-    elif pnl < 0:
-        by_day[day]["losses"] += 1
-        if pnl < by_day[day]["worst"]:
-            by_day[day]["worst"] = pnl
+if not r.get("success"):
+    # Fallback para /performance se o novo endpoint ainda nao deployou
+    r2 = httpx.get(f"{url}/performance", timeout=30).json()
+    data = r2.get("data", {})
+    print("Endpoint novo ainda carregando. Dados parciais via /performance:")
+    print(f"Total acumulado: R${data.get('total_pnl', 0):.2f} em {data.get('total_cycles', 0)} ciclos")
+    print(f"Win rate: {data.get('win_rate_pct', 0):.1f}%")
+    print(f"Hoje: R${data.get('pnl_today', 0):.2f}")
+    print(f"Melhor ciclo: R${data.get('best_cycle_pnl', 0):.2f}")
+    print(f"Pior ciclo: R${data.get('worst_cycle_pnl', 0):.2f}")
+    import sys; sys.exit(0)
 
 cambio = 5.80
+total_pnl = r["total_pnl"]
+total_cycles = r["total_cycles"]
+days = r.get("days", [])
 
-print("=== PnL por DIA (ultimos ciclos registrados) ===")
+print("=" * 60)
+print("  LUCRO POR DIA - HISTORICO COMPLETO")
+print("=" * 60)
+print(f"  TOTAL ACUMULADO: R${total_pnl:.2f}  (~US${total_pnl/cambio:.2f})  |  {total_cycles} ciclos")
+print("=" * 60)
 print()
-for day in sorted(by_day.keys()):
-    d = by_day[day]
-    sinal = "LUCRO" if d["pnl"] >= 0 else "PERDA"
-    usd = d["pnl"] / cambio
-    print(f"  {day}  [{sinal}]")
-    print(f"    Total:   R${d['pnl']:+.2f}  (~US${usd:+.2f})")
-    print(f"    5m:      R${d['pnl_5m']:+.2f}  |  1h: R${d['pnl_1h']:+.2f}  |  1d: R${d['pnl_1d']:+.2f}")
-    print(f"    Ciclos:  {d['cycles']}  |  {d['wins']}W / {d['losses']}L  |  melhor: R${d['best']:.2f}  pior: R${d['worst']:.2f}")
-    print()
 
-if len(cycles) < total_cycles:
-    diff = total_cycles - len(cycles)
-    print(f"  (Aviso: API retornou {len(cycles)} ciclos recentes de {total_cycles} totais.)")
-    print(f"  ({diff} ciclos anteriores nao aparecem no detalhe por dia, mas estao no total R${total_pnl:.2f})")
+if not days:
+    print("  Sem dados historicos ainda.")
+else:
+    for d in days:
+        sinal = "LUCRO" if d["pnl"] >= 0 else "PERDA"
+        usd = d["pnl"] / cambio
+        wr = d["win_rate_pct"]
+        print(f"  {d['date']}  [{sinal}]  R${d['pnl']:+.2f}  (~US${usd:+.2f})")
+        print(f"    Ciclos: {d['cycles']}  |  {d['wins']}W/{d['losses']}L  ({wr:.0f}% win rate)")
+        print(f"    5m: R${d['pnl_5m']:.2f}  |  1h: R${d['pnl_1h']:.2f}  |  1d: R${d['pnl_1d']:.2f}")
+        print(f"    Melhor ciclo: R${d['best_cycle']:.2f}  |  Pior ciclo: R${d['worst_cycle']:.2f}")
+        print()
+
