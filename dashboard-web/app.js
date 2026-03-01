@@ -591,14 +591,15 @@ async function loadDashboard() {
     setApiStatus(true);
 
     // 1) Fast data first (trade + risk load in ~2-5s)
-    const [tradeStatus, riskStatus, perfData] = await Promise.all([
+    const [tradeStatus, riskStatus, perfData, perfHistory] = await Promise.all([
       api('/trade/status').catch(() => null),
       api('/risk/status').catch(() => null),
       api('/performance').catch(() => null),
+      api('/performance/history').catch(() => null),
     ]);
 
     // Render partial KPIs immediately from fast endpoints
-    renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData);
+    renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHistory);
 
     // Prices separately
     loadMarketPrices();
@@ -619,7 +620,7 @@ async function loadDashboard() {
   }
 }
 
-function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData) {
+function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHistory) {
   // Render KPIs from fast endpoints immediately
   const td = tradeStatus?.data || {};
   const perf = perfData?.data || {};
@@ -640,6 +641,29 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData) {
     tradeOkEl.textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
     tradeOkEl.className = `kpi-change ${canTrade ? 'up' : 'down'}`;
   }
+
+  // Meta R$100 também na aba Dashboard
+  const targetDaily = 100;
+  const todayNet = Number(perf.pnl_today || 0);
+  const gap = targetDaily - todayNet;
+  const days = Array.isArray(perfHistory?.days) ? perfHistory.days : [];
+  const last7 = [...days].slice(-7);
+  const avg7 = last7.length ? last7.reduce((s, d) => s + Number(d.pnl || 0), 0) / last7.length : 0;
+  const costsToday = Number(perf.costs_today_total || 0);
+
+  const setGoal = (id, val, positiveIsGood = true) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = fmtMoney(val);
+    const ok = positiveIsGood ? val >= 0 : val <= 0;
+    el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  };
+
+  setGoal('dash-goal-today', todayNet, true);
+  setGoal('dash-goal-gap', gap, false);
+  setGoal('dash-goal-avg7', avg7, true);
+  setGoal('dash-costs-today', -costsToday, false);
+
   renderCapitalSplitBanners(td);
 }
 
