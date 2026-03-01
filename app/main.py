@@ -1712,6 +1712,7 @@ _DEFAULT_TRADE_STATE: dict = {
     "capital": settings.INITIAL_CAPITAL,
     "auto_trading": True,
     "positions": {},       # asset -> {"amount": float, "action": str, "pct": float}
+    "last_no_position_reason": "",
     "log": [],             # lista de eventos {timestamp, type, asset, amount, note}
     "total_pnl": 0.0,
     "last_cycle": None,
@@ -1856,6 +1857,7 @@ async def trade_status():
             "auto_trading":     _trade_state["auto_trading"],
             "total_pnl":        _trade_state["total_pnl"],
             "positions":        _trade_state["positions"],
+            "last_no_position_reason": _trade_state.get("last_no_position_reason", ""),
             "log":              _trade_state["log"],
             "last_cycle":       _trade_state["last_cycle"],
             "b3_open":          _is_market_open(),
@@ -2499,6 +2501,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     # ── 2. Top N ativos por momentum (com filtro de score mínimo) ────────
     min_score = settings.MIN_MOMENTUM_SCORE
+    no_position_reason = ""
 
     def _top_assets(klines, n):
         mom = MomentumAnalyzer.calculate_multiple_assets(klines)
@@ -2512,6 +2515,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     top_5m, mom_5m = _top_assets(klines_by_tf["5m"], _TIMEFRAME_N_ASSETS["5m"])
     top_1h, mom_1h = _top_assets(klines_by_tf["1h"], _TIMEFRAME_N_ASSETS["1h"])
     top_1d, mom_1d = _top_assets(klines_by_tf["1d"], _TIMEFRAME_N_ASSETS["1d"])
+
+    if not top_5m and not top_1h and not top_1d:
+        no_position_reason = f"Sem sinal válido: nenhum ativo acima do momentum mínimo ({min_score:.2f})."
 
     # ── 2b. Atualizar sinais avançados (sentimento, orderbook, cross-momentum)
     try:
@@ -2759,6 +2765,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     if _pause_mult <= 0.0:
         # Bot PAUSADO — não conta o PnL desse ciclo
+        no_position_reason = f"Pausado por proteção: {_protection_state.get('pause_reason', 'risco elevado')}"
         _trade_log("PAUSED", "—", capital,
             f"⏸️ Bot pausado: {_protection_state['pause_reason']} | Aguardando sinais fortes para retomar...")
         cycle_pnl = 0.0
@@ -2790,6 +2797,10 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 "pct": round(info["amount"]/capital*100, 1), "classification": "LONG", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
+    if len(new_positions) == 0:
+        _trade_state["last_no_position_reason"] = no_position_reason or "Sem oportunidade com risco/retorno aceitável neste ciclo."
+    else:
+        _trade_state["last_no_position_reason"] = ""
     _trade_state["last_cycle"] = _brt_now().isoformat()
     _trade_state["total_pnl"] = round(_trade_state.get("total_pnl", 0.0) + cycle_pnl, 4)
 

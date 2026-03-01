@@ -1755,6 +1755,7 @@ async function loadTradePage() {
     // Positions mini + table + donut
     const positions = d.positions || {};
     const posEntries = Object.entries(positions);
+    const noPosReason = d.last_no_position_reason || 'Sem oportunidade válida no ciclo atual.';
 
     const countBadge = document.getElementById('trade-positions-count');
     if (countBadge) countBadge.textContent = `${posEntries.length} ativos`;
@@ -1763,7 +1764,7 @@ async function loadTradePage() {
     const miniEl = document.getElementById('trade-positions-mini');
     if (miniEl) {
       if (!posEntries.length) {
-        miniEl.innerHTML = '<div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posições</p></div>';
+        miniEl.innerHTML = `<div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posições</p><p style="font-size:11px;color:var(--text-muted);margin-top:6px">${noPosReason}</p></div>`;
       } else {
         miniEl.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
@@ -1781,7 +1782,7 @@ async function loadTradePage() {
     const tbody = document.getElementById('trade-positions-tbody');
     if (tbody) {
       if (!posEntries.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Execute um ciclo para ver as posições</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Sem posições — ${noPosReason}</td></tr>`;
       } else {
         tbody.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
