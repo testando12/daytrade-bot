@@ -1529,9 +1529,10 @@ let _tradeLogCache = [];  // full log for client-side filtering
 
 async function loadTradePage() {
   try {
-    const [res, perfRes] = await Promise.all([
+    const [res, perfRes, perfHistRes] = await Promise.all([
       api('/trade/status'),
-      api('/performance')
+      api('/performance'),
+      api('/performance/history').catch(() => null),
     ]);
     if (!res.success) return;
     const d = res.data;
@@ -1545,6 +1546,7 @@ async function loadTradePage() {
     const todayPnl  = perf.pnl_today   != null ? perf.pnl_today   : todayCycles.reduce((s, c) => s + (c.pnl || 0), 0);
     const totalPnl  = perf.total_pnl   || d.total_pnl || 0;
     const totalCycles = perf.total_cycles || 0;
+    const historyDays = Array.isArray(perfHistRes?.days) ? perfHistRes.days : [];
 
     // Capital display
     const capDisplayEl = document.getElementById('trade-capital-display');
@@ -1634,6 +1636,45 @@ async function loadTradePage() {
     }
     const gainTotalCyclesEl = document.getElementById('trade-gain-total-cycles');
     if (gainTotalCyclesEl) gainTotalCyclesEl.textContent = `${totalCycles} ciclo${totalCycles !== 1 ? 's' : ''} no total`;
+
+    // 🎯 Meta diária R$100 + custos operacionais
+    const targetDaily = 100;
+    const todayNet = Number(perf.pnl_today ?? todayPnl ?? 0);
+    const gapToday = targetDaily - todayNet;
+
+    const sortedDays = [...historyDays].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const last7 = sortedDays.slice(-7);
+    const avg7 = last7.length ? last7.reduce((s, row) => s + Number(row.pnl || 0), 0) / last7.length : 0;
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+    const monthDays = sortedDays.filter(row => String(row.date || '').startsWith(monthPrefix));
+    const monthNet = monthDays.reduce((s, row) => s + Number(row.pnl || 0), 0);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayDay = now.getDate();
+    const remainingDays = Math.max(1, daysInMonth - todayDay + 1);
+    const monthTarget = targetDaily * daysInMonth;
+    const neededPace = (monthTarget - monthNet) / remainingDays;
+    const projection = monthNet + (avg7 * remainingDays);
+
+    const setGoal = (id, value, positiveIsGood = true) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = fmtMoney(value);
+      const ok = positiveIsGood ? value >= 0 : value <= 0;
+      el.style.color = ok ? 'var(--green)' : 'var(--red)';
+    };
+
+    setGoal('trade-goal-today', todayNet, true);
+    setGoal('trade-goal-gap', gapToday, false);
+    setGoal('trade-goal-avg7', avg7, true);
+    setGoal('trade-goal-needed', neededPace, false);
+    setGoal('trade-goal-projection', projection, true);
+    setGoal('trade-costs-today', -(Number(perf.costs_today_total || 0)), false);
+    setGoal('trade-costs-total', -(Number(perf.costs_total || 0)), false);
+
     // Banner reinvestimento
     const reinvestBanner = document.getElementById('trade-reinvest-info');
     if (reinvestBanner) reinvestBanner.style.display = 'block';

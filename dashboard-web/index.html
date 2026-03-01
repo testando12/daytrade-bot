@@ -885,6 +885,38 @@
           </div>
         </div>
 
+        <div class="card mb-16">
+          <div class="card-header">
+            <span class="card-title">🎯 Meta de Lucro + Custos Reais</span>
+            <span class="badge badge-blue">Meta: R$ 100/dia</span>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:space-around;padding:10px 4px 4px">
+            <div style="text-align:center;min-width:120px;flex:1">
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Hoje (líquido)</div>
+              <div id="trade-goal-today" style="font-size:20px;font-weight:800;color:var(--text-primary)">R$ --</div>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="text-align:center;min-width:120px;flex:1">
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Gap para 100 hoje</div>
+              <div id="trade-goal-gap" style="font-size:20px;font-weight:800;color:var(--text-primary)">R$ --</div>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="text-align:center;min-width:120px;flex:1">
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Média 7 dias</div>
+              <div id="trade-goal-avg7" style="font-size:20px;font-weight:800;color:var(--text-primary)">R$ --</div>
+            </div>
+            <div style="width:1px;background:var(--border);align-self:stretch"></div>
+            <div style="text-align:center;min-width:120px;flex:1">
+              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Ritmo necessário</div>
+              <div id="trade-goal-needed" style="font-size:20px;font-weight:800;color:var(--text-primary)">R$ --</div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px 12px;color:var(--text-muted);font-size:11px;border-top:1px solid var(--border)">
+            <span>Projeção fim do mês (ritmo atual): <b id="trade-goal-projection" style="color:var(--text-primary)">R$ --</b></span>
+            <span>Custos hoje: <b id="trade-costs-today" style="color:var(--red)">R$ --</b> · Custos totais: <b id="trade-costs-total" style="color:var(--red)">R$ --</b></span>
+          </div>
+        </div>
+
         <!-- Row 2: Positions table -->
         <div class="card mb-16">
           <div class="card-header">

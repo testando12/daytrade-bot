@@ -112,6 +112,64 @@ _strategy_state = {
     "last_recent_tf_pnl": {"5m": 0.0, "1h": 0.0, "1d": 0.0},
 }
 
+# Modelo de custos (simulação realista paper-first)
+_TRADING_COST_MODEL = {
+    "b3":        {"brokerage_bps": 2.0,  "exchange_bps": 1.8, "spread_bps": 3.0, "slippage_bps": 2.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "us":        {"brokerage_bps": 2.5,  "exchange_bps": 0.8, "spread_bps": 4.0, "slippage_bps": 2.5, "fx_bps": 35.0, "min_fee_brl": 0.10},
+    "crypto":    {"brokerage_bps": 10.0, "exchange_bps": 0.0, "spread_bps": 5.0, "slippage_bps": 4.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "forex":     {"brokerage_bps": 0.0,  "exchange_bps": 0.0, "spread_bps": 8.0, "slippage_bps": 3.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "commodity": {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 6.0, "slippage_bps": 3.0, "fx_bps": 20.0, "min_fee_brl": 0.08},
+    "other":     {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 5.0, "slippage_bps": 3.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
+}
+
+
+def _asset_market(asset: str) -> str:
+    a = (asset or "").upper()
+    if a in settings.ALLOWED_ASSETS:
+        return "b3"
+    if a in settings.US_STOCKS:
+        return "us"
+    if a in settings.CRYPTO_ASSETS:
+        return "crypto"
+    if a in settings.FOREX_PAIRS:
+        return "forex"
+    if a in settings.COMMODITIES:
+        return "commodity"
+    return "other"
+
+
+def _estimate_trade_costs_brl(asset: str, notional_brl: float, abs_return: float = 0.0) -> dict:
+    market = _asset_market(asset)
+    model = _TRADING_COST_MODEL.get(market, _TRADING_COST_MODEL["other"])
+
+    # Slippage cresce com volatilidade do candle (limitado)
+    vol_factor = 1.0 + min(max(abs_return, 0.0), 0.05) * 8.0
+    slippage_bps_eff = float(model["slippage_bps"]) * vol_factor
+
+    brokerage = notional_brl * ((float(model["brokerage_bps"]) * 2.0) / 10000.0)
+    exchange_fees = notional_brl * ((float(model["exchange_bps"]) * 2.0) / 10000.0)
+    spread = notional_brl * (float(model["spread_bps"]) / 10000.0)
+    slippage = notional_brl * (slippage_bps_eff / 10000.0)
+    fx = notional_brl * (float(model["fx_bps"]) / 10000.0)
+
+    total = brokerage + exchange_fees + spread + slippage + fx
+    min_fee = float(model.get("min_fee_brl", 0.0))
+    min_fee_adj = 0.0
+    if total < min_fee:
+        min_fee_adj = min_fee - total
+        total = min_fee
+
+    return {
+        "market": market,
+        "brokerage": round(brokerage, 6),
+        "exchange_fees": round(exchange_fees, 6),
+        "spread": round(spread, 6),
+        "slippage": round(slippage, 6),
+        "fx": round(fx, 6),
+        "min_fee_adj": round(min_fee_adj, 6),
+        "total": round(total, 6),
+    }
+
 
 def _normalize_alloc(alloc: dict) -> dict:
     total = sum(max(0.0, float(v)) for v in alloc.values())
@@ -1679,6 +1737,13 @@ _DEFAULT_PERF: dict = {
     "last_backtest": None,
     "total_gain": 0.0,     # soma acumulada de todos os ciclos positivos
     "total_loss": 0.0,     # soma acumulada do absoluto de ciclos negativos
+    "total_fees": 0.0,
+    "total_brokerage": 0.0,
+    "total_exchange_fees": 0.0,
+    "total_spread": 0.0,
+    "total_slippage": 0.0,
+    "total_fx": 0.0,
+    "total_min_fee_adj": 0.0,
 }
 _perf_state: dict = db_state.load_state("performance", dict(_DEFAULT_PERF))
 
@@ -1704,14 +1769,23 @@ def _trade_log(event_type: str, asset: str, amount: float, note: str):
 
 
 def _record_cycle_performance(pnl: float, capital: float, irq: float,
-                               pnl_5m: float = 0.0, pnl_1h: float = 0.0, pnl_1d: float = 0.0):
+                               pnl_5m: float = 0.0, pnl_1h: float = 0.0, pnl_1d: float = 0.0,
+                               costs: dict = None):
     """Registra o P&L de um ciclo no histórico de performance."""
+    cst = costs or {}
     _perf_state["cycles"].append({
         "timestamp": _brt_now().isoformat(),
         "pnl":       round(pnl, 4),
         "pnl_5m":    round(pnl_5m, 4),
         "pnl_1h":    round(pnl_1h, 4),
         "pnl_1d":    round(pnl_1d, 4),
+        "fees_total": round(cst.get("total", 0.0), 6),
+        "fees_brokerage": round(cst.get("brokerage", 0.0), 6),
+        "fees_exchange": round(cst.get("exchange_fees", 0.0), 6),
+        "fees_spread": round(cst.get("spread", 0.0), 6),
+        "fees_slippage": round(cst.get("slippage", 0.0), 6),
+        "fees_fx": round(cst.get("fx", 0.0), 6),
+        "fees_min_adj": round(cst.get("min_fee_adj", 0.0), 6),
         "capital":   round(capital, 2),
         "irq":       round(irq, 4),
     })
@@ -1733,6 +1807,14 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
         if pnl < _perf_state.get("worst_day_pnl", 0.0):
             _perf_state["worst_day_pnl"] = round(pnl, 4)
         _perf_state["total_loss"] = round(_perf_state.get("total_loss", 0.0) + abs(pnl), 4)
+
+    _perf_state["total_fees"] = round(_perf_state.get("total_fees", 0.0) + cst.get("total", 0.0), 6)
+    _perf_state["total_brokerage"] = round(_perf_state.get("total_brokerage", 0.0) + cst.get("brokerage", 0.0), 6)
+    _perf_state["total_exchange_fees"] = round(_perf_state.get("total_exchange_fees", 0.0) + cst.get("exchange_fees", 0.0), 6)
+    _perf_state["total_spread"] = round(_perf_state.get("total_spread", 0.0) + cst.get("spread", 0.0), 6)
+    _perf_state["total_slippage"] = round(_perf_state.get("total_slippage", 0.0) + cst.get("slippage", 0.0), 6)
+    _perf_state["total_fx"] = round(_perf_state.get("total_fx", 0.0) + cst.get("fx", 0.0), 6)
+    _perf_state["total_min_fee_adj"] = round(_perf_state.get("total_min_fee_adj", 0.0) + cst.get("min_fee_adj", 0.0), 6)
 
     db_state.save_state("performance", _perf_state)
 
@@ -1854,6 +1936,13 @@ async def reset_trade_state():
     _perf_state["loss_count"] = 0
     _perf_state["best_day_pnl"] = 0.0
     _perf_state["worst_day_pnl"] = 0.0
+    _perf_state["total_fees"] = 0.0
+    _perf_state["total_brokerage"] = 0.0
+    _perf_state["total_exchange_fees"] = 0.0
+    _perf_state["total_spread"] = 0.0
+    _perf_state["total_slippage"] = 0.0
+    _perf_state["total_fx"] = 0.0
+    _perf_state["total_min_fee_adj"] = 0.0
     db_state.save_state("performance", _perf_state)
     # Reset proteção inteligente também
     _protection_state["paused"] = False
@@ -2500,13 +2589,33 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         if mc not in top_5m:
             top_5m.append(mc)
 
-    # ── 4. P&L por bucket (ATR SL/TP + Volume + Partial TP + Momentum Accel + Kelly + DCA) ──
+    cycle_costs = {
+        "total": 0.0,
+        "brokerage": 0.0,
+        "exchange_fees": 0.0,
+        "spread": 0.0,
+        "slippage": 0.0,
+        "fx": 0.0,
+        "min_fee_adj": 0.0,
+        "by_market": {},
+    }
+
+    # ── 4. P&L por bucket (ATR SL/TP + Volume + Partial TP + Momentum Accel + Kelly + DCA + custos) ──
     def _calc_pnl_bucket(top_list, klines, bucket_capital, tf_name: str, mom_data=None):
         if not top_list:
-            return 0.0, {}
+            return 0.0, {}, {"total": 0.0}
         per_asset = round(bucket_capital / len(top_list), 2)
         pnl = 0.0
         positions = {}
+        bucket_costs = {
+            "total": 0.0,
+            "brokerage": 0.0,
+            "exchange_fees": 0.0,
+            "spread": 0.0,
+            "slippage": 0.0,
+            "fx": 0.0,
+            "min_fee_adj": 0.0,
+        }
         for asset in top_list:
             prices = klines.get(asset, {}).get("prices", []) if klines else []
             if len(prices) >= 2 and prices[-2] != 0:
@@ -2586,15 +2695,27 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                     f"💰 ATR Take Profit {asset}: +{ret*100:.2f}% (ATR TP={atr_tp*100:.2f}%)")
                 _protection_state["trailing_highs"].pop(asset, None)
 
-            pnl += (amt * ret) + partial_pnl
+            gross_pnl = (amt * ret) + partial_pnl
+            costs = _estimate_trade_costs_brl(asset, amt, abs(ret))
+            net_pnl = gross_pnl - costs["total"]
+
+            pnl += net_pnl
+            for k in ("total", "brokerage", "exchange_fees", "spread", "slippage", "fx", "min_fee_adj"):
+                bucket_costs[k] = round(bucket_costs.get(k, 0.0) + costs.get(k, 0.0), 6)
+                cycle_costs[k] = round(cycle_costs.get(k, 0.0) + costs.get(k, 0.0), 6)
+            mk = costs.get("market", "other")
+            cycle_costs["by_market"][mk] = round(cycle_costs["by_market"].get(mk, 0.0) + costs.get("total", 0.0), 6)
+
             positions[asset] = {"amount": amt, "ret_pct": round(ret * 100, 3),
                                 "atr_sl": round(atr_sl * 100, 2), "atr_tp": round(atr_tp * 100, 2),
-                                "vol_mult": round(vol_mult, 2), "mom_accel": round(mom_accel_mult, 2)}
-        return round(pnl, 4), positions
+                                "vol_mult": round(vol_mult, 2), "mom_accel": round(mom_accel_mult, 2),
+                                "market": mk, "gross_pnl": round(gross_pnl, 4),
+                                "costs": round(costs.get("total", 0.0), 4), "net_pnl": round(net_pnl, 4)}
+        return round(pnl, 4), positions, bucket_costs
 
-    pnl_5m, pos_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m, "5m", mom_5m)
-    pnl_1h, pos_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h, "1h", mom_1h)
-    pnl_1d, pos_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, "1d", mom_1d)
+    pnl_5m, pos_5m, costs_5m = _calc_pnl_bucket(top_5m, klines_by_tf["5m"], capital_5m, "5m", mom_5m)
+    pnl_1h, pos_1h, costs_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h, "1h", mom_1h)
+    pnl_1d, pos_1d, costs_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, "1d", mom_1d)
 
     # ── 4a. Grid Trading — lucra com mercado lateral ─────────────────────
     grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
@@ -2603,6 +2724,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         _trade_log("GRID_PROFIT", "—", grid_pnl,
             f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
 
+    fees_total = round(cycle_costs.get("total", 0.0), 4)
+    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + grid_pnl + fees_total, 4)
     cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + grid_pnl, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
@@ -2756,9 +2879,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # ── 6. Log e histórico ───────────────────────────────────────────────
     turbo_active = _is_turbo_mode(klines_by_tf["5m"])
     _trade_log("CICLO", "—", capital,
-        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
+        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f} | Grid: R${grid_pnl:+.2f} | Custos: R${fees_total:.2f} | Bruto: R${gross_cycle_pnl:+.2f} | Líq: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
 
-    _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d)
+    _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
 
     if DB_AVAILABLE:
         try:
@@ -2776,9 +2899,25 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "session":     session_label,
         "b3_open":     b3_open,
         "cycle_pnl":   cycle_pnl,
+        "gross_cycle_pnl": gross_cycle_pnl,
         "pnl_5m":      pnl_5m,
         "pnl_1h":      pnl_1h,
         "pnl_1d":      pnl_1d,
+        "costs": {
+            "total": round(cycle_costs.get("total", 0.0), 4),
+            "brokerage": round(cycle_costs.get("brokerage", 0.0), 4),
+            "exchange_fees": round(cycle_costs.get("exchange_fees", 0.0), 4),
+            "spread": round(cycle_costs.get("spread", 0.0), 4),
+            "slippage": round(cycle_costs.get("slippage", 0.0), 4),
+            "fx": round(cycle_costs.get("fx", 0.0), 4),
+            "min_fee_adj": round(cycle_costs.get("min_fee_adj", 0.0), 4),
+            "by_market": {k: round(v, 4) for k, v in cycle_costs.get("by_market", {}).items()},
+            "by_timeframe": {
+                "5m": round((costs_5m or {}).get("total", 0.0), 4),
+                "1h": round((costs_1h or {}).get("total", 0.0), 4),
+                "1d": round((costs_1d or {}).get("total", 0.0), 4),
+            },
+        },
         "capital_5m":  capital_5m,
         "capital_1h":  capital_1h,
         "capital_1d":  capital_1d,
@@ -2980,6 +3119,19 @@ async def get_performance():
     pnl_total_5m  = round(sum(c.get("pnl_5m", 0) for c in cycles), 2)
     pnl_total_1h  = round(sum(c.get("pnl_1h", 0) for c in cycles), 2)
     pnl_total_1d  = round(sum(c.get("pnl_1d", 0) for c in cycles), 2)
+    costs_today_total = round(sum(c.get("fees_total", 0) or 0 for c in today_cycles), 4)
+    costs_today_brokerage = round(sum(c.get("fees_brokerage", 0) or 0 for c in today_cycles), 4)
+    costs_today_exchange = round(sum(c.get("fees_exchange", 0) or 0 for c in today_cycles), 4)
+    costs_today_spread = round(sum(c.get("fees_spread", 0) or 0 for c in today_cycles), 4)
+    costs_today_slippage = round(sum(c.get("fees_slippage", 0) or 0 for c in today_cycles), 4)
+    costs_today_fx = round(sum(c.get("fees_fx", 0) or 0 for c in today_cycles), 4)
+
+    costs_total = round(_perf_state.get("total_fees") or sum(c.get("fees_total", 0) or 0 for c in cycles), 4)
+    costs_total_brokerage = round(_perf_state.get("total_brokerage") or sum(c.get("fees_brokerage", 0) or 0 for c in cycles), 4)
+    costs_total_exchange = round(_perf_state.get("total_exchange_fees") or sum(c.get("fees_exchange", 0) or 0 for c in cycles), 4)
+    costs_total_spread = round(_perf_state.get("total_spread") or sum(c.get("fees_spread", 0) or 0 for c in cycles), 4)
+    costs_total_slippage = round(_perf_state.get("total_slippage") or sum(c.get("fees_slippage", 0) or 0 for c in cycles), 4)
+    costs_total_fx = round(_perf_state.get("total_fx") or sum(c.get("fees_fx", 0) or 0 for c in cycles), 4)
     # totais acumulados (da memória persistida, com fallback do cálculo instantâneo)
     total_gain_acc = _perf_state.get("total_gain") or round(sum(c.get("pnl", 0) for c in cycles if c.get("pnl", 0) > 0), 2)
     total_loss_acc = _perf_state.get("total_loss") or round(sum(abs(c.get("pnl", 0)) for c in cycles if c.get("pnl", 0) < 0), 2)
@@ -3013,6 +3165,26 @@ async def get_performance():
             # Ganho e perda separados — acumulado total
             "total_gain":        round(total_gain_acc, 2),
             "total_loss":        round(total_loss_acc, 2),
+            # Custos operacionais (simulação realista)
+            "costs_today_total": costs_today_total,
+            "costs_today_brokerage": costs_today_brokerage,
+            "costs_today_exchange": costs_today_exchange,
+            "costs_today_spread": costs_today_spread,
+            "costs_today_slippage": costs_today_slippage,
+            "costs_today_fx": costs_today_fx,
+            "costs_total": costs_total,
+            "costs_total_brokerage": costs_total_brokerage,
+            "costs_total_exchange": costs_total_exchange,
+            "costs_total_spread": costs_total_spread,
+            "costs_total_slippage": costs_total_slippage,
+            "costs_total_fx": costs_total_fx,
+            "cost_model_assumptions": {
+                "b3": _TRADING_COST_MODEL["b3"],
+                "us": _TRADING_COST_MODEL["us"],
+                "crypto": _TRADING_COST_MODEL["crypto"],
+                "forex": _TRADING_COST_MODEL["forex"],
+                "commodity": _TRADING_COST_MODEL["commodity"],
+            },
             # P&L por timeframe — histórico total
             "pnl_total_5m":      pnl_total_5m,
             "pnl_total_1h":      pnl_total_1h,
