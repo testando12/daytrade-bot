@@ -574,6 +574,7 @@ async def health_check():
         "total_cycles": _effective_total_cycles(),
         "last_cycle": _trade_state.get("last_cycle"),
         "uptime_session": _scheduler_state.get("session", ""),
+        "persistence": db_state.storage_info(),
     }
 
 
