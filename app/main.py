@@ -88,6 +88,7 @@ def _effective_total_cycles() -> int:
 
 # Controle de reinvestimento diário
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
+_last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
 # Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 65%
 # Otimizado com base em dados reais: 1d gerou 99% do lucro
@@ -271,7 +272,7 @@ def _current_session() -> tuple:
 
 async def _auto_cycle_loop():
     """Loop interno do scheduler: executa ciclos de trading automaticamente."""
-    global _last_reinvestment_date
+    global _last_reinvestment_date, _last_daily_summary_date
     _scheduler_state["running"] = True
     print("[scheduler] Iniciado - intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
     # Aguarda o servidor subir completamente E o DB estar pronto antes do primeiro ciclo
@@ -281,6 +282,27 @@ async def _auto_cycle_loop():
         brt = timezone(timedelta(hours=-3))
         now_brt = datetime.now(brt)
         today_str = now_brt.strftime("%Y-%m-%d")
+
+        # ✨ Resumo diário via WhatsApp: na virada do dia (primeiro ciclo do novo dia)
+        if _last_daily_summary_date and _last_daily_summary_date != today_str:
+            try:
+                prev_day = _last_daily_summary_date
+                prev_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(prev_day)]
+                prev_pnl = round(sum(c.get("pnl", 0) for c in prev_cycles), 2)
+                prev_wins = sum(1 for c in prev_cycles if c.get("pnl", 0) > 0)
+                prev_capital = _trade_state.get("capital", 0)
+                if ALERTS_AVAILABLE and alert_manager:
+                    asyncio.create_task(alert_manager.alert_daily_summary(
+                        today_pnl=prev_pnl,
+                        capital=prev_capital,
+                        total_cycles=len(prev_cycles),
+                        win_cycles=prev_wins,
+                        date_str=prev_day
+                    ))
+                    print(f"[scheduler] 📊 Resumo diário enviado para {prev_day}", flush=True)
+            except Exception as _e_sum:
+                print(f"[scheduler] Erro no resumo diário: {_e_sum}", flush=True)
+        _last_daily_summary_date = today_str
 
         # ✨ Reinvestimento automático: após 17h BRT, reinveste lucro do dia
         if now_brt.weekday() < 5 and now_brt.hour == 17 and _last_reinvestment_date != today_str:
@@ -349,7 +371,13 @@ async def _auto_cycle_loop():
                 interval_sec = settings.TURBO_CYCLE_SECONDS
                 print(f"[scheduler] 🚀 Turbo Mode! Próximo ciclo em {settings.TURBO_CYCLE_SECONDS}s", flush=True)
         except Exception as e:
-            print(f"[scheduler] Erro no ciclo automático: {e}", flush=True)
+            err_msg = str(e)
+            print(f"[scheduler] Erro no ciclo automático: {err_msg}", flush=True)
+            if ALERTS_AVAILABLE and alert_manager:
+                asyncio.create_task(alert_manager.alert_critical_error(
+                    error_msg=err_msg,
+                    error_type="CICLO_FALHOU"
+                ))
 
         await asyncio.sleep(interval_sec)
 
@@ -506,6 +534,9 @@ async def lifespan(app: FastAPI):
         if settings.DISCORD_WEBHOOK_URL:
             alert_manager.add_discord("discord_main", settings.DISCORD_WEBHOOK_URL)
             print("[alerts] Discord configurado", flush=True)
+        if settings.WHATSAPP_PHONE and settings.WHATSAPP_APIKEY:
+            alert_manager.add_whatsapp("whatsapp_main", settings.WHATSAPP_PHONE, settings.WHATSAPP_APIKEY)
+            print("[alerts] WhatsApp (CallMeBot) configurado", flush=True)
     # ── Auto-trading ativo por padrão ──────────────────────────────────
     _trade_state["auto_trading"] = True
     # ── Reconciliação de posições com brokers ───────────────────────────
@@ -3094,6 +3125,18 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f} | Grid: R${grid_pnl:+.2f} | Custos: R${fees_total:.2f} | Bruto: R${gross_cycle_pnl:+.2f} | Líq: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
+
+    # ✨ Notificação WhatsApp por ciclo (só se houve PnL relevante)
+    if ALERTS_AVAILABLE and alert_manager:
+        asyncio.create_task(alert_manager.alert_cycle_result(
+            cycle_pnl=cycle_pnl,
+            today_pnl=_today_pnl,
+            capital=capital,
+            positions_count=len(new_positions),
+            fees=abs(fees_total),
+            irq=irq_score,
+            session_label=session_label
+        ))
 
     if DB_AVAILABLE:
         try:

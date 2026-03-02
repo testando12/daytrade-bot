@@ -133,6 +133,10 @@ class Settings:
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
+    # WhatsApp (CallMeBot) — gratuito, sem servidor
+    # Setup: mande 'I allow callmebot to send me messages' para +34 644 59 91 70 no WhatsApp
+    WHATSAPP_PHONE: str = os.getenv("WHATSAPP_PHONE", "")   # ex: 5511999999999
+    WHATSAPP_APIKEY: str = os.getenv("WHATSAPP_APIKEY", "")
 
     # Proteção Global (IRQ - Índice de Risco de Queda)
     IRQ_THRESHOLD_HIGH: float = 0.70  # 70% - começar redução

@@ -124,6 +124,59 @@ class DiscordAlert(AlertChannel):
             return False
 
 
+class CallMeBotAlert(AlertChannel):
+    """
+    Alerta via WhatsApp usando CallMeBot (gratuito, sem servidor)
+    
+    Setup (1 vez):
+    1. Salve o número +34 644 59 91 70 como contato 'CallMeBot'
+    2. Mande 'I allow callmebot to send me messages' via WhatsApp para esse número
+    3. Você receberá seu apikey automaticamente
+    
+    Env vars: WHATSAPP_PHONE (ex: 5511999999999), WHATSAPP_APIKEY
+    """
+    
+    def __init__(self, phone: str, apikey: str):
+        self.phone = phone.strip().lstrip("+")
+        self.apikey = apikey
+        self.enabled = bool(phone and apikey)
+        self.api_url = "https://api.callmebot.com/whatsapp.php"
+    
+    async def send(self, title: str, message: str, level: AlertLevel = AlertLevel.INFO) -> bool:
+        if not self.enabled:
+            print(f"[WhatsApp] Desabilitado (WHATSAPP_PHONE ou WHATSAPP_APIKEY faltando)")
+            return False
+        
+        try:
+            timestamp = datetime.now().strftime("%H:%M")
+            full_text = f"{level.value} {title} [{timestamp}]\n{message}"
+            
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.get(
+                    self.api_url,
+                    params={
+                        "phone": self.phone,
+                        "text": full_text,
+                        "apikey": self.apikey
+                    }
+                )
+                
+                if response.status_code == 200 and "Message queued" in response.text:
+                    print(f"[WhatsApp] ✅ Mensagem enviada: {title}")
+                    return True
+                elif response.status_code == 200:
+                    # CallMeBot às vezes retorna 200 mesmo em sucesso sem esse texto
+                    print(f"[WhatsApp] ✅ Enviado (status 200): {title}")
+                    return True
+                else:
+                    print(f"[WhatsApp] ❌ Erro {response.status_code}: {response.text[:200]}")
+                    return False
+        
+        except Exception as e:
+            print(f"[WhatsApp] Erro ao enviar: {e}")
+            return False
+
+
 class AlertManager:
     """Gerenciador centralizado de alertas"""
     
@@ -145,6 +198,12 @@ class AlertManager:
         """Adiciona canal Discord"""
         self.channels[name] = DiscordAlert(webhook_url)
         print(f"[AlertManager] Canal Discord '{name}' registrado")
+        return self.channels[name].enabled
+    
+    def add_whatsapp(self, name: str, phone: str, apikey: str) -> bool:
+        """Adiciona canal WhatsApp via CallMeBot"""
+        self.channels[name] = CallMeBotAlert(phone, apikey)
+        print(f"[AlertManager] Canal WhatsApp '{name}' registrado (phone: ...{phone[-4:] if len(phone) >= 4 else phone})")
         return self.channels[name].enabled
     
     async def send_alert(
@@ -300,6 +359,109 @@ Perda: {loss_pct:.2f}%
 Stop loss foi acionado.
 Posição foi encerrada automaticamente.""",
             level=AlertLevel.WARNING
+        )
+    
+    async def alert_cycle_result(
+        self,
+        cycle_pnl: float,
+        today_pnl: float,
+        capital: float,
+        positions_count: int,
+        fees: float,
+        irq: float,
+        session_label: str = ""
+    ):
+        """
+        Alerta a cada ciclo (a cada ~30 min) com lucro/perda.
+        Enviado apenas para WhatsApp. Ignora ciclos com PnL zero.
+        """
+        if abs(cycle_pnl) < 0.01:
+            return  # Ciclo sem atividade, não notificar
+        
+        emoji = "📈" if cycle_pnl > 0 else "📉"
+        sinal = "+" if cycle_pnl >= 0 else ""
+        hoje_sinal = "+" if today_pnl >= 0 else ""
+        
+        # Usar evento com timestamp para não bloquear por anti-spam
+        event_key = f"cycle_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        
+        # Não aplicar anti-spam de 5 min para ciclos (remover da lista após envio)
+        now = datetime.now().timestamp()
+        # Força envio ignorando anti-spam para ciclos
+        if event_key in self.last_alerts:
+            del self.last_alerts[event_key]
+        
+        irq_emoji = "🔴" if irq > 0.8 else "🟡" if irq > 0.5 else "🟢"
+        
+        await self.send_alert(
+            event=event_key,
+            title=f"{emoji} Ciclo {''+session_label+' ' if session_label else ''}{sinal}R${cycle_pnl:+.2f}",
+            message=(
+                f"Líquido: {sinal}R${cycle_pnl:.2f}\n"
+                f"Hoje acum.: {hoje_sinal}R${today_pnl:.2f}\n"
+                f"Capital: R${capital:.2f}\n"
+                f"Posições: {positions_count}\n"
+                f"Taxas ciclo: R${fees:.2f}\n"
+                f"Risco (IRQ): {irq_emoji} {irq*100:.0f}%"
+            ),
+            level=AlertLevel.SUCCESS if cycle_pnl > 0 else AlertLevel.WARNING,
+            channels=["whatsapp_main"]  # Só WhatsApp para não encher Telegram
+        )
+    
+    async def alert_daily_summary(
+        self,
+        today_pnl: float,
+        capital: float,
+        total_cycles: int,
+        win_cycles: int,
+        date_str: str = ""
+    ):
+        """
+        Resumo diário enviado automaticamente na virada do dia.
+        Inclui recomendação baseada na performance.
+        """
+        win_rate = round(win_cycles / total_cycles * 100, 1) if total_cycles > 0 else 0
+        pnl_pct = round(today_pnl / capital * 100, 2) if capital > 0 else 0
+        sinal = "+" if today_pnl >= 0 else ""
+        
+        # Recomendação automática baseada na performance
+        if win_rate >= 60 and today_pnl > 0:
+            rec = "✅ Performance boa — manter configuração atual"
+        elif win_rate >= 50 and today_pnl >= 0:
+            rec = "🟡 Performance ok — mercado lateral, sem alterações"
+        elif win_rate >= 40 or today_pnl > -capital * 0.03:
+            rec = "⚠️ Performance abaixo — acompanhar de perto amanhã"
+        else:
+            rec = "🚨 Performance ruim — considere suspender até revisar"
+        
+        date_label = date_str or datetime.now().strftime("%d/%m/%Y")
+        
+        await self.send_alert(
+            event=f"daily_summary_{date_label.replace('/', '')}",
+            title=f"📊 Resumo Diário — {date_label}",
+            message=(
+                f"P&L do dia: {sinal}R${today_pnl:.2f} ({sinal}{pnl_pct:.2f}%)\n"
+                f"Capital: R${capital:.2f}\n"
+                f"Ciclos: {total_cycles} | Lucrativos: {win_cycles} ({win_rate:.0f}%)\n"
+                f"\nRecomendação:\n{rec}"
+            ),
+            level=AlertLevel.SUCCESS if today_pnl >= 0 else AlertLevel.WARNING
+        )
+    
+    async def alert_critical_error(self, error_msg: str, error_type: str = "ERRO"):
+        """
+        Alerta de erro urgente que faz o bot parar de operar.
+        Enviado para TODOS os canais configurados.
+        """
+        await self.send_alert(
+            event=f"critical_{error_type}_{datetime.now().strftime('%H%M')}",
+            title=f"🔴 ERRO CRÍTICO — {error_type}",
+            message=(
+                f"O bot encontrou um erro e pode ter parado de operar.\n\n"
+                f"Erro: {error_msg[:300]}\n\n"
+                f"Acesse o Railway para verificar os logs."
+            ),
+            level=AlertLevel.ALERT
         )
     
     def get_alert_history(self, limit: int = 20) -> list:
