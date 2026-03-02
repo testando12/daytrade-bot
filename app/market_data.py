@@ -963,6 +963,52 @@ class BrapiMarketData:
 
         return positions
 
+    async def place_stop_loss_order(
+        self,
+        asset: str,
+        quantity: float,
+        entry_price: float,
+        stop_loss_pct: float = 0.02,
+    ) -> Optional[Dict]:
+        """
+        Roteia ordem de stop loss server-side para o broker correto.
+        B3 → BTG (STOP_LIMIT) | Crypto → Binance (STOP_LOSS_LIMIT GTC)
+        A ordem fica ativa na corretora mesmo se o bot reiniciar.
+        """
+        ticker = asset.upper()
+        if self._is_crypto(ticker):
+            if self.binance_broker:
+                return await self.binance_broker.place_stop_loss_order(ticker, quantity, entry_price, stop_loss_pct)
+        elif self._is_b3(ticker):
+            if self.btg_broker:
+                return await self.btg_broker.place_stop_loss_order(ticker, quantity, entry_price, stop_loss_pct)
+        print(f"[market] Sem broker configurado para stop loss de {ticker}", flush=True)
+        return None
+
+    async def get_all_positions(self) -> List[Dict]:
+        """
+        Retorna TODAS as posições abertas em todos os brokers (para reconciliação).
+        Retorna lista de dicts com: asset, quantity, mode, broker
+        """
+        all_pos: List[Dict] = []
+        if self.btg_broker:
+            try:
+                btg_pos = await self.btg_broker.get_positions()
+                for p in btg_pos:
+                    p["broker"] = "btg"
+                    all_pos.append(p)
+            except Exception as e:
+                print(f"[market] Erro get_positions BTG: {e}", flush=True)
+        if self.binance_broker:
+            try:
+                bn_pos = await self.binance_broker.get_positions()
+                for p in bn_pos:
+                    p["broker"] = "binance"
+                    all_pos.append(p)
+            except Exception as e:
+                print(f"[market] Erro get_positions Binance: {e}", flush=True)
+        return all_pos
+
     async def get_usd_brl_rate(self) -> float:
         """Obtém taxa USD/BRL em tempo real. Tenta Alpha Vantage, depois Yahoo, depois fallback."""
         # Alpha Vantage

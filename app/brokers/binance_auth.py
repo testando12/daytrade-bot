@@ -549,7 +549,110 @@ class BinanceAuthBroker:
         except Exception as e:
             print(f"[binance-auth] Erro order history: {e}", flush=True)
         return []
+    async def get_positions(self) -> List[Dict]:
+        """Retorna todas as posições abertas na Binance (paper ou live)."""
+        if self.paper_trading:
+            return [
+                {"asset": asset, "quantity": qty, "mode": "paper"}
+                for asset, qty in self._paper_positions.items()
+                if qty > 0
+            ]
+        if not self.is_configured:
+            return []
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                signed = self._sign_params({})
+                r = await client.get(
+                    f"{self.base_url}/api/v3/account",
+                    params=signed,
+                    headers=self._auth_headers(),
+                )
+                if r.status_code == 200:
+                    balances = r.json().get("balances", [])
+                    return [
+                        {"asset": b["asset"], "quantity": float(b["free"]) + float(b["locked"]), "mode": "live"}
+                        for b in balances
+                        if float(b.get("free", 0)) + float(b.get("locked", 0)) > 0.000001
+                        and b["asset"] != "USDT"
+                    ]
+        except Exception as e:
+            print(f"[binance-auth] Erro get_positions: {e}", flush=True)
+        return []
 
+    async def place_stop_loss_order(
+        self,
+        asset: str,
+        quantity: float,
+        entry_price: float,
+        stop_loss_pct: float = 0.02,
+    ) -> Optional[Dict]:
+        """
+        Coloca ordem de stop loss server-side após uma entrada.
+        Binance: usa STOP_LOSS_LIMIT (GTC) — fica ativa mesmo se o bot reiniciar.
+        Paper: registra o stop virtual em _paper_orders para tracking.
+        """
+        stop_price  = round(entry_price * (1 - stop_loss_pct), 8)
+        limit_price = round(stop_price * 0.995, 8)  # 0.5% abaixo do stop (garante execução)
+        symbol = self._to_symbol(asset)
+
+        if self.paper_trading:
+            stop_id = f"STOP-BN-{int(time.time() * 1000)}"
+            stop = {
+                "order_id": stop_id, "asset": asset.upper(), "symbol": symbol,
+                "side": "SELL", "type": "STOP_LOSS_LIMIT", "quantity": quantity,
+                "stop_price": stop_price, "limit_price": limit_price,
+                "entry_price": entry_price, "stop_pct": stop_loss_pct,
+                "status": "NEW", "mode": "paper",
+                "timestamp": datetime.now().isoformat(),
+            }
+            self._paper_orders.append(stop)
+            self._save_paper_state()
+            print(
+                f"[binance-auth] PAPER STOP: SELL {quantity:.6f} {symbol} | "
+                f"stop=${stop_price:.4f} limit=${limit_price:.4f} ({stop_loss_pct*100:.0f}%)",
+                flush=True,
+            )
+            return stop
+
+        if not self.is_configured:
+            return None
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                params = {
+                    "symbol": symbol,
+                    "side": "SELL",
+                    "type": "STOP_LOSS_LIMIT",
+                    "quantity": f"{quantity:.8f}",
+                    "stopPrice": f"{stop_price:.8f}",
+                    "price": f"{limit_price:.8f}",
+                    "timeInForce": "GTC",
+                }
+                signed_params = self._sign_params(params)
+                r = await client.post(
+                    f"{self.base_url}/api/v3/order",
+                    params=signed_params,
+                    headers=self._auth_headers(),
+                )
+                if r.status_code == 200:
+                    result = r.json()
+                    order_id = result.get("orderId", "unknown")
+                    print(
+                        f"[binance-auth] STOP LIVE: {symbol} | "
+                        f"stop=${stop_price:.4f} limit=${limit_price:.4f} | ID:{order_id}",
+                        flush=True,
+                    )
+                    return {
+                        "order_id": str(order_id), "asset": asset.upper(), "symbol": symbol,
+                        "side": "SELL", "type": "STOP_LOSS_LIMIT", "quantity": quantity,
+                        "stop_price": stop_price, "limit_price": limit_price,
+                        "status": result.get("status", "NEW"), "mode": "live",
+                    }
+                else:
+                    print(f"[binance-auth] Erro stop order: {r.status_code} {r.text[:200]}", flush=True)
+        except Exception as e:
+            print(f"[binance-auth] Erro place_stop_loss_order {asset}: {e}", flush=True)
+        return None
     # ── Helpers ───────────────────────────────────────────────────────────
 
     def _to_symbol(self, asset: str) -> str:

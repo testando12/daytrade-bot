@@ -554,3 +554,76 @@ class BTGBroker:
         except Exception as e:
             print(f"[btg] Erro order history: {e}", flush=True)
         return []
+
+    async def place_stop_loss_order(
+        self,
+        asset: str,
+        quantity: float,
+        entry_price: float,
+        stop_loss_pct: float = 0.02,
+    ) -> Optional[Dict]:
+        """
+        Coloca ordem de stop limit server-side na BTG após uma compra.
+        Paper: registra stop virtual para tracking.
+        Live: envia STOP_LIMIT à BTG — fica ativa mesmo se o bot reiniciar.
+        """
+        stop_price  = round(entry_price * (1 - stop_loss_pct), 4)
+        limit_price = round(stop_price * 0.995, 4)
+        ticker = asset.upper()
+
+        if self.paper_trading:
+            stop_id = f"STOP-BTG-{int(time.time() * 1000)}"
+            stop = {
+                "order_id": stop_id, "asset": ticker,
+                "side": "sell", "type": "stop_limit",
+                "quantity": quantity, "stop_price": stop_price,
+                "limit_price": limit_price, "entry_price": entry_price,
+                "stop_pct": stop_loss_pct, "status": "NEW", "mode": "paper",
+                "timestamp": datetime.now().isoformat(),
+            }
+            self._paper_orders.append(stop)
+            self._save_paper_state()
+            print(
+                f"[btg] PAPER STOP: SELL {quantity:.6f} {ticker} | "
+                f"stop=R${stop_price:.4f} limit=R${limit_price:.4f} ({stop_loss_pct*100:.0f}%)",
+                flush=True,
+            )
+            return stop
+
+        if not self.is_configured:
+            return None
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                token = await self._get_auth_token(client)
+                if not token:
+                    return None
+                order_data = {
+                    "symbol": ticker,
+                    "side": "SELL",
+                    "type": "STOP_LIMIT",
+                    "quantity": quantity,
+                    "stopPrice": stop_price,
+                    "price": limit_price,
+                    "accountId": self.account_id,
+                }
+                r = await client.post(
+                    f"{self.base_url}/trading/v1/orders",
+                    json=order_data,
+                    headers=self._auth_headers(token),
+                )
+                if r.status_code in (200, 201):
+                    result = r.json()
+                    order_id = result.get("orderId", result.get("id", "unknown"))
+                    print(f"[btg] STOP LIVE: {ticker} | stop=R${stop_price:.4f} limit=R${limit_price:.4f} | ID:{order_id}", flush=True)
+                    return {
+                        "order_id": order_id, "asset": ticker,
+                        "side": "sell", "type": "stop_limit", "quantity": quantity,
+                        "stop_price": stop_price, "limit_price": limit_price,
+                        "status": result.get("status", "NEW"), "mode": "live",
+                    }
+                else:
+                    print(f"[btg] Erro stop order: {r.status_code} {r.text[:200]}", flush=True)
+        except Exception as e:
+            print(f"[btg] Erro place_stop_loss_order {asset}: {e}", flush=True)
+        return None

@@ -381,6 +381,60 @@ async def _keep_alive_loop():
         await asyncio.sleep(600)  # 10 minutos
 
 
+async def _reconcile_broker_positions():
+    """
+    Reconcilia posições abertas nos brokers com o _trade_state após um restart.
+    Garante que o bot não abra posições duplicadas e não perca rastro de posições existentes.
+    """
+    if not market_data_service:
+        print("[reconcile] market_data_service não disponível, pulando reconciliação.", flush=True)
+        return
+    try:
+        broker_positions = await market_data_service.get_all_positions()
+        if not broker_positions:
+            print("[reconcile] Nenhuma posição aberta nos brokers.", flush=True)
+            return
+
+        state_positions = _trade_state.get("positions", {})
+        added, confirmed = 0, 0
+
+        for bp in broker_positions:
+            asset    = bp.get("asset", "").upper()
+            quantity = float(bp.get("quantity", 0))
+            if not asset or quantity <= 0:
+                continue
+
+            if asset in state_positions:
+                # Posição já conhecida — confirma que ainda está aberta
+                state_positions[asset]["quantity_broker"] = quantity
+                confirmed += 1
+            else:
+                # Posição orfã no broker (aberta antes do reset/restart)
+                state_positions[asset] = {
+                    "amount":          0,           # valor BRL desconhecido neste ponto
+                    "action":          "BUY",
+                    "tf":              "reconciled",
+                    "pct":             0,
+                    "classification": "UNKNOWN",
+                    "change_pct":      0,
+                    "quantity_broker": quantity,
+                    "broker":          bp.get("broker", "unknown"),
+                    "reconciled":      True,        # flag: veio do broker, não de um ciclo
+                }
+                added += 1
+                print(f"[reconcile] Posição orfã importada do broker: {asset} ({quantity:.6f})", flush=True)
+
+        _trade_state["positions"] = state_positions
+        db_state.save_state("trade_state", _trade_state)
+        print(
+            f"[reconcile] Concluído: {confirmed} confirmadas, {added} importadas do broker, "
+            f"{len(state_positions)} total.",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"[reconcile] Erro na reconciliação: {e}", flush=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicia o scheduler automático quando o servidor sobe."""
@@ -454,6 +508,8 @@ async def lifespan(app: FastAPI):
             print("[alerts] Discord configurado", flush=True)
     # ── Auto-trading ativo por padrão ──────────────────────────────────
     _trade_state["auto_trading"] = True
+    # ── Reconciliação de posições com brokers ───────────────────────────
+    asyncio.get_event_loop().create_task(_reconcile_broker_positions())
     # ── Scheduler de ciclos ────────────────────────────────────────────
     task = asyncio.create_task(_auto_cycle_loop())
     _scheduler_state["task"] = task
@@ -2922,6 +2978,12 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                     _trade_log("ENTRY", asset, info["amount"],
                         f"📈 COMPRA {asset}: {quantity:.6f} @ {currency}{entry_price:.4f} = {currency}{info['amount']:.2f} [{info.get('tf', '?')}]")
                     _order_count += 1
+                    # ── Coloca stop loss SERVER-SIDE na corretora ────────────────────────
+                    # A ordem fica ativa na corretora mesmo se o bot reiniciar
+                    stop_pct = getattr(settings, "STOP_LOSS_PERCENTAGE", 0.02)
+                    asyncio.create_task(
+                        market_data_service.place_stop_loss_order(asset, quantity, entry_price, stop_pct)
+                    )
                     # Alerta
                     if ALERTS_AVAILABLE and alert_manager:
                         asyncio.create_task(alert_manager.alert_trade_executed(asset, "BUY", quantity, entry_price))
