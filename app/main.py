@@ -469,7 +469,7 @@ async def lifespan(app: FastAPI):
     # ── Recarregar estado do DB com retry (garante persistência entre deploys) ──
     global _perf_state, _trade_state, _scheduler_state
 
-    async def _load_with_retry(key: str, default: dict, label: str, retries: int = 4, delay: float = 2.5) -> dict:
+    async def _load_with_retry(key: str, default: dict, label: str, retries: int = 10, delay: float = 5.0) -> dict:
         """Tenta carregar estado do DB até `retries` vezes com `delay` segundos entre tentativas."""
         for attempt in range(1, retries + 1):
             try:
@@ -506,9 +506,19 @@ async def lifespan(app: FastAPI):
 
         saved_trade = await _load_with_retry("trade_state", {}, "trade_state")
         if saved_trade and saved_trade.get("capital"):
-            # Preservar capital e posições; auto_trading será forçado abaixo
-            _trade_state.update(saved_trade)
-            print(f"[lifespan] Trade state recarregado: capital=R${_trade_state.get('capital',0):.2f}", flush=True)
+            # Só atualiza se o capital do DB for MAIOR que o da memória (nunca regredir)
+            db_capital = saved_trade.get("capital", 0)
+            mem_capital = _trade_state.get("capital", 0)
+            if db_capital >= mem_capital:
+                _trade_state.update(saved_trade)
+            else:
+                # Mantém capital da memória mas pega o resto (log, posições etc)
+                saved_no_capital = {k: v for k, v in saved_trade.items() if k != "capital"}
+                _trade_state.update(saved_no_capital)
+            print(f"[lifespan] Trade state recarregado: capital=R${_trade_state.get('capital',0):.2f}"
+                  f" (DB={db_capital:.2f}, mem={mem_capital:.2f})", flush=True)
+        else:
+            print(f"[lifespan] AVISO: trade_state NÃO carregado do DB! Usando memória: capital=R${_trade_state.get('capital',0):.2f}", flush=True)
 
         saved_scheduler = await _load_with_retry("scheduler_state", {}, "scheduler_state")
         if saved_scheduler:
@@ -1958,6 +1968,25 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
     _perf_state["total_slippage"] = round(_perf_state.get("total_slippage", 0.0) + cst.get("slippage", 0.0), 6)
     _perf_state["total_fx"] = round(_perf_state.get("total_fx", 0.0) + cst.get("fx", 0.0), 6)
     _perf_state["total_min_fee_adj"] = round(_perf_state.get("total_min_fee_adj", 0.0) + cst.get("min_fee_adj", 0.0), 6)
+
+    # SAFETY: nunca sobrescrever DB se ele tiver mais ciclos (previne perda de histórico)
+    try:
+        db_current = db_state.load_state("performance", {})
+        db_cycle_count = len(db_current.get("cycles", []))
+        mem_cycle_count = len(_perf_state.get("cycles", []))
+        if db_cycle_count > mem_cycle_count + 1:  # margem de 1 para o ciclo que acabou de rodar
+            print(f"[perf] BLOQUEADO: DB tem {db_cycle_count} ciclos, mem tem {mem_cycle_count}. "
+                  f"Não sobrescrevendo!", flush=True)
+            # Restaurar do DB e adicionar o ciclo atual
+            _perf_state.update(db_current)
+            _perf_state["cycles"].append({
+                "timestamp": _brt_now().isoformat(),
+                "pnl": round(pnl, 4), "capital": round(capital, 2), "irq": round(irq, 4),
+                "pnl_5m": round(pnl_5m, 4), "pnl_1h": round(pnl_1h, 4), "pnl_1d": round(pnl_1d, 4),
+                "fees_total": round(cst.get("total", 0.0), 6),
+            })
+    except Exception as _safe_e:
+        print(f"[perf] Aviso no safety check: {_safe_e}", flush=True)
 
     db_state.save_state("performance", _perf_state)
 

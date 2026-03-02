@@ -20,7 +20,7 @@ class Settings:
     PREFERRED_MARKET: str = "binance"  # binance ou polygon
 
     # Bot - Configurações de trading
-    INITIAL_CAPITAL: float = float(os.getenv("INITIAL_CAPITAL", "2000"))
+    INITIAL_CAPITAL: float = float(os.getenv("INITIAL_CAPITAL", "2770"))
     MAX_POSITION_PERCENTAGE: float = 0.30  # máximo 30% por ativo
     MIN_POSITION_AMOUNT: float = 30.0  # ~$5 (mín Binance) em BRL = R$30
 
