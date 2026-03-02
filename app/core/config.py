@@ -22,18 +22,23 @@ class Settings:
     # Bot - Configurações de trading
     INITIAL_CAPITAL: float = float(os.getenv("INITIAL_CAPITAL", "2000"))
     MAX_POSITION_PERCENTAGE: float = 0.30  # máximo 30% por ativo
-    MIN_POSITION_AMOUNT: float = 10.0  # alocação mínima por ativo
-    STOP_LOSS_PERCENTAGE: float = 0.02  # 2% — fallback fixo (ATR sobrescreve)
-    TAKE_PROFIT_PERCENTAGE: float = 0.015  # 1.5% — fallback fixo (ATR sobrescreve)
+    MIN_POSITION_AMOUNT: float = 30.0  # ~$5 (mín Binance) em BRL = R$30
+
+    # ── Mínimos notacionais por broker (rejeita ordens abaixo disso) ───
+    MIN_NOTIONAL_BINANCE_USD: float = 5.0    # Binance: mín $5 por ordem
+    MIN_NOTIONAL_BTG_BRL: float = 50.0       # BTG B3: mín R$50 por ordem
+    MIN_NOTIONAL_DEFAULT_BRL: float = 30.0   # fallback genérico
+    STOP_LOSS_PERCENTAGE: float = 0.015  # 1.5% — fallback fixo (ATR sobrescreve)
+    TAKE_PROFIT_PERCENTAGE: float = 0.03  # 3.0% — R:R 1:2 (ATR sobrescreve)
     TRAILING_STOP_PERCENTAGE: float = 0.012  # 1.2% abaixo do pico — protege lucro sem cortar cedo
     REBALANCE_INTERVAL: int = 300  # segundos (5 minutos)
 
     # ── ATR Adaptive SL/TP ─────────────────────────────────────────────
     ATR_PERIOD: int = 14  # candles para calcular ATR
     ATR_SL_MULTIPLIER: float = 1.5  # SL = ATR × 1.5
-    ATR_TP_MULTIPLIER: float = 2.0  # TP = ATR × 2.0 (risk:reward 1:1.33)
+    ATR_TP_MULTIPLIER: float = 2.5  # TP = ATR × 2.5 (risk:reward ≥ 1:1.67)
     ATR_MIN_SL: float = 0.005  # SL mínimo 0.5% (para não ficar micro)
-    ATR_MAX_SL: float = 0.05  # SL máximo 5% (para não ficar absurdo)
+    ATR_MAX_SL: float = 0.04  # SL máximo 4% (proteção para grana real)
 
     # ── Grid Trading (mercado lateral) ─────────────────────────────────
     GRID_ENABLED: bool = True
@@ -64,9 +69,9 @@ class Settings:
     MOMENTUM_ACCEL_BOOST: float = 1.5  # aumenta posição 50% quando acelerando
 
     # Limites operacionais (proteção inteligente — agressiva mas com pausa/retorno)
-    MAX_DAILY_LOSS_PERCENTAGE: float = 0.08  # 8% perda diária → PAUSA (não trava, só pausa)
-    MAX_WEEKLY_LOSS_PERCENTAGE: float = 0.15  # 15% semanal → opera 25% do tamanho
-    MAX_DRAWDOWN_PERCENTAGE: float = 0.40  # 40% do capital inicial → HARD STOP (piso absoluto)
+    MAX_DAILY_LOSS_PERCENTAGE: float = 0.05  # 5% perda diária → PAUSA (proteção real)
+    MAX_WEEKLY_LOSS_PERCENTAGE: float = 0.10  # 10% semanal → opera 25% do tamanho
+    MAX_DRAWDOWN_PERCENTAGE: float = 0.10  # 10% do capital inicial → HARD STOP (proteção grana real)
     RESUME_MOMENTUM_THRESHOLD: float = 0.60  # momentum > 0.60 → volta a operar após pausa
     CONSECUTIVE_LOSS_REDUCE: int = 3  # após 3 perdas seguidas, reduz tamanho 50%
     CONSECUTIVE_LOSS_RECOVERY: float = 0.50  # fator de redução após perdas consecutivas
@@ -121,7 +126,8 @@ class Settings:
 
     # ── Modo de Operação ───────────────────────────────────────────────
     # paper = dados reais, ordens simuladas | live = ordens reais
-    TRADING_MODE: str = os.getenv("TRADING_MODE", "paper")  # "paper" ou "live"
+    # "paper" = dados reais, ordens simuladas  |  "testnet" = API real c/ dinheiro fictício  |  "live" = ordens reais
+    TRADING_MODE: str = os.getenv("TRADING_MODE", "paper")  # "paper", "testnet" ou "live"
 
     # Alertas
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")

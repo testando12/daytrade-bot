@@ -116,7 +116,7 @@ _strategy_state = {
 _TRADING_COST_MODEL = {
     "b3":        {"brokerage_bps": 2.0,  "exchange_bps": 1.8, "spread_bps": 3.0, "slippage_bps": 2.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
     "us":        {"brokerage_bps": 2.5,  "exchange_bps": 0.8, "spread_bps": 4.0, "slippage_bps": 2.5, "fx_bps": 35.0, "min_fee_brl": 0.10},
-    "crypto":    {"brokerage_bps": 10.0, "exchange_bps": 0.0, "spread_bps": 5.0, "slippage_bps": 4.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "crypto":    {"brokerage_bps": 10.0, "exchange_bps": 0.0, "spread_bps": 3.0, "slippage_bps": 5.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
     "forex":     {"brokerage_bps": 0.0,  "exchange_bps": 0.0, "spread_bps": 8.0, "slippage_bps": 3.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
     "commodity": {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 6.0, "slippage_bps": 3.0, "fx_bps": 20.0, "min_fee_brl": 0.08},
     "other":     {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 5.0, "slippage_bps": 3.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
@@ -2967,6 +2967,28 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 entry_price = prices[-1] if prices else 0
                 if entry_price <= 0:
                     continue
+                # Validação de valor mínimo de ordem (rejeita se abaixo do mín da corretora)
+                notional_brl = info["amount"]
+                if market_data_service._is_crypto(asset):
+                    usd_rate = getattr(settings, "USD_BRL_RATE", 5.75)
+                    try:
+                        lr = await market_data_service.get_usd_brl_rate()
+                        if lr and lr > 0:
+                            usd_rate = lr
+                    except Exception:
+                        pass
+                    notional_usd = notional_brl / usd_rate
+                    if notional_usd < settings.MIN_NOTIONAL_BINANCE_USD:
+                        print(f"[trade] Skip {asset}: ${notional_usd:.2f} < mín Binance ${settings.MIN_NOTIONAL_BINANCE_USD}", flush=True)
+                        continue
+                elif market_data_service._is_b3(asset):
+                    if notional_brl < settings.MIN_NOTIONAL_BTG_BRL:
+                        print(f"[trade] Skip {asset}: R${notional_brl:.2f} < mín BTG R${settings.MIN_NOTIONAL_BTG_BRL}", flush=True)
+                        continue
+                else:
+                    if notional_brl < settings.MIN_NOTIONAL_DEFAULT_BRL:
+                        print(f"[trade] Skip {asset}: R${notional_brl:.2f} < mín R${settings.MIN_NOTIONAL_DEFAULT_BRL}", flush=True)
+                        continue
                 # Quantidade: valor alocado / preço
                 quantity = round(info["amount"] / entry_price, 8)
                 if quantity <= 0:

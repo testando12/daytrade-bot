@@ -47,7 +47,9 @@ class BTGBroker:
         self.api_secret = settings.BTG_API_SECRET
         self.account_id = settings.BTG_ACCOUNT_ID
         self.base_url = settings.BTG_BASE_URL.rstrip("/")
-        self.paper_trading = settings.BTG_PAPER_TRADING
+        trading_mode = getattr(settings, "TRADING_MODE", "paper")
+        # BTG: paper se TRADING_MODE=paper OU BTG_PAPER_TRADING=true
+        self.paper_trading = settings.BTG_PAPER_TRADING or trading_mode == "paper" or trading_mode == "testnet"
         self.timeout = settings.MARKET_API_TIMEOUT
         self._token: Optional[str] = None
         self._token_expiry: float = 0

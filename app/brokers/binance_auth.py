@@ -52,8 +52,9 @@ class BinanceAuthBroker:
     def __init__(self):
         self.api_key = settings.BINANCE_API_KEY
         self.api_secret = settings.BINANCE_API_SECRET
-        self.use_testnet = getattr(settings, "BINANCE_TESTNET", False)
-        self.paper_trading = getattr(settings, "TRADING_MODE", "paper") == "paper"
+        trading_mode = getattr(settings, "TRADING_MODE", "paper")
+        self.use_testnet = getattr(settings, "BINANCE_TESTNET", False) or trading_mode == "testnet"
+        self.paper_trading = trading_mode == "paper"
         self.timeout = settings.MARKET_API_TIMEOUT
 
         if self.use_testnet:

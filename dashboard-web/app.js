@@ -426,8 +426,8 @@ function renderPreRealPanel(tradeData, perfData) {
   }
 
   const mode = (tradeData?.trading_mode || 'paper').toUpperCase();
-  modeBadge.textContent = mode === 'LIVE' ? '🔴 LIVE' : '📝 PAPER';
-  modeBadge.className = `badge ${mode === 'LIVE' ? 'badge-red' : 'badge-yellow'}`;
+  modeBadge.textContent = mode === 'LIVE' ? '🔴 LIVE' : mode === 'TESTNET' ? '🧪 TESTNET' : '📝 PAPER';
+  modeBadge.className = `badge ${mode === 'LIVE' ? 'badge-red' : mode === 'TESTNET' ? 'badge-orange' : 'badge-yellow'}`;
 
   const gate = evaluatePreRealGate(perfData || {}, tradeData || {});
   _preRealGate = gate;
