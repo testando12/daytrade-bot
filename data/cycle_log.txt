@@ -77,3 +77,7 @@
 [2026-03-02T17:59:51] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-02T17:59:51] Ciclo concluído | IRQ: 0.080 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 14.5184 | Total P&L: R$ 14.5184
 [2026-03-02T17:59:51] Top posições: RENT3=R$5.42 | ADBE=R$3.22 | GOOGL=R$2.96 | ATOM=R$2.92
+[2026-03-02T19:52:32] Iniciando ciclo — capital: R$ 150.00
+[2026-03-02T19:52:33] Dados obtidos: 105 ativos via yahoo.finance
+[2026-03-02T19:52:33] Ciclo concluído | IRQ: 0.079 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 8.9042 | Total P&L: R$ 8.9042
+[2026-03-02T19:52:33] Top posições: INTC=R$2.43 | NEAR=R$2.26 | MGLU3=R$2.14 | GGBR4=R$2.07
