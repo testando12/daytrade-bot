@@ -2012,6 +2012,42 @@ async def reset_trade_state():
     return {"success": True, "message": f"Histórico zerado — capital restaurado para R$ {settings.INITIAL_CAPITAL:.2f}. Proteções resetadas."}
 
 
+@app.post("/admin/restore-perf")
+async def admin_restore_perf(payload: dict):
+    """
+    Restaura manualmente o estado de performance (para recuperação de histórico perdido).
+    Aceita campos parciais — apenas os fornecidos são atualizados.
+    Campos aceitos: cycles, win_count, loss_count, best_day_pnl, worst_day_pnl,
+                    total_gain, total_loss, total_fees, total_pnl_history
+    """
+    global _perf_state, _perf_db_safety_checked
+    allowed = {
+        "cycles", "win_count", "loss_count", "best_day_pnl", "worst_day_pnl",
+        "total_gain", "total_loss", "total_fees", "total_brokerage",
+        "total_exchange_fees", "total_spread", "total_slippage", "total_fx",
+        "total_min_fee_adj", "total_pnl_history",
+    }
+    updated = []
+    for key, val in payload.items():
+        if key in allowed:
+            _perf_state[key] = val
+            updated.append(key)
+    # Marca safety check como feito para não sobrescrever na próxima gravação
+    _perf_db_safety_checked = True
+    db_state.save_state("performance", _perf_state)
+    cycles_count = len(_perf_state.get("cycles", []))
+    print(f"[admin] restore-perf: {len(updated)} campos restaurados, {cycles_count} ciclos no estado", flush=True)
+    return {
+        "success": True,
+        "updated_fields": updated,
+        "cycles_in_state": cycles_count,
+        "win_count": _perf_state.get("win_count", 0),
+        "loss_count": _perf_state.get("loss_count", 0),
+        "total_gain": _perf_state.get("total_gain", 0),
+        "total_loss": _perf_state.get("total_loss", 0),
+    }
+
+
 @app.get("/trade/unfreeze")
 @app.post("/trade/unfreeze")
 async def unfreeze_bot():
