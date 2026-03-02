@@ -1565,7 +1565,8 @@ async function loadTradePage() {
     // Valor Total card — 3 timeframes + hoje + total
     const perf = perfRes?.data || {};
     _perfSnapshot = perf;
-    const today = new Date().toISOString().slice(0, 10);
+    // Usa data BRT (UTC-3) para alinhar com os timestamps do backend
+    const today = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const todayCycles = (perf.recent_cycles || []).filter(c => (c.timestamp || '').startsWith(today));
     const todayPnl  = perf.pnl_today   != null ? perf.pnl_today   : todayCycles.reduce((s, c) => s + (c.pnl || 0), 0);
     const totalPnl  = perf.total_pnl   || d.total_pnl || 0;
