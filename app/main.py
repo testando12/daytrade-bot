@@ -466,6 +466,12 @@ async def _reconcile_broker_positions():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Inicia o scheduler automático quando o servidor sobe."""
+    # ══ PASSO 0: Aguardar PostgreSQL estar pronto ANTES de carregar qualquer estado ══
+    print("[lifespan] Aguardando PostgreSQL ficar pronto...", flush=True)
+    pg_ok = await asyncio.to_thread(db_state.wait_pg_ready, 120, 3.0)
+    if not pg_ok:
+        print("[lifespan] ⚠️ PostgreSQL não respondeu! Usando dados em memória/JSON local.", flush=True)
+    
     # ── Recarregar estado do DB com retry (garante persistência entre deploys) ──
     global _perf_state, _trade_state, _scheduler_state
 

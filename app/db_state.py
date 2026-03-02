@@ -120,6 +120,41 @@ def is_using_postgres() -> bool:
     return _USE_PG
 
 
+def wait_pg_ready(max_wait: int = 120, interval: float = 3.0) -> bool:
+    """
+    Bloqueia até o PostgreSQL aceitar conexão.
+    Retorna True se conectou, False se esgotou o timeout.
+    Chamado no startup para não carregar estado antes do DB estar pronto.
+    """
+    if not _USE_PG:
+        log.info("PostgreSQL não configurado — usando JSON local.")
+        return True
+    
+    import time
+    start = time.time()
+    attempt = 0
+    while time.time() - start < max_wait:
+        attempt += 1
+        try:
+            conn = _pg_conn()
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            conn.close()
+            elapsed = round(time.time() - start, 1)
+            log.info(f"PostgreSQL pronto! (tentativa {attempt}, {elapsed}s)")
+            print(f"[db_state] ✅ PostgreSQL pronto (tentativa {attempt}, {elapsed}s)", flush=True)
+            _ensure_table()
+            return True
+        except Exception as e:
+            elapsed = round(time.time() - start, 1)
+            print(f"[db_state] ⏳ Aguardando PostgreSQL... tentativa {attempt} ({elapsed}s) — {e}", flush=True)
+            time.sleep(interval)
+    
+    print(f"[db_state] ❌ PostgreSQL NÃO respondeu em {max_wait}s! Bot vai usar JSON local.", flush=True)
+    log.error(f"PostgreSQL timeout after {max_wait}s")
+    return False
+
+
 def storage_info() -> dict:
     return {
         "backend": "postgres" if _USE_PG else "json",
