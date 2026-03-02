@@ -2015,6 +2015,8 @@ async def set_trade_capital(body: dict):
     delta = amount - prev
     event = "DEPÓSITO" if delta >= 0 else "RETIRADA"
     _trade_log(event, "—", abs(delta), f"Capital {event.lower()} de R$ {prev:.2f} → R$ {amount:.2f}")
+    # Persiste imediatamente no banco para sobreviver a deploys/restarts
+    db_state.save_state("trade_state", _trade_state)
     return {"success": True, "capital": amount, "previous": prev}
 
 
