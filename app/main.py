@@ -2340,8 +2340,19 @@ def _update_protection(cycle_pnl: float, capital: float, mom_scores: dict):
         state["hard_stopped"] = True
         state["paused"] = True
         state["pause_reason"] = f"HARD STOP: drawdown {drawdown_pct*100:.1f}% do pico R$ {state['peak_capital']:.2f}"
-        _trade_log("HARD_STOP", "—", capital,
-            f"🔴 {state['pause_reason']} — necessário reset manual")
+        msg = f"🔴 {state['pause_reason']} — necessário reset manual"
+        _trade_log("HARD_STOP", "—", capital, msg)
+        print(f"[proteção] {msg}", flush=True)
+        # ── Alerta imediato: Telegram + Discord ──────────────────────────
+        if ALERTS_AVAILABLE and alert_manager:
+            asyncio.create_task(alert_manager.send_alert(
+                "HARD_STOP",
+                "🚨 BOT TRAVADO — HARD STOP",
+                f"Drawdown de {drawdown_pct*100:.1f}% atingido.\n"
+                f"Capital: R${capital:.2f} (pico: R${state['peak_capital']:.2f})\n"
+                f"Perda: R${state['peak_capital'] - capital:.2f}\n"
+                f"⚠️ Bot parou de operar. Acesse o dashboard para desbloquear.",
+            ))
         return
 
     # ── Ciclo com ganho → recuperação ─────────────────────────
@@ -2410,6 +2421,19 @@ def _check_smart_pause(today_pnl: float, week_pnl: float, capital: float, top_sc
             return 0.50 * state["size_multiplier"]
         else:
             # Signals fracos → mantém pausa
+            if not state["paused"]:
+                # Primeira vez pausando — envia alerta
+                pause_msg = f"Perda diária R$ {today_pnl:.2f} > limite R$ {max_daily:.2f}"
+                _trade_log("SMART_PAUSE", "—", capital, f"⏸️ Smart Pause ativado: {pause_msg}")
+                if ALERTS_AVAILABLE and alert_manager:
+                    asyncio.create_task(alert_manager.send_alert(
+                        "SMART_PAUSE",
+                        "⏸️ BOT PAUSADO — Perda diária",
+                        f"Perda do dia: R${abs(today_pnl):.2f} (limite: R${max_daily:.2f})\n"
+                        f"Capital: R${capital:.2f}\n"
+                        f"Momentum fraco ({avg_top_score:.2f}) — aguardando recuperação.\n"
+                        f"O bot volta automaticamente quando o mercado melhorar.",
+                    ))
             state["paused"] = True
             state["pause_reason"] = f"Perda diária R$ {today_pnl:.2f} > limite R$ {max_daily:.2f} (avg momentum: {avg_top_score:.2f})"
             return 0.0
