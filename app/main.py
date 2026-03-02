@@ -274,8 +274,8 @@ async def _auto_cycle_loop():
     global _last_reinvestment_date
     _scheduler_state["running"] = True
     print("[scheduler] Iniciado - intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
-    # Aguarda o servidor subir completamente antes do primeiro ciclo
-    await asyncio.sleep(20)
+    # Aguarda o servidor subir completamente E o DB estar pronto antes do primeiro ciclo
+    await asyncio.sleep(60)
     while _scheduler_state["running"]:
         from datetime import timezone, timedelta
         brt = timezone(timedelta(hours=-3))
@@ -1800,10 +1800,34 @@ def _trade_log(event_type: str, asset: str, amount: float, note: str):
     db_state.save_state("trade_state", _trade_state)
 
 
+# Flag de segurança: garantir que o primeiro save não sobrescreva dados do DB
+_perf_db_safety_checked: bool = False
+
+
 def _record_cycle_performance(pnl: float, capital: float, irq: float,
                                pnl_5m: float = 0.0, pnl_1h: float = 0.0, pnl_1d: float = 0.0,
                                costs: dict = None):
     """Registra o P&L de um ciclo no histórico de performance."""
+    global _perf_db_safety_checked, _perf_state
+    # ── SAFETY MERGE: no primeiro ciclo após startup, verifica se o DB tem mais ciclos ──
+    # Isso previne sobrescrever histórico válido quando o estado em memória começou vazio
+    if not _perf_db_safety_checked:
+        _perf_db_safety_checked = True
+        try:
+            db_saved = db_state.load_state("performance", {})
+            db_cycles_count = len(db_saved.get("cycles", []))
+            mem_cycles_count = len(_perf_state.get("cycles", []))
+            if db_cycles_count > mem_cycles_count:
+                print(
+                    f"[perf] SAFETY MERGE: DB tem {db_cycles_count} ciclos, memória tem {mem_cycles_count}. "
+                    f"Restaurando histórico do DB antes de salvar.",
+                    flush=True,
+                )
+                _perf_state.update(db_saved)
+            else:
+                print(f"[perf] Safety check OK: memória={mem_cycles_count} ciclos, DB={db_cycles_count}", flush=True)
+        except Exception as _se:
+            print(f"[perf] Aviso no safety merge: {_se}", flush=True)
     cst = costs or {}
     _perf_state["cycles"].append({
         "timestamp": _brt_now().isoformat(),
