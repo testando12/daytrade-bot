@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 import asyncio
 import json
+import random as _rnd
 import os
 
 from app.core.config import settings
@@ -2867,6 +2868,22 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 ret = (prices[-1] - prices[-2]) / prices[-2]
             else:
                 ret = 0.0
+
+            # ── Realismo paper mode: adverse selection + falha de execução ──
+            # Simula que pedidos reais nunca executam no preço ideal
+            # 10% das ordens não são preenchidas (mercado saiu rápido demais)
+            if _rnd.random() < 0.10:
+                continue
+            # Adverse selection: você entra depois do sinal → captura só ~72% do movimento
+            # Ruído gaussiano simula variação de execução (±0.2%)
+            if ret > 0:
+                capture = max(0.0, _rnd.gauss(0.72, 0.18))  # média 72%, desvio 18%
+                ret = ret * min(capture, 1.05)               # máx 105% (overshoot ocasional)
+            else:
+                # Na queda: adverse selection piora a perda (entra antes de perceber)
+                worsen = max(1.0, _rnd.gauss(1.10, 0.12))   # perde ~10% a mais em média
+                ret = ret * worsen
+            ret += _rnd.gauss(-0.0003, 0.0015)              # ruído de execução (ligeiramente negativo)
 
             # ── ATR Adaptive SL/TP — calcula limites dinâmicos por ativo ──
             atr_sl, atr_tp = _atr_adaptive_sl_tp(prices, asset)
