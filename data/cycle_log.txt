@@ -85,3 +85,7 @@
 [2026-03-02T21:06:34] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-02T21:06:34] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 17.4621 | Total P&L: R$ 17.4621
 [2026-03-02T21:06:34] Top posições: CVS=R$5.04 | TSLA=R$4.26 | AVGO=R$4.17 | COP=R$4.00
+[2026-03-03T15:34:53] Iniciando ciclo — capital: R$ 150.00
+[2026-03-03T15:34:55] Dados obtidos: 105 ativos via yahoo.finance
+[2026-03-03T15:34:55] Ciclo concluído | IRQ: 0.079 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 22.0466 | Total P&L: R$ 22.0466
+[2026-03-03T15:34:55] Top posições: NEAR=R$7.72 | COP=R$5.65 | JPM=R$4.44 | BTC=R$4.23
