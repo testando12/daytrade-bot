@@ -93,3 +93,7 @@
 [2026-03-03T18:04:17] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-03T18:04:17] Ciclo concluído | IRQ: 0.080 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 9.5896 | Total P&L: R$ 9.5896
 [2026-03-03T18:04:17] Top posições: RENT3=R$2.68 | OP=R$2.40 | SNAP=R$2.31 | CVS=R$2.19
+[2026-03-03T19:58:30] Iniciando ciclo — capital: R$ 150.00
+[2026-03-03T19:58:31] Dados obtidos: 105 ativos via yahoo.finance
+[2026-03-03T19:58:31] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 10.8393 | Total P&L: R$ 10.8393
+[2026-03-03T19:58:31] Top posições: ABBV=R$3.00 | SILVER=R$2.98 | UBER=R$2.49 | QCOM=R$2.38
