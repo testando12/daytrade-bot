@@ -1952,7 +1952,7 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
     if len(_perf_state["cycles"]) > 500:
         _perf_state["cycles"] = _perf_state["cycles"][-500:]
 
-    _perf_state["total_pnl_history"].append(round(capital, 2))
+    _perf_state["total_pnl_history"].append(round(capital + pnl, 2))
     if len(_perf_state["total_pnl_history"]) > 500:
         _perf_state["total_pnl_history"] = _perf_state["total_pnl_history"][-500:]
 
@@ -3161,12 +3161,18 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
 
+    # ── Atualizar capital com PnL líquido do ciclo ──────────────────────
+    if cycle_pnl != 0:
+        new_capital = round(_trade_state["capital"] + cycle_pnl, 2)
+        print(f"[trade] Capital: R${_trade_state['capital']:.2f} {cycle_pnl:+.2f} → R${new_capital:.2f}", flush=True)
+        _trade_state["capital"] = new_capital
+
     # ✨ Notificação WhatsApp por ciclo (só se houve PnL relevante)
     if ALERTS_AVAILABLE and alert_manager:
         asyncio.create_task(alert_manager.alert_cycle_result(
             cycle_pnl=cycle_pnl,
             today_pnl=_today_pnl,
-            capital=capital,
+            capital=_trade_state["capital"],
             positions_count=len(new_positions),
             fees=abs(fees_total),
             irq=irq_score,
