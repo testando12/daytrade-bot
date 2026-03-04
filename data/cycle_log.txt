@@ -105,3 +105,7 @@
 [2026-03-04T15:02:19] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-04T15:02:19] Ciclo concluído | IRQ: 0.080 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 18.5155 | Total P&L: R$ 18.5155
 [2026-03-04T15:02:19] Top posições: AMD=R$4.91 | AMZN=R$4.84 | AVGO=R$4.60 | IBM=R$4.16
+[2026-03-04T17:27:55] Iniciando ciclo — capital: R$ 150.00
+[2026-03-04T17:27:59] Dados obtidos: 105 ativos via yahoo.finance
+[2026-03-04T17:27:59] Ciclo concluído | IRQ: 0.080 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 16.1909 | Total P&L: R$ 16.1909
+[2026-03-04T17:27:59] Top posições: BBDC4=R$4.62 | PRIO3=R$4.22 | INTC=R$3.71 | AMD=R$3.64
