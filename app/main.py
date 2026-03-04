@@ -94,7 +94,8 @@ _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 # Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 65%
 # Otimizado com base em dados reais: 1d gerou 99% do lucro
 _TIMEFRAME_ALLOC = {"5m": 0.10, "1h": 0.25, "1d": 0.65}
-_TIMEFRAME_N_ASSETS = {"5m": 3, "1h": 6, "1d": 12}  # top N ativos por bucket
+# v2 (2026-03-04): reduzido de 3/6/12 → 1/2/3 para operar com convicção (menos breadth, mais depth)
+_TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 2, "1d": 3}  # top N ativos por bucket
 
 # Estratégia adaptativa (paper-first): alocação dinâmica + filtro de regime + risco por timeframe
 _strategy_state = {

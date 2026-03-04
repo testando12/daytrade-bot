@@ -79,7 +79,8 @@ class Settings:
     MAX_TRADES_PER_DAY: int = 1000  # mais trades com grid + turbo
 
     # Filtro de score mínimo (só opera se momentum > threshold)
-    MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.35"))
+    # v2 (2026-03-04): elevado de 0.35→0.50 para reduzir entradas com score marginal
+    MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.50"))
 
     # Kelly Criterion — multiplier conservador
     KELLY_FRACTION: float = 0.25  # usa 25% do Kelly real (Kelly fracionário)
