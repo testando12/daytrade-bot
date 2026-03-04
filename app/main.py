@@ -116,13 +116,15 @@ _strategy_state = {
 }
 
 # Modelo de custos (simulação realista paper-first)
+# v2 (2026-03-04): B3 slippage 2→10 bps e spread 3→5 bps (realista para mid-cap Bovespa)
+# Referência: mid-caps B3 têm slippage de 8–15 bps em condições normais de book
 _TRADING_COST_MODEL = {
-    "b3":        {"brokerage_bps": 2.0,  "exchange_bps": 1.8, "spread_bps": 3.0, "slippage_bps": 2.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
-    "us":        {"brokerage_bps": 2.5,  "exchange_bps": 0.8, "spread_bps": 4.0, "slippage_bps": 2.5, "fx_bps": 35.0, "min_fee_brl": 0.10},
-    "crypto":    {"brokerage_bps": 10.0, "exchange_bps": 0.0, "spread_bps": 3.0, "slippage_bps": 5.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
-    "forex":     {"brokerage_bps": 0.0,  "exchange_bps": 0.0, "spread_bps": 8.0, "slippage_bps": 3.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
-    "commodity": {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 6.0, "slippage_bps": 3.0, "fx_bps": 20.0, "min_fee_brl": 0.08},
-    "other":     {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 5.0, "slippage_bps": 3.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "b3":        {"brokerage_bps": 2.0,  "exchange_bps": 1.8, "spread_bps": 5.0, "slippage_bps": 10.0, "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "us":        {"brokerage_bps": 2.5,  "exchange_bps": 0.8, "spread_bps": 4.0, "slippage_bps": 2.5,  "fx_bps": 35.0, "min_fee_brl": 0.10},
+    "crypto":    {"brokerage_bps": 10.0, "exchange_bps": 0.0, "spread_bps": 3.0, "slippage_bps": 5.0,  "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "forex":     {"brokerage_bps": 0.0,  "exchange_bps": 0.0, "spread_bps": 8.0, "slippage_bps": 3.0,  "fx_bps": 0.0,  "min_fee_brl": 0.05},
+    "commodity": {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 6.0, "slippage_bps": 3.0,  "fx_bps": 20.0, "min_fee_brl": 0.08},
+    "other":     {"brokerage_bps": 2.0,  "exchange_bps": 1.0, "spread_bps": 5.0, "slippage_bps": 3.0,  "fx_bps": 0.0,  "min_fee_brl": 0.05},
 }
 
 
