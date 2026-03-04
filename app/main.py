@@ -2580,7 +2580,7 @@ def _atr_adaptive_sl_tp(prices: list, asset: str = "") -> tuple:
     # SL = ATR × multiplier, clampado entre min e max
     sl = max(settings.ATR_MIN_SL, min(atr_pct * settings.ATR_SL_MULTIPLIER, settings.ATR_MAX_SL))
     # TP = ATR × multiplier (sempre > SL para manter risk:reward positivo)
-    tp = max(sl * 1.2, atr_pct * settings.ATR_TP_MULTIPLIER)
+    tp = max(sl * 2.0, atr_pct * settings.ATR_TP_MULTIPLIER)  # TP >= 2× SL sempre
     # Cache para logs
     _atr_cache[asset] = {"atr": round(atr, 6), "atr_pct": round(atr_pct, 6), "sl": round(sl, 6), "tp": round(tp, 6)}
     return (sl, tp)
@@ -2871,19 +2871,23 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
             # ── Realismo paper mode: adverse selection + falha de execução ──
             # Simula que pedidos reais nunca executam no preço ideal
-            # 10% das ordens não são preenchidas (mercado saiu rápido demais)
-            if _rnd.random() < 0.10:
+            # 8% das ordens não são preenchidas (mercado saiu rápido demais)
+            if _rnd.random() < 0.08:
                 continue
-            # Adverse selection: você entra depois do sinal → captura só ~72% do movimento
-            # Ruído gaussiano simula variação de execução (±0.2%)
+            # Filtro de retorno mínimo: skip se |ret| menor que custo estimado
+            min_ret_threshold = 0.0018  # 0.18% — abaixo disso custos comem o lucro
+            if abs(ret) < min_ret_threshold:
+                continue
+            # Adverse selection: entra depois do sinal → captura ~80% do movimento
+            # Valores calibrados para Binance spot (spreads apertados)
             if ret > 0:
-                capture = max(0.0, _rnd.gauss(0.72, 0.18))  # média 72%, desvio 18%
+                capture = max(0.0, _rnd.gauss(0.80, 0.12))  # média 80%, desvio 12%
                 ret = ret * min(capture, 1.05)               # máx 105% (overshoot ocasional)
             else:
-                # Na queda: adverse selection piora a perda (entra antes de perceber)
-                worsen = max(1.0, _rnd.gauss(1.10, 0.12))   # perde ~10% a mais em média
+                # Na queda: adverse selection piora a perda ligeiramente
+                worsen = max(1.0, _rnd.gauss(1.05, 0.08))   # perde ~5% a mais em média
                 ret = ret * worsen
-            ret += _rnd.gauss(-0.0003, 0.0015)              # ruído de execução (ligeiramente negativo)
+            ret += _rnd.gauss(-0.0001, 0.0010)              # ruído de execução (leve)
 
             # ── ATR Adaptive SL/TP — calcula limites dinâmicos por ativo ──
             atr_sl, atr_tp = _atr_adaptive_sl_tp(prices, asset)
@@ -2897,6 +2901,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             score = 0.5
             if mom_data and asset in mom_data:
                 score = mom_data[asset].get("momentum_score", 0.5)
+            # ── Filtro de qualidade: só entrar quando score >= 0.55 ──
+            if score < 0.55:
+                continue
             amt = _kelly_weight(score, per_asset, asset)
             # DCA: aumentar se já estava em posição perdedora
             amt = _dca_adjust(asset, amt, klines)
@@ -3177,6 +3184,45 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f} | Grid: R${grid_pnl:+.2f} | Custos: R${fees_total:.2f} | Bruto: R${gross_cycle_pnl:+.2f} | Líq: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
+
+    # ── ML: Salvar amostras de treinamento (features + outcome por ativo) ─
+    try:
+        if DB_AVAILABLE and db:
+            _ml_ts = _brt_now().isoformat()
+            _ml_hour = _brt_now().hour
+            _ml_dow = _brt_now().weekday()
+
+            def _save_bucket_ml(pos_dict, mom_dict, tf_name):
+                for _asset, _pos in pos_dict.items():
+                    _mom = mom_dict.get(_asset, {})
+                    db.save_ml_sample(
+                        cycle_ts=_ml_ts,
+                        asset=_asset,
+                        tf=tf_name,
+                        momentum_score=float(_mom.get("momentum_score", 0)),
+                        roc_score=float(_mom.get("return_score", 0)),
+                        rsi_score=float(_mom.get("rsi_score", 0)),
+                        trend_score=float(_mom.get("trend_score", 0)),
+                        volume_score=float(_mom.get("volume_score", 0)),
+                        candle_score=float(_mom.get("macd_score", 0)),
+                        signal_quality=float(_mom.get("signal_quality", 0)),
+                        irq_score=float(irq_score),
+                        hour_of_day=int(_ml_hour),
+                        day_of_week=int(_ml_dow),
+                        atr_sl=float(_pos.get("atr_sl", 0)) / 100.0,
+                        atr_tp=float(_pos.get("atr_tp", 0)) / 100.0,
+                        vol_mult=float(_pos.get("vol_mult", 1.0)),
+                        mom_accel=float(_pos.get("mom_accel", 1.0)),
+                        ret_pct=float(_pos.get("ret_pct", 0)) / 100.0,
+                        net_pnl=float(_pos.get("net_pnl", 0)),
+                        label=1 if float(_pos.get("net_pnl", 0)) > 0 else 0,
+                    )
+
+            _save_bucket_ml(pos_5m, mom_5m, "5m")
+            _save_bucket_ml(pos_1h, mom_1h, "1h")
+            _save_bucket_ml(pos_1d, mom_1d, "1d")
+    except Exception as _ml_err:
+        print(f"[ml] Erro ao salvar amostra: {_ml_err}", flush=True)
 
     # ── Atualizar capital com PnL líquido do ciclo ──────────────────────
     if cycle_pnl != 0:
@@ -3833,6 +3879,199 @@ async def test_allocation(body: dict = None):
                 "total_allocated": round(total_allocated, 2),
                 "allocation_pct": round(total_allocated / capital * 100, 2) if capital > 0 else 0,
                 "allocations": {a: round(v, 2) for a, v in allocation.items()},
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════
+# ENDPOINTS: ML / TREINAMENTO
+# ═══════════════════════════════════════════
+
+@app.get("/ml/training-data")
+async def ml_get_training_data(limit: int = 2000, asset: str = None, tf: str = None):
+    """
+    Retorna amostras de treinamento coletadas (features + outcomes por trade).
+    Cada ciclo gera N amostras (uma por ativo operado).
+    Usado para treinar modelo de classificação: 'esse trade vai lucrar?'
+    """
+    if not DB_AVAILABLE or not db:
+        raise HTTPException(status_code=503, detail="Banco de dados não disponível")
+    try:
+        samples = db.get_ml_training_data(limit=limit, asset=asset, tf=tf)
+        stats = db.get_ml_stats()
+        return {
+            "success": True,
+            "data": {
+                "stats": stats,
+                "samples": samples,
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ml/train")
+async def ml_train():
+    """
+    Treina Regressão Logística nas amostras coletadas.
+    Requer: scikit-learn instalado + mínimo 200 amostras.
+    Retorna: acurácia, CV score, feature importances e veredicto de edge.
+    """
+    if not DB_AVAILABLE or not db:
+        raise HTTPException(status_code=503, detail="Banco de dados não disponível")
+    try:
+        samples = db.get_ml_training_data(limit=5000)
+        if len(samples) < 50:
+            return {
+                "success": False,
+                "message": f"Amostras insuficientes: {len(samples)}/50 mínimo. "
+                           f"Continue rodando o bot — cada ciclo gera 2-4 amostras.",
+            }
+
+        FEATURE_COLS = [
+            "momentum_score", "roc_score", "rsi_score", "trend_score",
+            "volume_score", "candle_score", "signal_quality", "irq_score",
+            "hour_norm", "atr_sl", "atr_tp", "vol_mult",
+        ]
+
+        X, y = [], []
+        for s in samples:
+            X.append([
+                float(s.get("momentum_score", 0)),
+                float(s.get("roc_score", 0)),
+                float(s.get("rsi_score", 0)),
+                float(s.get("trend_score", 0)),
+                float(s.get("volume_score", 0)),
+                float(s.get("candle_score", 0)),
+                float(s.get("signal_quality", 0)),
+                float(s.get("irq_score", 0)),
+                float(s.get("hour_of_day", 0)) / 24.0,
+                float(s.get("atr_sl", 0)),
+                float(s.get("atr_tp", 0)),
+                float(s.get("vol_mult", 1.0)),
+            ])
+            y.append(int(s.get("label", 0)))
+
+        try:
+            from sklearn.linear_model import LogisticRegression
+            from sklearn.preprocessing import StandardScaler
+            from sklearn.model_selection import cross_val_score
+            import numpy as _np
+            import json as _json
+
+            X_arr = _np.array(X)
+            y_arr = _np.array(y)
+
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X_arr)
+
+            model = LogisticRegression(max_iter=1000, random_state=42)
+
+            # Cross-validation (k=5 se >= 100 amostras, k=3 se < 100)
+            cv_scores = []
+            if len(samples) >= 30:
+                k = min(5, len(samples) // 20)
+                k = max(k, 3)
+                cv_scores = cross_val_score(
+                    model, X_scaled, y_arr, cv=k, scoring="accuracy"
+                ).tolist()
+
+            model.fit(X_scaled, y_arr)
+
+            train_acc = float(model.score(X_scaled, y_arr))
+            base_wr = sum(y) / len(y)
+            cv_mean = sum(cv_scores) / len(cv_scores) if cv_scores else train_acc
+
+            # Feature importances (coeficientes normalizados)
+            coefs = {
+                name: round(float(c), 4)
+                for name, c in zip(FEATURE_COLS, model.coef_[0])
+            }
+            coefs_sorted = dict(sorted(coefs.items(), key=lambda x: abs(x[1]), reverse=True))
+
+            # Veredicto de edge
+            edge_vs_random = cv_mean - base_wr
+            if edge_vs_random > 0.08:
+                verdict = "EDGE FORTE — modelo supera chance aleatória em >8%"
+            elif edge_vs_random > 0.04:
+                verdict = "EDGE MODERADO — modelo supera aleatório em >4%"
+            elif edge_vs_random > 0.01:
+                verdict = "EDGE FRACO — ligeira melhora vs aleatório"
+            else:
+                verdict = "SEM EDGE CLARO — modelo não supera aleatorio"
+
+            # Salvar modelo em JSON para uso futuro
+            import os as _os
+            model_data = {
+                "trained_at": datetime.utcnow().isoformat(),
+                "n_samples": len(samples),
+                "feature_names": FEATURE_COLS,
+                "scaler_mean": scaler.mean_.tolist(),
+                "scaler_std": scaler.scale_.tolist(),
+                "coefs": model.coef_[0].tolist(),
+                "intercept": float(model.intercept_[0]),
+                "train_accuracy": train_acc,
+                "cv_accuracy_mean": cv_mean,
+                "base_win_rate": base_wr,
+                "edge_vs_random": round(edge_vs_random, 4),
+                "verdict": verdict,
+            }
+            _os.makedirs("data", exist_ok=True)
+            with open("data/ml_model.json", "w") as _f:
+                _json.dump(model_data, _f, indent=2)
+
+            return {
+                "success": True,
+                "data": {
+                    "n_samples": len(samples),
+                    "train_accuracy": round(train_acc, 4),
+                    "cv_accuracy_mean": round(cv_mean, 4),
+                    "cv_accuracy_std": round(float(_np.std(cv_scores)), 4) if cv_scores else None,
+                    "base_win_rate": round(base_wr, 4),
+                    "edge_vs_random_pct": round(edge_vs_random * 100, 2),
+                    "verdict": verdict,
+                    "feature_importance": coefs_sorted,
+                    "intercept": round(float(model.intercept_[0]), 4),
+                    "model_saved": "data/ml_model.json",
+                    "next_step": (
+                        "Edge detectado! Rode /ml/train novamente com 500+ amostras para confirmar."
+                        if edge_vs_random > 0.04 else
+                        "Colete mais ciclos (objetivo: 500 amostras) e retreine."
+                    ),
+                },
+            }
+        except ImportError:
+            return {
+                "success": False,
+                "message": "scikit-learn não instalado. Adicione 'scikit-learn' ao requirements.txt e redeploye.",
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/ml/stats")
+async def ml_stats():
+    """Resumo rápido do dataset de treinamento ML."""
+    if not DB_AVAILABLE or not db:
+        raise HTTPException(status_code=503, detail="Banco de dados não disponível")
+    try:
+        stats = db.get_ml_stats()
+        needed = max(0, 500 - stats["total_samples"])
+        cycles_needed = max(0, needed // 3)  # ~3 amostras por ciclo
+        return {
+            "success": True,
+            "data": {
+                **stats,
+                "samples_needed_for_training": needed,
+                "estimated_cycles_needed": cycles_needed,
+                "estimated_days": round(cycles_needed / 144, 1),  # 144 ciclos/dia (10min)
+                "status": (
+                    "PRONTO PARA TREINAR"    if stats["total_samples"] >= 500 else
+                    "COLETANDO (mínimo ok)"  if stats["total_samples"] >= 200 else
+                    "COLETANDO"
+                ),
             },
         }
     except Exception as e:

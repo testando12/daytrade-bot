@@ -101,6 +101,35 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_trades_date ON trades(executed_at);
             CREATE INDEX IF NOT EXISTS idx_positions_active ON positions(is_active);
             CREATE INDEX IF NOT EXISTS idx_snapshots_asset ON market_snapshots(asset);
+
+            CREATE TABLE IF NOT EXISTS ml_training_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cycle_ts TEXT NOT NULL,
+                asset TEXT NOT NULL,
+                tf TEXT NOT NULL DEFAULT '5m',
+                momentum_score REAL NOT NULL DEFAULT 0,
+                roc_score REAL NOT NULL DEFAULT 0,
+                rsi_score REAL NOT NULL DEFAULT 0,
+                trend_score REAL NOT NULL DEFAULT 0,
+                volume_score REAL NOT NULL DEFAULT 0,
+                candle_score REAL NOT NULL DEFAULT 0,
+                signal_quality REAL NOT NULL DEFAULT 0,
+                irq_score REAL NOT NULL DEFAULT 0,
+                hour_of_day INTEGER NOT NULL DEFAULT 0,
+                day_of_week INTEGER NOT NULL DEFAULT 0,
+                atr_sl REAL NOT NULL DEFAULT 0,
+                atr_tp REAL NOT NULL DEFAULT 0,
+                vol_mult REAL NOT NULL DEFAULT 1.0,
+                mom_accel REAL NOT NULL DEFAULT 1.0,
+                ret_pct REAL NOT NULL DEFAULT 0,
+                net_pnl REAL NOT NULL DEFAULT 0,
+                label INTEGER NOT NULL DEFAULT 0,
+                saved_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ml_asset ON ml_training_data(asset);
+            CREATE INDEX IF NOT EXISTS idx_ml_label ON ml_training_data(label);
+            CREATE INDEX IF NOT EXISTS idx_ml_ts ON ml_training_data(cycle_ts);
         """)
 
         conn.commit()
@@ -286,7 +315,105 @@ class Database:
         conn.close()
         return [dict(row) for row in rows]
 
-    def get_stats(self) -> Dict:
+    # ─────────────────────────────────────────
+    # ML TRAINING DATA
+    # ─────────────────────────────────────────
+
+    def save_ml_sample(
+        self,
+        cycle_ts: str,
+        asset: str,
+        tf: str,
+        momentum_score: float,
+        roc_score: float,
+        rsi_score: float,
+        trend_score: float,
+        volume_score: float,
+        candle_score: float,
+        signal_quality: float,
+        irq_score: float,
+        hour_of_day: int,
+        day_of_week: int,
+        atr_sl: float,
+        atr_tp: float,
+        vol_mult: float,
+        mom_accel: float,
+        ret_pct: float,
+        net_pnl: float,
+        label: int,
+    ) -> int:
+        """Salva uma amostra de treinamento ML (features + outcome de um trade)."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO ml_training_data
+               (cycle_ts, asset, tf, momentum_score, roc_score, rsi_score, trend_score,
+                volume_score, candle_score, signal_quality, irq_score, hour_of_day,
+                day_of_week, atr_sl, atr_tp, vol_mult, mom_accel, ret_pct, net_pnl, label)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (cycle_ts, asset, tf, momentum_score, roc_score, rsi_score, trend_score,
+             volume_score, candle_score, signal_quality, irq_score, hour_of_day,
+             day_of_week, atr_sl, atr_tp, vol_mult, mom_accel, ret_pct, net_pnl, label),
+        )
+        sample_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return sample_id
+
+    def get_ml_training_data(self, limit: int = 5000, asset: str = None, tf: str = None) -> List[Dict]:
+        """Retorna amostras de treinamento, mais recentes primeiro."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        conditions = []
+        params = []
+        if asset:
+            conditions.append("asset = ?")
+            params.append(asset)
+        if tf:
+            conditions.append("tf = ?")
+            params.append(tf)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        params.append(limit)
+        cursor.execute(
+            f"SELECT * FROM ml_training_data {where} ORDER BY saved_at DESC LIMIT ?",
+            params,
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    def get_ml_stats(self) -> dict:
+        """Estatísticas resumidas do dataset ML."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as total FROM ml_training_data")
+        total = cursor.fetchone()["total"]
+        cursor.execute("SELECT COUNT(*) as wins FROM ml_training_data WHERE label = 1")
+        wins = cursor.fetchone()["wins"]
+        cursor.execute("SELECT COUNT(DISTINCT asset) as assets FROM ml_training_data")
+        assets = cursor.fetchone()["assets"]
+        cursor.execute("SELECT COUNT(DISTINCT cycle_ts) as cycles FROM ml_training_data")
+        cycles = cursor.fetchone()["cycles"]
+        cursor.execute("SELECT AVG(momentum_score) as avg_mom, AVG(irq_score) as avg_irq FROM ml_training_data")
+        avgs = dict(cursor.fetchone())
+        cursor.execute("SELECT MIN(saved_at) as first, MAX(saved_at) as last FROM ml_training_data")
+        dates = dict(cursor.fetchone())
+        conn.close()
+        return {
+            "total_samples": total,
+            "win_samples": wins,
+            "loss_samples": total - wins,
+            "base_win_rate": round(wins / total, 4) if total > 0 else 0,
+            "unique_assets": assets,
+            "unique_cycles": cycles,
+            "avg_momentum_score": round(avgs.get("avg_mom") or 0, 4),
+            "avg_irq_score": round(avgs.get("avg_irq") or 0, 4),
+            "first_sample": dates.get("first"),
+            "last_sample": dates.get("last"),
+            "ready_for_training": total >= 200,
+            "recommended_min": 500,
+        }
+
         """Retorna estatísticas gerais do banco"""
         conn = self._get_connection()
         cursor = conn.cursor()
