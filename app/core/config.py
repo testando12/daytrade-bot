@@ -35,8 +35,8 @@ class Settings:
 
     # ── ATR Adaptive SL/TP ─────────────────────────────────────────────
     ATR_PERIOD: int = 14  # candles para calcular ATR
-    ATR_SL_MULTIPLIER: float = 1.5  # SL = ATR × 1.5
-    ATR_TP_MULTIPLIER: float = 2.5  # TP = ATR × 2.5 (risk:reward ≥ 1:1.67)
+    ATR_SL_MULTIPLIER: float = 1.3  # SL = ATR × 1.3 (mais apertado → corta perda rápido)
+    ATR_TP_MULTIPLIER: float = 3.5  # TP = ATR × 3.5 (risk:reward ≥ 1:2.7)
     ATR_MIN_SL: float = 0.005  # SL mínimo 0.5% (para não ficar micro)
     ATR_MAX_SL: float = 0.04  # SL máximo 4% (proteção para grana real)
 
