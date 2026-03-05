@@ -121,3 +121,7 @@
 [2026-03-05T15:36:38] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-05T15:36:38] Ciclo concluído | IRQ: 0.102 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 35.8721 | Total P&L: R$ 35.8721
 [2026-03-05T15:36:38] Top posições: OIL=R$14.33 | USDCAD=R$10.87 | USDCHF=R$6.01 | PRIO3=R$4.66
+[2026-03-05T19:46:30] Iniciando ciclo — capital: R$ 150.00
+[2026-03-05T19:46:31] Dados obtidos: 105 ativos via yahoo.finance
+[2026-03-05T19:46:31] Ciclo concluído | IRQ: 0.077 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 16.2139 | Total P&L: R$ 16.2139
+[2026-03-05T19:46:31] Top posições: SHIB=R$5.22 | WIF=R$5.06 | FET=R$3.02 | WMT=R$2.92
