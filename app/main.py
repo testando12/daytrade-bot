@@ -24,6 +24,7 @@ import os
 from app.core.config import settings
 from app import db_state
 from app.engines import MomentumAnalyzer, RiskAnalyzer, PortfolioManager
+from app.engines.mean_reversion import MeanReversionAnalyzer
 from app.engines.risk_manager import risk_manager
 
 # Database
@@ -91,11 +92,12 @@ def _effective_total_cycles() -> int:
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
-# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 65%
-# Otimizado com base em dados reais: 1d gerou 99% do lucro
-_TIMEFRAME_ALLOC = {"5m": 0.10, "1h": 0.25, "1d": 0.65}
-# v2 (2026-03-04): reduzido de 3/6/12 → 1/2/3 para operar com convicção (menos breadth, mais depth)
-_TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 2, "1d": 3}  # top N ativos por bucket
+# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 55% + 10% Mean Reversion
+# v2.1 (2026-03-05): 1d reduzido de 0.65→0.55 para liberar 10% ao bucket de Mean Reversion
+_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.55}
+_MR_ALLOC_PCT      = 0.10   # capital dedicado ao bucket de Mean Reversion
+# v2.1 (2026-03-05): top-N reduzido para 1 por bucket — operar só o melhor sinal de cada timeframe
+_TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 1, "1d": 1}  # era 1/2/3 — com 1d=3 perdia em dias de queda
 
 # Estratégia adaptativa (paper-first): alocação dinâmica + filtro de regime + risco por timeframe
 _strategy_state = {
@@ -213,20 +215,24 @@ def _effective_timeframe_alloc(irq_score: float) -> tuple:
 
         if irq_score >= extreme_irq or loss_streak >= 4:
             regime = "extreme"
+            # v2.1: Mercado turbulento/perdas — proteger capital reduzindo 1d (mais exposto)
+            # Era: 1d×1.35 (ERRADO — aumentava exposição no pior momento)
             alloc = {
-                "5m": alloc["5m"] * 0.10,
-                "1h": alloc["1h"] * 0.50,
-                "1d": alloc["1d"] * 1.35,
+                "5m": alloc["5m"] * 0.50,   # manter algum scalping
+                "1h": alloc["1h"] * 0.30,   # reduzir 1h
+                "1d": alloc["1d"] * 0.10,   # quase zerar 1d em queda extrema
             }
-            reasons.append("regime extremo: reduz curto prazo")
+            reasons.append("regime extremo: protege capital, reduz 1d drasticamente")
         elif irq_score >= high_irq or loss_streak >= 2:
             regime = "cautious"
+            # v2.1: Sinal de alerta — reduzir 1d moderadamente
+            # Era: 1d×1.15 (ERRADO — reforçava a perda)
             alloc = {
-                "5m": alloc["5m"] * 0.35,
-                "1h": alloc["1h"] * 0.80,
-                "1d": alloc["1d"] * 1.15,
+                "5m": alloc["5m"] * 0.70,
+                "1h": alloc["1h"] * 0.60,
+                "1d": alloc["1d"] * 0.50,   # metade da exposição 1d em regime cauteloso
             }
-            reasons.append("regime cauteloso")
+            reasons.append("regime cauteloso: reduz exposição 1d")
 
     alloc = _normalize_alloc(alloc)
     _strategy_state["regime"] = regime
@@ -2802,23 +2808,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             adjusted = adjusted * sentiment * orderbook * cross_mom
         return round(adjusted, 2)
 
-    # ── 3c. Mean Reversion — detecta ativos com queda brusca ────────────
-    def _mean_reversion_candidates(klines: dict, n: int = 3) -> list:
-        """Retorna ativos que caíram muito rápido e tendem a reverter."""
-        candidates = []
-        for asset, data in klines.items():
-            prices = data.get("prices", [])
-            if len(prices) < 10:
-                continue
-            recent_avg = sum(prices[-10:]) / 10
-            current    = prices[-1]
-            if recent_avg > 0:
-                drop_pct = (current - recent_avg) / recent_avg
-                # Queda > 3% = candidato a reversão
-                if drop_pct < -0.03:
-                    candidates.append((asset, drop_pct))
-        candidates.sort(key=lambda x: x[1])  # mais caiu primeiro
-        return [a for a, _ in candidates[:n]]
+    # ── 3c. Mean Reversion v2.1 — usa engine com BB + RSI + divergência ─
+    # (substituiu a função naïve que só checava queda >3%, pegava faca caindo)
 
     # ── 3d. DCA inteligente — acumula em posições perdedoras ─────────────
     def _dca_adjust(asset: str, current_amount: float, klines: dict) -> float:
@@ -2832,11 +2823,16 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             return round(current_amount * 1.5, 2)
         return current_amount
 
-    # Adicionar candidatos de mean reversion ao 5m bucket
-    mr_candidates = _mean_reversion_candidates(klines_by_tf["5m"])
-    for mc in mr_candidates:
-        if mc not in top_5m:
-            top_5m.append(mc)
+    # ── Mean Reversion: bucket dedicado (usa 1h para sinais mais confiáveis) ─
+    # v2.1: não adiciona mais ao top_5m — tem capital próprio
+    mr_results  = MeanReversionAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=2)
+    top_mr      = list(mr_results.keys())
+    # Adapta mr_results para o formato que _calc_pnl_bucket espera (momentum_score >= 0.55)
+    mom_mr      = {
+        a: {**d, "momentum_score": max(d["mr_score"], 0.56)}
+        for a, d in mr_results.items()
+    }
+    capital_mr  = round(capital * _MR_ALLOC_PCT, 2) if top_mr else 0.0
 
     cycle_costs = {
         "total": 0.0,
@@ -2989,7 +2985,13 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     pnl_1h, pos_1h, costs_1h = _calc_pnl_bucket(top_1h, klines_by_tf["1h"], capital_1h, "1h", mom_1h)
     pnl_1d, pos_1d, costs_1d = _calc_pnl_bucket(top_1d, klines_by_tf["1d"], capital_1d, "1d", mom_1d)
 
-    # ── 4a. Grid Trading — lucra com mercado lateral ─────────────────────
+    # ── 4a-mr. Mean Reversion bucket — bucket dedicado de 10% ────────────
+    pnl_mr, pos_mr, costs_mr = _calc_pnl_bucket(top_mr, klines_by_tf["1h"], capital_mr, "mr", mom_mr)
+    if top_mr:
+        _trade_log("MR_SIGNAL", "—", capital_mr,
+            f"🔁 Mean Reversion: {len(top_mr)} ativo(s) | {list(top_mr)} | R${capital_mr:.2f} | P&L: R${pnl_mr:+.4f}")
+
+    # ── 4b. Grid Trading — lucra com mercado lateral ─────────────────────
     grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
     grid_pnl, grid_details = _grid_trading_pnl(klines_by_tf["5m"], grid_capital)
     if grid_pnl > 0:
@@ -2997,8 +2999,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
 
     fees_total = round(cycle_costs.get("total", 0.0), 4)
-    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + grid_pnl + fees_total, 4)
-    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + grid_pnl, 4)
+    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + grid_pnl + fees_total, 4)
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + grid_pnl, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
@@ -3061,6 +3063,13 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         else:
             new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "1d",
                 "pct": round(info["amount"]/capital*100, 1), "classification": "LONG", "change_pct": info["ret_pct"]}
+    for asset, info in pos_mr.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+mr"
+        else:
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "mr",
+                "pct": round(info["amount"]/capital*100, 1), "classification": "REVERSION", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
     if len(new_positions) == 0:
@@ -3183,8 +3192,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     # ── 6. Log e histórico ───────────────────────────────────────────────
     turbo_active = _is_turbo_mode(klines_by_tf["5m"])
+    mr_info = f" | MR: R${pnl_mr:+.2f}" if top_mr else ""
     _trade_log("CICLO", "—", capital,
-        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f} | Grid: R${grid_pnl:+.2f} | Custos: R${fees_total:.2f} | Bruto: R${gross_cycle_pnl:+.2f} | Líq: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
+        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
 
@@ -3265,6 +3275,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "pnl_5m":      pnl_5m,
         "pnl_1h":      pnl_1h,
         "pnl_1d":      pnl_1d,
+        "pnl_mr":      pnl_mr,
         "costs": {
             "total": round(cycle_costs.get("total", 0.0), 4),
             "brokerage": round(cycle_costs.get("brokerage", 0.0), 4),
@@ -3283,6 +3294,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "capital_5m":  capital_5m,
         "capital_1h":  capital_1h,
         "capital_1d":  capital_1d,
+        "capital_mr":  capital_mr,
         # Grid Trading
         "grid_pnl":    grid_pnl,
         "grid_assets":  len(grid_details),
@@ -3295,6 +3307,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             "volume_confirm": settings.VOLUME_CONFIRM_ENABLED,
             "partial_tp": settings.PARTIAL_TP_ENABLED,
             "momentum_accel": settings.MOMENTUM_ACCEL_ENABLED,
+            "mean_reversion": len(top_mr) > 0,
             "adaptive_alloc": _strategy_state.get("dynamic_alloc_enabled", False),
             "regime_filter": _strategy_state.get("regime_filter_enabled", False),
             "tf_risk_tuning": _strategy_state.get("tf_risk_tuning_enabled", False),
@@ -3555,6 +3568,7 @@ async def get_performance():
             "alloc_5m_pct":      int(_TIMEFRAME_ALLOC["5m"] * 100),
             "alloc_1h_pct":      int(_TIMEFRAME_ALLOC["1h"] * 100),
             "alloc_1d_pct":      int(_TIMEFRAME_ALLOC["1d"] * 100),
+            "alloc_mr_pct":      int(_MR_ALLOC_PCT * 100),
         },
     }
 

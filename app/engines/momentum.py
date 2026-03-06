@@ -60,7 +60,7 @@ def _roc(prices: List[float], n: int) -> float:
 class MomentumAnalyzer:
     """Analisador de momentum v3 — calibrado para >= 70% direção"""
 
-    ENTRY_THRESHOLD = 0.02   # limiar muito baixo para sempre operar
+    ENTRY_THRESHOLD = 0.50   # v2.1: alinhado com MIN_MOMENTUM_SCORE — só opera sinais fortes
 
     W_ROC     = 0.35   # ROC (mais preditivo)
     W_RSI     = 0.25   # RSI tendency

@@ -103,15 +103,9 @@ class PortfolioManager:
                 candidates[asset] = max(score, 0.02) * atr_factor
 
         if not candidates:
-            # Fallback: aloca igualmente nos top-3 ativos positivos
-            sorted_assets = sorted(momentum_scores.items(), key=lambda x: x[1], reverse=True)
-            top = [(a, s) for a, s in sorted_assets if s > 0][:3]
-            if not top:
-                top = sorted_assets[:2]  # pega os 2 melhores mesmo que negativos
-            total_score_fb = sum(s for _, s in top) or 1.0
-            per_asset = total_capital * 0.20  # 20% por ativo no fallback
-            return {a: (per_asset if (a, s) in top else 0.0)
-                    for a, s in momentum_scores.items()}
+            # v2.1: sem candidatos válidos → não forçar entrada com scores fracos/negativos
+            # Retorna alocação zerada para todos os ativos
+            return {a: 0.0 for a in momentum_scores}
 
         total_score = sum(candidates.values()) or 1.0
 
