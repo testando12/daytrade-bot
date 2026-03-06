@@ -141,3 +141,7 @@
 [2026-03-06T19:24:55] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-06T19:24:55] Ciclo concluído | IRQ: 0.077 (NORMAL) | BUY:3 SELL:0 | P&L estimado: R$ 45.0000 | Total P&L: R$ 45.0000
 [2026-03-06T19:24:55] Top posições: FLOKI=R$15.64 | WIF=R$15.58 | SHIB=R$13.78
+[2026-03-06T20:02:39] Iniciando ciclo — capital: R$ 150.00
+[2026-03-06T20:02:40] Dados obtidos: 105 ativos via yahoo.finance
+[2026-03-06T20:02:40] Ciclo concluído | IRQ: 0.079 (NORMAL) | BUY:3 SELL:0 | P&L estimado: R$ 53.0823 | Total P&L: R$ 53.0823
+[2026-03-06T20:02:40] Top posições: CRM=R$22.84 | IBM=R$17.57 | LREN3=R$12.67
