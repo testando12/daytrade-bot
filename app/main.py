@@ -26,6 +26,7 @@ from app import db_state
 from app.engines import MomentumAnalyzer, RiskAnalyzer, PortfolioManager
 from app.engines.mean_reversion import MeanReversionAnalyzer
 from app.engines.breakout import BreakoutAnalyzer
+from app.engines.squeeze import SqueezeAnalyzer
 from app.engines.risk_manager import risk_manager
 
 # Database
@@ -100,11 +101,12 @@ def _effective_total_cycles() -> int:
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
-# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 47% + 10% Mean Reversion + 8% Breakout
-# v2.2 (2026-03-06): 1d reduzido de 0.55→0.47 para liberar 8% ao bucket de Breakout
-_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.47}
+# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 41% + 10% MR + 8% Breakout + 6% Squeeze
+# v2.3 (2026-03-07): 1d reduzido de 0.47→0.41 para liberar 6% ao bucket de Squeeze (Volatility Compression)
+_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.41}
 _MR_ALLOC_PCT      = 0.10   # capital dedicado ao bucket de Mean Reversion
 _BO_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Breakout
+_SQ_ALLOC_PCT      = 0.06   # capital dedicado ao bucket de Squeeze (Volatility Compression)
 # v2.1 (2026-03-05): top-N reduzido para 1 por bucket — operar só o melhor sinal de cada timeframe
 _TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 1, "1d": 1}  # era 1/2/3 — com 1d=3 perdia em dias de queda
 
@@ -192,6 +194,45 @@ def _normalize_alloc(alloc: dict) -> dict:
     if total <= 0:
         return dict(_TIMEFRAME_ALLOC)
     return {k: max(0.0, float(v)) / total for k, v in alloc.items()}
+
+
+def _calc_adx_simple(prices: list, period: int = 14) -> float:
+    """
+    ADX simplificado usando apenas fechamentos (sem High/Low).
+    Usa variações absolutas como proxy de True Range e signed changes para DM.
+    Retorna valor 0-100; >25 = tendência forte, <18 = mercado lateral.
+    """
+    if len(prices) < period * 3:
+        return 20.0  # neutro por padrão
+    changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+    recent  = changes[-(period * 3):]
+
+    def wilder(vals: list, p: int) -> float:
+        if len(vals) < p:
+            return sum(abs(v) for v in vals) / max(len(vals), 1)
+        sm = sum(abs(v) for v in vals[:p])
+        for v in vals[p:]:
+            sm = sm - sm / p + abs(v)
+        return sm
+
+    plus_dm  = [max(c, 0.0) for c in recent]
+    minus_dm = [max(-c, 0.0) for c in recent]
+    tr_vals  = [abs(c) for c in recent]
+
+    sm_plus  = wilder(plus_dm, period)
+    sm_minus = wilder(minus_dm, period)
+    sm_tr    = wilder(tr_vals, period)
+
+    if sm_tr == 0:
+        return 0.0
+    plus_di  = 100.0 * sm_plus  / sm_tr
+    minus_di = 100.0 * sm_minus / sm_tr
+    denom    = plus_di + minus_di
+    if denom == 0:
+        return 0.0
+    dx = 100.0 * abs(plus_di - minus_di) / denom
+    # Suaviza com Wilder sobre as últimas 'period' estimativas de DX
+    return round(dx, 2)
 
 
 def _effective_timeframe_alloc(irq_score: float) -> tuple:
@@ -2816,6 +2857,16 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     capital_1h = round(capital * effective_alloc["1h"], 2)
     capital_1d = round(capital * effective_alloc["1d"], 2)
 
+    # ── ADX Regime Detection v2.3 — redireciona capital entre estratégias ────
+    # ADX alto = TREND: Breakout excela, MR falha; ADX baixo = LATERAL: MR/Squeeze excedem
+    _adx_val    = _calc_adx_simple(ref_data.get("prices", []))
+    if _adx_val > 25:
+        _adx_regime = "TREND"    # tendência forte
+    elif _adx_val < 18:
+        _adx_regime = "LATERAL"  # mercado lateral/consolidação
+    else:
+        _adx_regime = "NEUTRAL"
+
     # ── 3b. Kelly Criterion + sinais avançados ─────────────────────────
     def _kelly_weight(score: float, base_amount: float, asset: str = "") -> float:
         """Retorna alocação ajustada via Kelly fracionário + sinais avançados.
@@ -2873,6 +2924,30 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         for a, d in bo_results.items()
     }
     capital_bo  = round(capital * _BO_ALLOC_PCT, 2) if top_bo else 0.0
+
+    # ── Squeeze: bucket dedicado de 6% (Volatility Compression → Expansion) ─
+    # v2.3: entra no início da expansão após Bollinger Squeeze confirmado por Keltner
+    sq_results  = SqueezeAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
+    top_sq      = list(sq_results.keys())
+    # Adapta sq_results para o formato que _calc_pnl_bucket espera (momentum_score >= 0.55)
+    mom_sq      = {
+        a: {**d, "momentum_score": max(d["squeeze_score"], 0.59)}
+        for a, d in sq_results.items()
+    }
+    capital_sq  = round(capital * _SQ_ALLOC_PCT, 2) if top_sq else 0.0
+
+    # ── ADX Regime Routing: redireciona capital entre estratégias ────────
+    # TREND  (ADX>25): Breakout excela, MR falha contra tendência
+    # LATERAL(ADX<18): MR+Squeeze excedem, Breakout gera falsos sinais
+    if _adx_regime == "TREND":
+        capital_mr = round(capital_mr * 0.35, 2)   # reduz MR em tendência
+        capital_bo = round(capital_bo * 1.40, 2)   # boost Breakout em tendência
+        capital_sq = round(capital_sq * 1.20, 2)   # Squeeze pode disparar em tendência
+    elif _adx_regime == "LATERAL":
+        capital_mr = round(capital_mr * 1.40, 2)   # boost MR em mercado lateral
+        capital_bo = round(capital_bo * 0.25, 2)   # suprime Breakout (falsos sinais)
+        capital_sq = round(capital_sq * 1.30, 2)   # Squeeze acumula em lateral
+    # NEUTRAL: sem ajuste — usa capital base
 
     cycle_costs = {
         "total": 0.0,
@@ -3037,6 +3112,14 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         _trade_log("BO_SIGNAL", "—", capital_bo,
             f"🚀 Breakout: {len(top_bo)} ativo(s) | {list(top_bo)} | R${capital_bo:.2f} | P&L: R${pnl_bo:+.4f}")
 
+    # ── 4a-sq. Squeeze bucket — Volatility Compression → Expansion (6%) ──
+    pnl_sq, pos_sq, costs_sq = _calc_pnl_bucket(top_sq, klines_by_tf["1h"], capital_sq, "sq", mom_sq)
+    if top_sq:
+        _sq_dir  = sq_results.get(list(top_sq)[0], {}).get("direction", "?")
+        _sq_bars = sq_results.get(list(top_sq)[0], {}).get("squeeze_bars", 0)
+        _trade_log("SQ_SIGNAL", "—", capital_sq,
+            f"🎯 Squeeze {_sq_dir}: {len(top_sq)} ativo(s) | {list(top_sq)} | {_sq_bars} bars | R${capital_sq:.2f} | P&L: R${pnl_sq:+.4f} | ADX={_adx_val:.1f}({_adx_regime})")
+
     # ── 4b. Grid Trading — lucra com mercado lateral ─────────────────────
     grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
     grid_pnl, grid_details = _grid_trading_pnl(klines_by_tf["5m"], grid_capital)
@@ -3045,8 +3128,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
 
     fees_total = round(cycle_costs.get("total", 0.0), 4)
-    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + grid_pnl + fees_total, 4)
-    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + grid_pnl, 4)
+    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + grid_pnl + fees_total, 4)
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + grid_pnl, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
@@ -3123,6 +3206,14 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         else:
             new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "bo",
                 "pct": round(info["amount"]/capital*100, 1), "classification": "BREAKOUT", "change_pct": info["ret_pct"]}
+    for asset, info in pos_sq.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+sq"
+        else:
+            sq_dir = sq_results.get(asset, {}).get("direction", "LONG")
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "sq",
+                "pct": round(info["amount"]/capital*100, 1), "classification": f"SQUEEZE_{sq_dir}", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
     if len(new_positions) == 0:
@@ -3247,8 +3338,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     turbo_active = _is_turbo_mode(klines_by_tf["5m"])
     mr_info = f" | MR: R${pnl_mr:+.2f}" if top_mr else ""
     bo_info = f" | BO: R${pnl_bo:+.2f}" if top_bo else ""
+    sq_info = f" | SQ: R${pnl_sq:+.2f}" if top_sq else ""
     _trade_log("CICLO", "—", capital,
-        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info}{bo_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
+        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info}{bo_info}{sq_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | ADX: {_adx_val:.1f}({_adx_regime}) | Turbo: {'ON' if turbo_active else 'OFF'}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
 
@@ -3331,6 +3423,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "pnl_1d":      pnl_1d,
         "pnl_mr":      pnl_mr,
         "pnl_bo":      pnl_bo,
+        "pnl_sq":      pnl_sq,
         "costs": {
             "total": round(cycle_costs.get("total", 0.0), 4),
             "brokerage": round(cycle_costs.get("brokerage", 0.0), 4),
@@ -3351,6 +3444,10 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "capital_1d":  capital_1d,
         "capital_mr":  capital_mr,
         "capital_bo":  capital_bo,
+        "capital_sq":  capital_sq,
+        # Regime
+        "adx_value":   round(_adx_val, 1),
+        "adx_regime":  _adx_regime,
         # Grid Trading
         "grid_pnl":    grid_pnl,
         "grid_assets":  len(grid_details),
@@ -3365,6 +3462,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             "momentum_accel": settings.MOMENTUM_ACCEL_ENABLED,
             "mean_reversion": len(top_mr) > 0,
             "breakout": len(top_bo) > 0,
+            "squeeze": len(top_sq) > 0,
             "adaptive_alloc": _strategy_state.get("dynamic_alloc_enabled", False),
             "regime_filter": _strategy_state.get("regime_filter_enabled", False),
             "tf_risk_tuning": _strategy_state.get("tf_risk_tuning_enabled", False),
@@ -3631,6 +3729,7 @@ async def get_performance():
             "alloc_1d_pct":      int(_TIMEFRAME_ALLOC["1d"] * 100),
             "alloc_mr_pct":      int(_MR_ALLOC_PCT * 100),
             "alloc_bo_pct":      int(_BO_ALLOC_PCT * 100),
+            "alloc_sq_pct":      int(_SQ_ALLOC_PCT * 100),
         },
     }
 
