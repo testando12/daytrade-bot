@@ -459,7 +459,7 @@ Posição foi encerrada automaticamente.""",
             message=(
                 f"O bot encontrou um erro e pode ter parado de operar.\n\n"
                 f"Erro: {error_msg[:300]}\n\n"
-                f"Acesse o Railway para verificar os logs."
+                f"Acesse os logs locais para verificar o erro."
             ),
             level=AlertLevel.ALERT
         )
