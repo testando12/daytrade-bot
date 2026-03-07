@@ -2001,7 +2001,7 @@ async def trade_status():
     today_str = datetime.now(_brt).strftime("%Y-%m-%d")
     today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str)]
     pnl_today_live = round(sum(c.get("pnl", 0) for c in today_cycles), 2)
-    capital_base = _trade_state["capital"]
+    capital_base = _trade_state.get("capital", settings.INITIAL_CAPITAL)
     capital_efetivo = round(capital_base + pnl_today_live, 2)
 
     # ── Capital Split BRL vs USD ─────────────────────────────────────────
@@ -2025,12 +2025,12 @@ async def trade_status():
             "capital":          capital_base,
             "capital_efetivo":  capital_efetivo,
             "pnl_hoje":         pnl_today_live,
-            "auto_trading":     _trade_state["auto_trading"],
-            "total_pnl":        _trade_state["total_pnl"],
-            "positions":        _trade_state["positions"],
+            "auto_trading":     _trade_state.get("auto_trading", True),
+            "total_pnl":        _trade_state.get("total_pnl", 0.0),
+            "positions":        _trade_state.get("positions", []),
             "last_no_position_reason": _trade_state.get("last_no_position_reason", ""),
-            "log":              _trade_state["log"],
-            "last_cycle":       _trade_state["last_cycle"],
+            "log":              _trade_state.get("log", []),
+            "last_cycle":       _trade_state.get("last_cycle", None),
             "b3_open":          _is_market_open(),
             "session":          session_label,
             # ── Bolsões BRL / USD ──────────────────────────────────────

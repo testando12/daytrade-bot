@@ -9,8 +9,10 @@
 // CONFIG
 // =============================================
 
-// API sempre local
-let API_BASE = 'http://localhost:8000';
+// Quando acessado localmente usa localhost:8000; via túnel usa a própria origem
+let API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : window.location.origin;
 let currentPage = 'dashboard';
 let autoRefreshInterval = null;
 let charts = {};
