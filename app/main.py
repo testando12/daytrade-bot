@@ -27,6 +27,9 @@ from app.engines import MomentumAnalyzer, RiskAnalyzer, PortfolioManager
 from app.engines.mean_reversion import MeanReversionAnalyzer
 from app.engines.breakout import BreakoutAnalyzer
 from app.engines.squeeze import SqueezeAnalyzer
+from app.engines.liquidity_sweep import LiquiditySweepAnalyzer
+from app.engines.fvg import FVGAnalyzer
+from app.engines.regime import RegimeDetector
 from app.engines.risk_manager import risk_manager
 
 # Database
@@ -101,12 +104,14 @@ def _effective_total_cycles() -> int:
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
-# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 41% + 10% MR + 8% Breakout + 6% Squeeze
-# v2.3 (2026-03-07): 1d reduzido de 0.47→0.41 para liberar 6% ao bucket de Squeeze (Volatility Compression)
-_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.41}
+# Alocação por timeframe: SHORT 10% + MEDIUM 25% + LONG 37% + MR 10% + BO 8% + SQ 6% + LS 2% + FVG 2% = 100%
+# v3.0 (2026-03-07): 1d reduzido 41%→37% para liberar 4% aos buckets LS+FVG + RegimeDetector multi-sinal
+_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.37}
 _MR_ALLOC_PCT      = 0.10   # capital dedicado ao bucket de Mean Reversion
 _BO_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Breakout
 _SQ_ALLOC_PCT      = 0.06   # capital dedicado ao bucket de Squeeze (Volatility Compression)
+_LS_ALLOC_PCT      = 0.02   # capital dedicado ao bucket de Liquidity Sweep (Stop Hunt)
+_FVG_ALLOC_PCT     = 0.02   # capital dedicado ao bucket de Fair Value Gap (Imbalance Fill)
 # v2.1 (2026-03-05): top-N reduzido para 1 por bucket — operar só o melhor sinal de cada timeframe
 _TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 1, "1d": 1}  # era 1/2/3 — com 1d=3 perdia em dias de queda
 
@@ -196,10 +201,41 @@ def _normalize_alloc(alloc: dict) -> dict:
     return {k: max(0.0, float(v)) / total for k, v in alloc.items()}
 
 
+def _dynamic_strategy_weights(lookback: int = 30) -> dict:
+    """
+    Dynamic Strategy Allocation v1 — ajusta capital de cada bucket pelo Sharpe recente.
+    Lê os últimos `lookback` ciclos e calcula: mean(pnl) / std(pnl) por estratégia.
+    Sharpe > 1.0 → ×1.50 | > 0.5 → ×1.25 | > 0 → ×1.10 | > -0.3 → ×0.85 | else → ×0.60
+    """
+    cycles = _perf_state.get("cycles", [])[-lookback:]
+    if len(cycles) < 5:
+        return {k: 1.0 for k in ("mr", "bo", "sq", "ls", "fvg")}
+
+    def _sharpe(key: str) -> float:
+        vals = [c.get(key, 0.0) or 0.0 for c in cycles]
+        if len(vals) < 2:
+            return 0.0
+        mu   = sum(vals) / len(vals)
+        std  = (sum((x - mu) ** 2 for x in vals) / len(vals)) ** 0.5
+        return (mu / std) if std > 0 else 0.0
+
+    def _sharpe_to_mult(s: float) -> float:
+        if s >  1.0: return 1.50
+        if s >  0.5: return 1.25
+        if s >  0.0: return 1.10
+        if s > -0.3: return 0.85
+        return 0.60
+
+    return {
+        k: round(_sharpe_to_mult(_sharpe(f"pnl_{k}")), 3)
+        for k in ("mr", "bo", "sq", "ls", "fvg")
+    }
+
+
 def _calc_adx_simple(prices: list, period: int = 14) -> float:
     """
     ADX simplificado usando apenas fechamentos (sem High/Low).
-    Usa variações absolutas como proxy de True Range e signed changes para DM.
+    Mantido para compatibilidade; internamente o RegimeDetector usa a mesma lógica.
     Retorna valor 0-100; >25 = tendência forte, <18 = mercado lateral.
     """
     if len(prices) < period * 3:
@@ -1964,7 +2000,9 @@ _perf_db_safety_checked: bool = False
 
 def _record_cycle_performance(pnl: float, capital: float, irq: float,
                                pnl_5m: float = 0.0, pnl_1h: float = 0.0, pnl_1d: float = 0.0,
-                               costs: dict = None):
+                               costs: dict = None,
+                               pnl_mr: float = 0.0, pnl_bo: float = 0.0, pnl_sq: float = 0.0,
+                               pnl_ls: float = 0.0, pnl_fvg: float = 0.0):
     """Registra o P&L de um ciclo no histórico de performance."""
     global _perf_db_safety_checked, _perf_state
     # ── SAFETY MERGE: no primeiro ciclo após startup, verifica se o DB tem mais ciclos ──
@@ -1993,6 +2031,11 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
         "pnl_5m":    round(pnl_5m, 4),
         "pnl_1h":    round(pnl_1h, 4),
         "pnl_1d":    round(pnl_1d, 4),
+        "pnl_mr":    round(pnl_mr, 4),
+        "pnl_bo":    round(pnl_bo, 4),
+        "pnl_sq":    round(pnl_sq, 4),
+        "pnl_ls":    round(pnl_ls, 4),
+        "pnl_fvg":   round(pnl_fvg, 4),
         "fees_total": round(cst.get("total", 0.0), 6),
         "fees_brokerage": round(cst.get("brokerage", 0.0), 6),
         "fees_exchange": round(cst.get("exchange_fees", 0.0), 6),
@@ -2857,15 +2900,14 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     capital_1h = round(capital * effective_alloc["1h"], 2)
     capital_1d = round(capital * effective_alloc["1d"], 2)
 
-    # ── ADX Regime Detection v2.3 — redireciona capital entre estratégias ────
-    # ADX alto = TREND: Breakout excela, MR falha; ADX baixo = LATERAL: MR/Squeeze excedem
-    _adx_val    = _calc_adx_simple(ref_data.get("prices", []))
-    if _adx_val > 25:
-        _adx_regime = "TREND"    # tendência forte
-    elif _adx_val < 18:
-        _adx_regime = "LATERAL"  # mercado lateral/consolidação
-    else:
-        _adx_regime = "NEUTRAL"
+    # ── Regime Detection v3.0 — ADX + ATR Ratio + Hurst Exponent ─────────
+    # Substitui ADX simples por detector multi-sinal com 3 indicadores
+    _regime_result = RegimeDetector.detect(ref_data.get("prices", []))
+    _adx_val    = _regime_result["adx"]
+    _adx_regime = _regime_result["regime"]   # TREND_STRONG/TREND_WEAK/LATERAL/HIGH_VOL/LOW_VOL_SQUEEZE/NEUTRAL
+    _atr_ratio  = _regime_result["atr_ratio"]
+    _hurst      = _regime_result["hurst"]
+    _regime_conf = _regime_result["confidence"]
 
     # ── 3b. Kelly Criterion + sinais avançados ─────────────────────────
     def _kelly_weight(score: float, base_amount: float, asset: str = "") -> float:
@@ -2929,25 +2971,50 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # v2.3: entra no início da expansão após Bollinger Squeeze confirmado por Keltner
     sq_results  = SqueezeAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
     top_sq      = list(sq_results.keys())
-    # Adapta sq_results para o formato que _calc_pnl_bucket espera (momentum_score >= 0.55)
     mom_sq      = {
         a: {**d, "momentum_score": max(d["squeeze_score"], 0.59)}
         for a, d in sq_results.items()
     }
     capital_sq  = round(capital * _SQ_ALLOC_PCT, 2) if top_sq else 0.0
 
-    # ── ADX Regime Routing: redireciona capital entre estratégias ────────
-    # TREND  (ADX>25): Breakout excela, MR falha contra tendência
-    # LATERAL(ADX<18): MR+Squeeze excedem, Breakout gera falsos sinais
-    if _adx_regime == "TREND":
-        capital_mr = round(capital_mr * 0.35, 2)   # reduz MR em tendência
-        capital_bo = round(capital_bo * 1.40, 2)   # boost Breakout em tendência
-        capital_sq = round(capital_sq * 1.20, 2)   # Squeeze pode disparar em tendência
-    elif _adx_regime == "LATERAL":
-        capital_mr = round(capital_mr * 1.40, 2)   # boost MR em mercado lateral
-        capital_bo = round(capital_bo * 0.25, 2)   # suprime Breakout (falsos sinais)
-        capital_sq = round(capital_sq * 1.30, 2)   # Squeeze acumula em lateral
-    # NEUTRAL: sem ajuste — usa capital base
+    # ── Liquidity Sweep: bucket de 2% (Stop Hunt / Caça de Liquidez) ────
+    # v3.0: detecta falsas rupturas seguidas de reversão institucional
+    ls_results  = LiquiditySweepAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
+    top_ls      = list(ls_results.keys())
+    mom_ls      = {
+        a: {**d, "momentum_score": max(d["sweep_score"], 0.61)}
+        for a, d in ls_results.items()
+    }
+    capital_ls  = round(capital * _LS_ALLOC_PCT, 2) if top_ls else 0.0
+
+    # ── Fair Value Gap: bucket de 2% (Imbalance Fill) ───────────────────
+    # v3.0: detecta gaps institucionais e opera o preenchimento
+    fvg_results = FVGAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
+    top_fvg     = list(fvg_results.keys())
+    mom_fvg     = {
+        a: {**d, "momentum_score": max(d["fvg_score"], 0.61)}
+        for a, d in fvg_results.items()
+    }
+    capital_fvg = round(capital * _FVG_ALLOC_PCT, 2) if top_fvg else 0.0
+
+    # ── Regime Routing v3.0 — aplica multipliers do RegimeDetector ───────
+    # Usa ADX + ATR Ratio + Hurst para rotear capital de forma ótima
+    _base_caps = {"mr": capital_mr, "bo": capital_bo, "sq": capital_sq,
+                  "ls": capital_ls, "fvg": capital_fvg}
+    _regime_caps = RegimeDetector.apply_multipliers(_base_caps, _regime_result)
+    capital_mr  = round(_regime_caps["mr"], 2)
+    capital_bo  = round(_regime_caps["bo"], 2)
+    capital_sq  = round(_regime_caps["sq"], 2)
+    capital_ls  = round(_regime_caps["ls"], 2)
+    capital_fvg = round(_regime_caps["fvg"], 2)
+
+    # ── Dynamic Strategy Allocation — ajuste fino por Sharpe histórico ───
+    _dyn_weights = _dynamic_strategy_weights(lookback=30)
+    capital_mr  = round(capital_mr  * _dyn_weights["mr"],  2)
+    capital_bo  = round(capital_bo  * _dyn_weights["bo"],  2)
+    capital_sq  = round(capital_sq  * _dyn_weights["sq"],  2)
+    capital_ls  = round(capital_ls  * _dyn_weights["ls"],  2)
+    capital_fvg = round(capital_fvg * _dyn_weights["fvg"], 2)
 
     cycle_costs = {
         "total": 0.0,
@@ -3118,7 +3185,23 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         _sq_dir  = sq_results.get(list(top_sq)[0], {}).get("direction", "?")
         _sq_bars = sq_results.get(list(top_sq)[0], {}).get("squeeze_bars", 0)
         _trade_log("SQ_SIGNAL", "—", capital_sq,
-            f"🎯 Squeeze {_sq_dir}: {len(top_sq)} ativo(s) | {list(top_sq)} | {_sq_bars} bars | R${capital_sq:.2f} | P&L: R${pnl_sq:+.4f} | ADX={_adx_val:.1f}({_adx_regime})")
+            f"🎯 Squeeze {_sq_dir}: {len(top_sq)} ativo(s) | {list(top_sq)} | {_sq_bars} bars | R${capital_sq:.2f} | P&L: R${pnl_sq:+.4f} | Regime={_adx_regime}")
+
+    # ── 4a-ls. Liquidity Sweep bucket — Stop Hunt / Reversão Institucional (2%) ──
+    pnl_ls, pos_ls, costs_ls = _calc_pnl_bucket(top_ls, klines_by_tf["1h"], capital_ls, "ls", mom_ls)
+    if top_ls:
+        _ls_dir   = ls_results.get(list(top_ls)[0], {}).get("direction", "?")
+        _ls_depth = ls_results.get(list(top_ls)[0], {}).get("sweep_depth_pct", 0.0)
+        _trade_log("LS_SIGNAL", "—", capital_ls,
+            f"🎣 LiqSweep {_ls_dir}: {len(top_ls)} ativo(s) | {list(top_ls)} | depth={_ls_depth*100:.2f}% | R${capital_ls:.2f} | P&L: R${pnl_ls:+.4f}")
+
+    # ── 4a-fvg. Fair Value Gap bucket — Imbalance Fill (2%) ─────────────
+    pnl_fvg, pos_fvg, costs_fvg = _calc_pnl_bucket(top_fvg, klines_by_tf["1h"], capital_fvg, "fvg", mom_fvg)
+    if top_fvg:
+        _fvg_dir  = fvg_results.get(list(top_fvg)[0], {}).get("direction", "?")
+        _fvg_gap  = fvg_results.get(list(top_fvg)[0], {}).get("gap_size_pct", 0.0)
+        _trade_log("FVG_SIGNAL", "—", capital_fvg,
+            f"📐 FVG {_fvg_dir}: {len(top_fvg)} ativo(s) | {list(top_fvg)} | gap={_fvg_gap:.2f}% | R${capital_fvg:.2f} | P&L: R${pnl_fvg:+.4f}")
 
     # ── 4b. Grid Trading — lucra com mercado lateral ─────────────────────
     grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
@@ -3128,8 +3211,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
 
     fees_total = round(cycle_costs.get("total", 0.0), 4)
-    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + grid_pnl + fees_total, 4)
-    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + grid_pnl, 4)
+    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + grid_pnl + fees_total, 4)
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + grid_pnl, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
@@ -3214,6 +3297,22 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             sq_dir = sq_results.get(asset, {}).get("direction", "LONG")
             new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "sq",
                 "pct": round(info["amount"]/capital*100, 1), "classification": f"SQUEEZE_{sq_dir}", "change_pct": info["ret_pct"]}
+    for asset, info in pos_ls.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+ls"
+        else:
+            ls_dir = ls_results.get(asset, {}).get("direction", "LONG")
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "ls",
+                "pct": round(info["amount"]/capital*100, 1), "classification": f"SWEEP_{ls_dir}", "change_pct": info["ret_pct"]}
+    for asset, info in pos_fvg.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+fvg"
+        else:
+            fvg_dir = fvg_results.get(asset, {}).get("direction", "LONG")
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "fvg",
+                "pct": round(info["amount"]/capital*100, 1), "classification": f"FVG_{fvg_dir}", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
     if len(new_positions) == 0:
@@ -3336,13 +3435,17 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     # ── 6. Log e histórico ───────────────────────────────────────────────
     turbo_active = _is_turbo_mode(klines_by_tf["5m"])
-    mr_info = f" | MR: R${pnl_mr:+.2f}" if top_mr else ""
-    bo_info = f" | BO: R${pnl_bo:+.2f}" if top_bo else ""
-    sq_info = f" | SQ: R${pnl_sq:+.2f}" if top_sq else ""
+    mr_info  = f" | MR: R${pnl_mr:+.2f}" if top_mr else ""
+    bo_info  = f" | BO: R${pnl_bo:+.2f}" if top_bo else ""
+    sq_info  = f" | SQ: R${pnl_sq:+.2f}" if top_sq else ""
+    ls_info  = f" | LS: R${pnl_ls:+.2f}" if top_ls else ""
+    fvg_info = f" | FVG: R${pnl_fvg:+.2f}" if top_fvg else ""
     _trade_log("CICLO", "—", capital,
-        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info}{bo_info}{sq_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | ADX: {_adx_val:.1f}({_adx_regime}) | Turbo: {'ON' if turbo_active else 'OFF'}")
+        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info}{bo_info}{sq_info}{ls_info}{fvg_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Regime: {_adx_regime}(ADX={_adx_val:.1f}/ATR={_atr_ratio:.2f}/H={_hurst:.2f}) | Turbo: {'ON' if turbo_active else 'OFF'}")
 
-    _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
+    _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs,
+                               pnl_mr=pnl_mr, pnl_bo=pnl_bo, pnl_sq=pnl_sq,
+                               pnl_ls=pnl_ls, pnl_fvg=pnl_fvg)
 
     # ── ML: Salvar amostras de treinamento (features + outcome por ativo) ─
     try:
@@ -3424,6 +3527,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "pnl_mr":      pnl_mr,
         "pnl_bo":      pnl_bo,
         "pnl_sq":      pnl_sq,
+        "pnl_ls":      pnl_ls,
+        "pnl_fvg":     pnl_fvg,
         "costs": {
             "total": round(cycle_costs.get("total", 0.0), 4),
             "brokerage": round(cycle_costs.get("brokerage", 0.0), 4),
@@ -3445,9 +3550,16 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "capital_mr":  capital_mr,
         "capital_bo":  capital_bo,
         "capital_sq":  capital_sq,
-        # Regime
-        "adx_value":   round(_adx_val, 1),
-        "adx_regime":  _adx_regime,
+        "capital_ls":  capital_ls,
+        "capital_fvg": capital_fvg,
+        # Regime v3.0 — multi-sinal
+        "adx_value":      round(_adx_val, 1),
+        "adx_regime":     _adx_regime,
+        "atr_ratio":      round(_atr_ratio, 3),
+        "hurst":          round(_hurst, 3),
+        "regime_confidence": round(_regime_conf, 3),
+        "regime_signals": _regime_result.get("signals", {}),
+        "dyn_weights":    _dyn_weights,
         # Grid Trading
         "grid_pnl":    grid_pnl,
         "grid_assets":  len(grid_details),
@@ -3463,6 +3575,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             "mean_reversion": len(top_mr) > 0,
             "breakout": len(top_bo) > 0,
             "squeeze": len(top_sq) > 0,
+            "liquidity_sweep": len(top_ls) > 0,
+            "fvg": len(top_fvg) > 0,
             "adaptive_alloc": _strategy_state.get("dynamic_alloc_enabled", False),
             "regime_filter": _strategy_state.get("regime_filter_enabled", False),
             "tf_risk_tuning": _strategy_state.get("tf_risk_tuning_enabled", False),

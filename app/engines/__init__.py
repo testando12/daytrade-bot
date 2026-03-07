@@ -9,5 +9,13 @@ from .risk_manager import RiskManager, risk_manager
 from .mean_reversion import MeanReversionAnalyzer
 from .breakout import BreakoutAnalyzer
 from .squeeze import SqueezeAnalyzer
+from .liquidity_sweep import LiquiditySweepAnalyzer
+from .fvg import FVGAnalyzer
+from .regime import RegimeDetector
 
-__all__ = ["MomentumAnalyzer", "RiskAnalyzer", "PortfolioManager", "RiskManager", "risk_manager", "MeanReversionAnalyzer", "BreakoutAnalyzer", "SqueezeAnalyzer"]
+__all__ = [
+    "MomentumAnalyzer", "RiskAnalyzer", "PortfolioManager",
+    "RiskManager", "risk_manager", "MeanReversionAnalyzer",
+    "BreakoutAnalyzer", "SqueezeAnalyzer",
+    "LiquiditySweepAnalyzer", "FVGAnalyzer", "RegimeDetector",
+]
