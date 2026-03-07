@@ -1,0 +1,30 @@
+[btg] Modo: PAPER | Keys: ✗ | Account: N/A
+[binance-auth] Paper state restored: USDT=$526.69 | 5 positions | 6 orders
+[binance-auth] Modo: PAPER | Keys: ✗ | URL: https://api.binance.com
+[alpha-vantage] Key: ✗ | URL: https://www.alphavantage.co/query
+[market] ═══ Data Sources ═══
+[market]   B3:          BRAPI+token → Yahoo
+[market]   Crypto:      Binance(pub) → Yahoo
+[market]   US Stocks:   Yahoo
+[market]   Forex:       Yahoo
+[market]   Commodities: Yahoo
+[market]   Mode:        PAPER
+[market] Assets: B3=20 | US=50 | Crypto=31 | Forex=8 | Commodities=4
+[lifespan] Aguardando PostgreSQL ficar pronto...
+[lifespan] 'performance' carregado do DB (tentativa 1)
+[lifespan] 'trade_state' carregado do DB (tentativa 1)
+[lifespan] Trade state recarregado: capital=R$3289.05 (DB=3289.05, mem=3289.05)
+[lifespan] 'scheduler_state' carregado do DB (tentativa 1)
+[lifespan] Scheduler recarregado: ciclos=0 intervalo=30min
+[lifespan] Bot 24/7 ativo — scheduler + keep-alive iniciados
+[reconcile] Concluído: 5 confirmadas, 0 importadas do broker, 5 total.
+[scheduler] Iniciado - intervalo: 30 min
+[keep-alive] Iniciado — ping a cada 10 min em https://daytrade-bot.onrender.com/health
+INFO:     127.0.0.1:56513 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56518 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56518 - "GET /health HTTP/1.1" 200 OK
+[keep-alive] Ping OK — status 503
+[market] get_all_klines: 30/30 OK (5m)
+[market] get_all_klines: 30/30 OK (1h)
+[market] get_all_klines: 30/30 OK (1d)
+[scheduler] Erro no ciclo automático: 'log'

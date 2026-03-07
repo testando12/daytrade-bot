@@ -12,6 +12,10 @@ $PYTHON      = Join-Path $BOT_DIR "venv\Scripts\python.exe"
 
 Set-Location $BOT_DIR
 
+# Força UTF-8 no console e no Python
+$env:PYTHONIOENCODING = "utf-8"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "   DAYTRADE BOT - Iniciando localmente     " -ForegroundColor Cyan
