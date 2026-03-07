@@ -133,6 +133,51 @@ _strategy_state = {
     "last_recent_tf_pnl": {"5m": 0.0, "1h": 0.0, "1d": 0.0},
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SIMULATION STRESS MODE — controla o quão pessimista é a simulação paper
+# normal  : dia médio de mercado (calibrado para Binance + B3 mid-cap)
+# stress  : dia ruim (alta vol, spreads alargados, book fino)
+# extreme : crise / black swan (evento macro, halting, flash crash parcial)
+# Altere em runtime via POST /trade/sim-mode {"mode": "stress"}
+# ─────────────────────────────────────────────────────────────────────────────
+_SIM_PROFILES = {
+    "normal": {
+        "rejection_rate":    0.08,    # % ordens não preenchidas
+        "capture_mean":      0.80,    # adverse selection: captura % do movimento
+        "capture_std":       0.12,
+        "loss_worsen_mean":  1.05,    # perde X% a mais em stops
+        "loss_worsen_std":   0.08,
+        "noise_mean":       -0.0001,  # ruído de execução
+        "noise_std":         0.0010,
+        "cost_multiplier":   1.00,    # multiplicador sobre spread/slippage
+        "min_ret_threshold": 0.0018,  # filtra retornos abaixo dos custos
+    },
+    "stress": {
+        "rejection_rate":    0.20,    # 20% das ordens rejeitadas/não preenchidas
+        "capture_mean":      0.65,    # captura apenas 65% do movimento
+        "capture_std":       0.15,
+        "loss_worsen_mean":  1.15,    # perde 15% a mais em stops
+        "loss_worsen_std":   0.12,
+        "noise_mean":       -0.0005,
+        "noise_std":         0.0030,
+        "cost_multiplier":   2.50,    # spreads 2.5× maiores
+        "min_ret_threshold": 0.0035,  # threshold maior (custos maiores)
+    },
+    "extreme": {
+        "rejection_rate":    0.35,    # 35% das ordens — mercado trava
+        "capture_mean":      0.45,    # captura apenas 45% do movimento
+        "capture_std":       0.20,
+        "loss_worsen_mean":  1.35,    # perde 35% a mais em stops (gap down)
+        "loss_worsen_std":   0.18,
+        "noise_mean":       -0.0015,
+        "noise_std":         0.0070,
+        "cost_multiplier":   5.00,    # spreads 5× (flash crash / evento macro)
+        "min_ret_threshold": 0.0060,
+    },
+}
+_sim_mode: str = "normal"   # alterado via /trade/sim-mode
+
+
 # Modelo de custos (simulação realista paper-first)
 # v2 (2026-03-04): B3 slippage 2→10 bps e spread 3→5 bps (realista para mid-cap Bovespa)
 # Referência: mid-caps B3 têm slippage de 8–15 bps em condições normais de book
@@ -164,14 +209,15 @@ def _asset_market(asset: str) -> str:
 def _estimate_trade_costs_brl(asset: str, notional_brl: float, abs_return: float = 0.0) -> dict:
     market = _asset_market(asset)
     model = _TRADING_COST_MODEL.get(market, _TRADING_COST_MODEL["other"])
+    cost_mult = _SIM_PROFILES.get(_sim_mode, _SIM_PROFILES["normal"])["cost_multiplier"]
 
-    # Slippage cresce com volatilidade do candle (limitado)
+    # Slippage cresce com volatilidade do candle (limitado) + multiplicador do modo stress
     vol_factor = 1.0 + min(max(abs_return, 0.0), 0.05) * 8.0
-    slippage_bps_eff = float(model["slippage_bps"]) * vol_factor
+    slippage_bps_eff = float(model["slippage_bps"]) * vol_factor * cost_mult
 
     brokerage = notional_brl * ((float(model["brokerage_bps"]) * 2.0) / 10000.0)
     exchange_fees = notional_brl * ((float(model["exchange_bps"]) * 2.0) / 10000.0)
-    spread = notional_brl * (float(model["spread_bps"]) / 10000.0)
+    spread = notional_brl * (float(model["spread_bps"]) * cost_mult / 10000.0)
     slippage = notional_brl * (slippage_bps_eff / 10000.0)
     fx = notional_brl * (float(model["fx_bps"]) / 10000.0)
 
@@ -2317,6 +2363,64 @@ async def unfreeze_bot():
     }
 
 
+@app.get("/trade/sim-mode")
+async def get_sim_mode():
+    """Retorna o modo de simulação atual e os parâmetros de cada modo."""
+    return {
+        "success": True,
+        "current_mode": _sim_mode,
+        "profiles": {
+            name: {
+                "rejection_rate_pct":   round(p["rejection_rate"] * 100, 0),
+                "capture_mean_pct":     round(p["capture_mean"]   * 100, 0),
+                "loss_worsen_mean_pct": round((p["loss_worsen_mean"] - 1) * 100, 0),
+                "cost_multiplier":      p["cost_multiplier"],
+                "description": {
+                    "normal":  "Dia médio de mercado. Referência para operação normal.",
+                    "stress":  "Dia ruim: alta volatilidade, spreads 2.5×, 20% das ordens rejeitadas.",
+                    "extreme": "Crise / black swan: spreads 5×, 35% rejeição, captura só 45% do movimento.",
+                }.get(name, ""),
+            }
+            for name, p in _SIM_PROFILES.items()
+        },
+    }
+
+
+@app.post("/trade/sim-mode")
+async def set_sim_mode(body: dict):
+    """
+    Altera o modo de simulação de stress.
+
+    Body: {"mode": "normal" | "stress" | "extreme"}
+
+    Efeito imediato: próximo ciclo já usa os novos parâmetros.
+    """
+    global _sim_mode
+    mode = (body.get("mode") or "").lower().strip()
+    if mode not in _SIM_PROFILES:
+        raise HTTPException(status_code=400,
+            detail=f"Modo inválido. Use: {list(_SIM_PROFILES.keys())}")
+    old_mode = _sim_mode
+    _sim_mode = mode
+    _sp = _SIM_PROFILES[mode]
+    _trade_log("SIM_MODE", "—", 0,
+        f"🎮 Modo de simulação alterado: {old_mode} → {mode} "
+        f"| rejeição={_sp['rejection_rate']*100:.0f}% "
+        f"| captura={_sp['capture_mean']*100:.0f}% "
+        f"| custos={_sp['cost_multiplier']}x")
+    return {
+        "success": True,
+        "previous_mode": old_mode,
+        "current_mode":  mode,
+        "params": {
+            "rejection_rate_pct":   round(_sp["rejection_rate"] * 100, 0),
+            "capture_mean_pct":     round(_sp["capture_mean"]   * 100, 0),
+            "loss_worsen_mean_pct": round((_sp["loss_worsen_mean"] - 1) * 100, 0),
+            "cost_multiplier":      _sp["cost_multiplier"],
+        },
+    }
+
+
 @app.get("/trade/protection")
 async def get_protection_status():
     """Retorna o estado atual do sistema de proteção inteligente."""
@@ -3060,24 +3164,22 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 ret = 0.0
 
             # ── Realismo paper mode: adverse selection + falha de execução ──
-            # Simula que pedidos reais nunca executam no preço ideal
-            # 8% das ordens não são preenchidas (mercado saiu rápido demais)
-            if _rnd.random() < 0.08:
+            # Parâmetros controlados pelo _sim_mode (normal/stress/extreme)
+            _sp = _SIM_PROFILES.get(_sim_mode, _SIM_PROFILES["normal"])
+            if _rnd.random() < _sp["rejection_rate"]:
                 continue
             # Filtro de retorno mínimo: skip se |ret| menor que custo estimado
-            min_ret_threshold = 0.0018  # 0.18% — abaixo disso custos comem o lucro
-            if abs(ret) < min_ret_threshold:
+            if abs(ret) < _sp["min_ret_threshold"]:
                 continue
-            # Adverse selection: entra depois do sinal → captura ~80% do movimento
-            # Valores calibrados para Binance spot (spreads apertados)
+            # Adverse selection: entra depois do sinal → captura % do movimento
             if ret > 0:
-                capture = max(0.0, _rnd.gauss(0.80, 0.12))  # média 80%, desvio 12%
-                ret = ret * min(capture, 1.05)               # máx 105% (overshoot ocasional)
+                capture = max(0.0, _rnd.gauss(_sp["capture_mean"], _sp["capture_std"]))
+                ret = ret * min(capture, 1.05)   # máx 105% (overshoot ocasional)
             else:
-                # Na queda: adverse selection piora a perda ligeiramente
-                worsen = max(1.0, _rnd.gauss(1.05, 0.08))   # perde ~5% a mais em média
+                # Na queda: adverse selection piora a perda
+                worsen = max(1.0, _rnd.gauss(_sp["loss_worsen_mean"], _sp["loss_worsen_std"]))
                 ret = ret * worsen
-            ret += _rnd.gauss(-0.0001, 0.0010)              # ruído de execução (leve)
+            ret += _rnd.gauss(_sp["noise_mean"], _sp["noise_std"])  # ruído de execução
 
             # ── ATR Adaptive SL/TP — calcula limites dinâmicos por ativo ──
             atr_sl, atr_tp = _atr_adaptive_sl_tp(prices, asset)
@@ -3572,6 +3674,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         # Grid Trading
         "grid_pnl":    grid_pnl,
         "grid_assets":  len(grid_details),
+        # Simulation mode (stress testing)
+        "sim_mode":    _sim_mode,
         # Turbo & Estratégias
         "turbo_active": turbo_active,
         "strategies_active": {
