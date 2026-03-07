@@ -25,6 +25,7 @@ from app.core.config import settings
 from app import db_state
 from app.engines import MomentumAnalyzer, RiskAnalyzer, PortfolioManager
 from app.engines.mean_reversion import MeanReversionAnalyzer
+from app.engines.breakout import BreakoutAnalyzer
 from app.engines.risk_manager import risk_manager
 
 # Database
@@ -99,10 +100,11 @@ def _effective_total_cycles() -> int:
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
-# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 55% + 10% Mean Reversion
-# v2.1 (2026-03-05): 1d reduzido de 0.65→0.55 para liberar 10% ao bucket de Mean Reversion
-_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.55}
+# Alocação por timeframe: SHORT 10%, MEDIUM 25%, LONG 47% + 10% Mean Reversion + 8% Breakout
+# v2.2 (2026-03-06): 1d reduzido de 0.55→0.47 para liberar 8% ao bucket de Breakout
+_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.47}
 _MR_ALLOC_PCT      = 0.10   # capital dedicado ao bucket de Mean Reversion
+_BO_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Breakout
 # v2.1 (2026-03-05): top-N reduzido para 1 por bucket — operar só o melhor sinal de cada timeframe
 _TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 1, "1d": 1}  # era 1/2/3 — com 1d=3 perdia em dias de queda
 
@@ -2861,6 +2863,17 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     }
     capital_mr  = round(capital * _MR_ALLOC_PCT, 2) if top_mr else 0.0
 
+    # ── Breakout: bucket dedicado de 8% (usa 1h para sinais intraday) ────
+    # v2.2: detecta rompimentos de resistência/suporte com confirmação de volume
+    bo_results  = BreakoutAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
+    top_bo      = list(bo_results.keys())
+    # Adapta bo_results para o formato que _calc_pnl_bucket espera (momentum_score >= 0.55)
+    mom_bo      = {
+        a: {**d, "momentum_score": max(d["breakout_score"], 0.61)}
+        for a, d in bo_results.items()
+    }
+    capital_bo  = round(capital * _BO_ALLOC_PCT, 2) if top_bo else 0.0
+
     cycle_costs = {
         "total": 0.0,
         "brokerage": 0.0,
@@ -3018,6 +3031,12 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         _trade_log("MR_SIGNAL", "—", capital_mr,
             f"🔁 Mean Reversion: {len(top_mr)} ativo(s) | {list(top_mr)} | R${capital_mr:.2f} | P&L: R${pnl_mr:+.4f}")
 
+    # ── 4a-bo. Breakout bucket — bucket dedicado de 8% ───────────────────
+    pnl_bo, pos_bo, costs_bo = _calc_pnl_bucket(top_bo, klines_by_tf["1h"], capital_bo, "bo", mom_bo)
+    if top_bo:
+        _trade_log("BO_SIGNAL", "—", capital_bo,
+            f"🚀 Breakout: {len(top_bo)} ativo(s) | {list(top_bo)} | R${capital_bo:.2f} | P&L: R${pnl_bo:+.4f}")
+
     # ── 4b. Grid Trading — lucra com mercado lateral ─────────────────────
     grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
     grid_pnl, grid_details = _grid_trading_pnl(klines_by_tf["5m"], grid_capital)
@@ -3026,8 +3045,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
 
     fees_total = round(cycle_costs.get("total", 0.0), 4)
-    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + grid_pnl + fees_total, 4)
-    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + grid_pnl, 4)
+    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + grid_pnl + fees_total, 4)
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + grid_pnl, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
@@ -3097,6 +3116,13 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         else:
             new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "mr",
                 "pct": round(info["amount"]/capital*100, 1), "classification": "REVERSION", "change_pct": info["ret_pct"]}
+    for asset, info in pos_bo.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+bo"
+        else:
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "bo",
+                "pct": round(info["amount"]/capital*100, 1), "classification": "BREAKOUT", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
     if len(new_positions) == 0:
@@ -3220,8 +3246,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # ── 6. Log e histórico ───────────────────────────────────────────────
     turbo_active = _is_turbo_mode(klines_by_tf["5m"])
     mr_info = f" | MR: R${pnl_mr:+.2f}" if top_mr else ""
+    bo_info = f" | BO: R${pnl_bo:+.2f}" if top_bo else ""
     _trade_log("CICLO", "—", capital,
-        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
+        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info}{bo_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Turbo: {'ON' if turbo_active else 'OFF'}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs)
 
@@ -3303,6 +3330,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "pnl_1h":      pnl_1h,
         "pnl_1d":      pnl_1d,
         "pnl_mr":      pnl_mr,
+        "pnl_bo":      pnl_bo,
         "costs": {
             "total": round(cycle_costs.get("total", 0.0), 4),
             "brokerage": round(cycle_costs.get("brokerage", 0.0), 4),
@@ -3322,6 +3350,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         "capital_1h":  capital_1h,
         "capital_1d":  capital_1d,
         "capital_mr":  capital_mr,
+        "capital_bo":  capital_bo,
         # Grid Trading
         "grid_pnl":    grid_pnl,
         "grid_assets":  len(grid_details),
@@ -3335,6 +3364,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             "partial_tp": settings.PARTIAL_TP_ENABLED,
             "momentum_accel": settings.MOMENTUM_ACCEL_ENABLED,
             "mean_reversion": len(top_mr) > 0,
+            "breakout": len(top_bo) > 0,
             "adaptive_alloc": _strategy_state.get("dynamic_alloc_enabled", False),
             "regime_filter": _strategy_state.get("regime_filter_enabled", False),
             "tf_risk_tuning": _strategy_state.get("tf_risk_tuning_enabled", False),
@@ -3600,6 +3630,7 @@ async def get_performance():
             "alloc_1h_pct":      int(_TIMEFRAME_ALLOC["1h"] * 100),
             "alloc_1d_pct":      int(_TIMEFRAME_ALLOC["1d"] * 100),
             "alloc_mr_pct":      int(_MR_ALLOC_PCT * 100),
+            "alloc_bo_pct":      int(_BO_ALLOC_PCT * 100),
         },
     }
 
