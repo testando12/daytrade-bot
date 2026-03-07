@@ -395,28 +395,12 @@ async def _auto_cycle_loop():
 
 
 # ═══════════════════════════════════════════
-# KEEP-ALIVE: Self-ping para manter Render ativo 24/7
-# ═══════════════════════════════════════════
+# KEEP-ALIVE: desativado (bot roda localmente)
+# ===================================================
 
 async def _keep_alive_loop():
-    """Pinga o próprio servidor a cada 10 min para impedir que o Render Free durma."""
-    import httpx
-    # Detectar URL do serviço: RENDER_EXTERNAL_URL é setada automaticamente pelo Render
-    base_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
-    if not base_url:
-        # Fallback: URL conhecida do deploy
-        base_url = "https://daytrade-bot.onrender.com"
-    health_url = f"{base_url}/health"
-    print(f"[keep-alive] Iniciado — ping a cada 10 min em {health_url}", flush=True)
-    await asyncio.sleep(60)  # espera 1 min para o servidor subir
-    while True:
-        try:
-            async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.get(health_url)
-                print(f"[keep-alive] Ping OK — status {resp.status_code}", flush=True)
-        except Exception as e:
-            print(f"[keep-alive] Ping falhou: {e}", flush=True)
-        await asyncio.sleep(600)  # 10 minutos
+    """Desativado — bot local não precisa de self-ping."""
+    return  # no-op
 
 
 async def _reconcile_broker_positions():
@@ -570,9 +554,9 @@ async def lifespan(app: FastAPI):
     # ── Scheduler de ciclos ────────────────────────────────────────────
     task = asyncio.create_task(_auto_cycle_loop())
     _scheduler_state["task"] = task
-    # ── Keep-alive self-ping (Render free tier) ────────────────────────
+    # ── Keep-alive desativado (bot local) ─────────────────────────────
     keep_alive_task = asyncio.create_task(_keep_alive_loop())
-    print("[lifespan] Bot 24/7 ativo — scheduler + keep-alive iniciados", flush=True)
+    print("[lifespan] Bot 24/7 ativo — scheduler iniciado", flush=True)
     yield
     # Shutdown
     _scheduler_state["running"] = False
