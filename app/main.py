@@ -3016,6 +3016,15 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     capital_ls  = round(capital_ls  * _dyn_weights["ls"],  2)
     capital_fvg = round(capital_fvg * _dyn_weights["fvg"], 2)
 
+    # ── Exposure Cap — nenhum bucket ultrapassa 2× sua alocação base ─────
+    # Previne que regime + dynamic weights se acumulem e criem alavancagem excessiva
+    # Exemplo: regime TREND_STRONG (1.55×) + dyn_weight 1.50× = 2.32× sem cap
+    capital_mr  = min(capital_mr,  round(capital * _MR_ALLOC_PCT  * 2.0, 2))
+    capital_bo  = min(capital_bo,  round(capital * _BO_ALLOC_PCT  * 2.0, 2))
+    capital_sq  = min(capital_sq,  round(capital * _SQ_ALLOC_PCT  * 2.0, 2))
+    capital_ls  = min(capital_ls,  round(capital * _LS_ALLOC_PCT  * 2.0, 2))
+    capital_fvg = min(capital_fvg, round(capital * _FVG_ALLOC_PCT * 2.0, 2))
+
     cycle_costs = {
         "total": 0.0,
         "brokerage": 0.0,
@@ -3784,6 +3793,41 @@ async def get_performance():
     total_gain_acc = _perf_state.get("total_gain") or round(sum(c.get("pnl", 0) for c in cycles if c.get("pnl", 0) > 0), 2)
     total_loss_acc = _perf_state.get("total_loss") or round(sum(abs(c.get("pnl", 0)) for c in cycles if c.get("pnl", 0) < 0), 2)
 
+    # ── Métricas de diagnóstico avançadas ─────────────────────────────────
+    profit_factor = round(total_gain_acc / total_loss_acc, 3) if total_loss_acc > 0 else 0.0
+    avg_win  = round(total_gain_acc / wins, 2)   if wins   > 0 else 0.0
+    avg_loss = round(total_loss_acc / losses, 2) if losses > 0 else 0.0
+    risk_reward_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else 0.0
+
+    # Per-bucket PnL totais (ciclos com os novos campos pnl_mr/bo/sq/ls/fvg)
+    pnl_total_mr  = round(sum(c.get("pnl_mr",  0) or 0 for c in cycles), 2)
+    pnl_total_bo  = round(sum(c.get("pnl_bo",  0) or 0 for c in cycles), 2)
+    pnl_total_sq  = round(sum(c.get("pnl_sq",  0) or 0 for c in cycles), 2)
+    pnl_total_ls  = round(sum(c.get("pnl_ls",  0) or 0 for c in cycles), 2)
+    pnl_total_fvg = round(sum(c.get("pnl_fvg", 0) or 0 for c in cycles), 2)
+
+    # Per-bucket win rates (ciclos onde o bucket gerou pnl > 0)
+    def _bucket_wr(key: str) -> float:
+        vals = [c.get(key, 0) or 0 for c in cycles if (c.get(key, 0) or 0) != 0]
+        if not vals:
+            return 0.0
+        return round(sum(1 for v in vals if v > 0) / len(vals) * 100, 1)
+
+    # Readiness Score 0-100 — quão próximo de capital real
+    # Critérios: PF>=1.5(25pts) + WR>=40%(20pts) + Cycles>=1000(20pts) + Sharpe>=1.5(20pts) + MaxDD>-10%(15pts)
+    _rs_pf    = 25 if profit_factor >= 1.5 else round(profit_factor / 1.5 * 25, 1)
+    _rs_wr    = 20 if (wins/total*100 if total > 0 else 0) >= 40 else round((wins/total*100 if total > 0 else 0) / 40 * 20, 1)
+    _rs_cyc   = 20 if _effective_total_cycles() >= 1000 else round(_effective_total_cycles() / 1000 * 20, 1)
+    _rs_sh    = 20 if sharpe >= 1.5 else round(max(sharpe, 0) / 1.5 * 20, 1)
+    _rs_dd    = 15 if max_dd > -10 else round(max(0, (max_dd + 20) / 10 * 15), 1)
+    readiness_score = round(_rs_pf + _rs_wr + _rs_cyc + _rs_sh + _rs_dd, 1)
+    readiness_label = (
+        "PRONTO" if readiness_score >= 80
+        else "QUASE" if readiness_score >= 60
+        else "EM PROGRESSO" if readiness_score >= 40
+        else "CEDO DEMAIS"
+    )
+
     return {
         "success": True,
         "data": {
@@ -3813,6 +3857,32 @@ async def get_performance():
             # Ganho e perda separados — acumulado total
             "total_gain":        round(total_gain_acc, 2),
             "total_loss":        round(total_loss_acc, 2),
+            # Métricas de diagnóstico avançadas
+            "profit_factor":     profit_factor,
+            "avg_win":           avg_win,
+            "avg_loss":          avg_loss,
+            "risk_reward_ratio": risk_reward_ratio,
+            # Per-bucket PnL e win rate
+            "pnl_total_mr":      pnl_total_mr,
+            "pnl_total_bo":      pnl_total_bo,
+            "pnl_total_sq":      pnl_total_sq,
+            "pnl_total_ls":      pnl_total_ls,
+            "pnl_total_fvg":     pnl_total_fvg,
+            "wr_mr_pct":         _bucket_wr("pnl_mr"),
+            "wr_bo_pct":         _bucket_wr("pnl_bo"),
+            "wr_sq_pct":         _bucket_wr("pnl_sq"),
+            "wr_ls_pct":         _bucket_wr("pnl_ls"),
+            "wr_fvg_pct":        _bucket_wr("pnl_fvg"),
+            # Readiness Assessment
+            "readiness_score":   readiness_score,
+            "readiness_label":   readiness_label,
+            "readiness_breakdown": {
+                "profit_factor":  _rs_pf,
+                "win_rate":       _rs_wr,
+                "cycles":         _rs_cyc,
+                "sharpe":         _rs_sh,
+                "drawdown":       _rs_dd,
+            },
             # Custos operacionais (simulação realista)
             "costs_today_total": costs_today_total,
             "costs_today_brokerage": costs_today_brokerage,
@@ -3844,6 +3914,8 @@ async def get_performance():
             "alloc_mr_pct":      int(_MR_ALLOC_PCT * 100),
             "alloc_bo_pct":      int(_BO_ALLOC_PCT * 100),
             "alloc_sq_pct":      int(_SQ_ALLOC_PCT * 100),
+            "alloc_ls_pct":      int(_LS_ALLOC_PCT * 100),
+            "alloc_fvg_pct":     int(_FVG_ALLOC_PCT * 100),
         },
     }
 
