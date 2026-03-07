@@ -2162,6 +2162,8 @@ async def admin_restore_perf(payload: dict):
         "total_gain", "total_loss", "total_fees", "total_brokerage",
         "total_exchange_fees", "total_spread", "total_slippage", "total_fx",
         "total_min_fee_adj", "total_pnl_history",
+        # Offsets históricos (para restaurar após reset/migração)
+        "total_cycles_offset", "total_pnl_offset",
     }
     updated = []
     for key, val in payload.items():
@@ -2181,6 +2183,29 @@ async def admin_restore_perf(payload: dict):
         "loss_count": _perf_state.get("loss_count", 0),
         "total_gain": _perf_state.get("total_gain", 0),
         "total_loss": _perf_state.get("total_loss", 0),
+    }
+
+
+@app.post("/admin/restore-trade")
+async def admin_restore_trade(payload: dict):
+    """
+    Restaura manualmente campos do trade_state (capital, total_pnl, etc).
+    Campos aceitos: capital, total_pnl, auto_trading
+    """
+    allowed = {"capital", "total_pnl", "auto_trading"}
+    updated = []
+    for key, val in payload.items():
+        if key in allowed:
+            _trade_state[key] = val
+            updated.append(key)
+    if "capital" in payload:
+        settings.INITIAL_CAPITAL = float(payload["capital"])
+    db_state.save_state("trade_state", _trade_state)
+    return {
+        "success": True,
+        "updated_fields": updated,
+        "capital": _trade_state.get("capital"),
+        "total_pnl": _trade_state.get("total_pnl"),
     }
 
 
