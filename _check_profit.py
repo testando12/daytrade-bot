@@ -1,6 +1,6 @@
 import urllib.request, json
 
-BASE = "http://localhost:8000"
+BASE = "https://daytrade-bot-production.up.railway.app"
 
 r = urllib.request.urlopen(BASE + "/trade/status", timeout=15)
 trade = json.loads(r.read().decode()).get("data", {})

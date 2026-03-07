@@ -26,7 +26,7 @@ const PRE_REAL_DEFAULT = {
   dailyLossStop: 120,
   maxRiskPct: 5,
   minCycles: 200,
-  minWinRate: 55,
+  minProfitFactor: 1.8,   // substitui minWinRate — critério institucional
   maxDrawdownPct: 12,
   minSharpe: 1,
   ackLiquidation: false,
@@ -49,7 +49,7 @@ function _buildAutoPreRealConfig(perf = {}, tradeData = {}) {
     cfg = {
       maxLeverageLive: 2,
       minCycles: 50,
-      minWinRate: 48,
+      minProfitFactor: 1.1,
       maxDrawdownPct: 18,
       minSharpe: 0.2,
       maxRiskPct: 2.0,
@@ -60,7 +60,7 @@ function _buildAutoPreRealConfig(perf = {}, tradeData = {}) {
     cfg = {
       maxLeverageLive: 2,
       minCycles: 150,
-      minWinRate: 52,
+      minProfitFactor: 1.3,
       maxDrawdownPct: 15,
       minSharpe: 0.5,
       maxRiskPct: 1.5,
@@ -71,7 +71,7 @@ function _buildAutoPreRealConfig(perf = {}, tradeData = {}) {
     cfg = {
       maxLeverageLive: 3,
       minCycles: 300,
-      minWinRate: 55,
+      minProfitFactor: 1.5,
       maxDrawdownPct: 12,
       minSharpe: 0.8,
       maxRiskPct: 1.25,
@@ -82,9 +82,9 @@ function _buildAutoPreRealConfig(perf = {}, tradeData = {}) {
     cfg = {
       maxLeverageLive: 3,
       minCycles: 300,
-      minWinRate: 57,
+      minProfitFactor: 1.8,
       maxDrawdownPct: 10,
-      minSharpe: 1.0,
+      minSharpe: 1.2,
       maxRiskPct: 1.0,
       dailyLossStop: Math.max(120, capital * 0.02),
     };
@@ -350,25 +350,30 @@ function _persistPreRealConfig() {
 
 function evaluatePreRealGate(perf = {}, tradeData = {}) {
   const cfg = _getEffectivePreRealConfig(perf, tradeData);
-  const cycles = Number(perf.total_cycles || 0);
-  const winRate = Number(perf.win_rate_pct || 0);
+  const cycles     = Number(perf.total_cycles || 0);
+  const winRate    = Number(perf.win_rate_pct || 0);
   const drawdownAbs = Math.abs(Number(perf.max_drawdown_pct || 0));
-  const sharpe = Number(perf.sharpe_ratio || 0);
+  const sharpe     = Number(perf.sharpe_ratio || 0);
+  // Profit Factor: critério institucional (substitui win rate fixo)
+  const totalGain  = Number(perf.total_gain || 0);
+  const totalLoss  = Number(perf.total_loss || 0);
+  const profitFactor = totalLoss > 0 ? totalGain / totalLoss : (totalGain > 0 ? 99 : 0);
+  const minPF     = Number(cfg.minProfitFactor || 1.8);
 
   const checks = [
-    { key: 'cycles', label: `Ciclos >= ${cfg.minCycles}`, pass: cycles >= cfg.minCycles },
-    { key: 'winrate', label: `Win Rate >= ${cfg.minWinRate}%`, pass: winRate >= cfg.minWinRate },
-    { key: 'drawdown', label: `Drawdown <= ${cfg.maxDrawdownPct}%`, pass: drawdownAbs <= cfg.maxDrawdownPct },
-    { key: 'sharpe', label: `Sharpe >= ${cfg.minSharpe}`, pass: sharpe >= cfg.minSharpe },
-    { key: 'ack1', label: 'Checklist risco marcado', pass: !!cfg.ackLiquidation },
-    { key: 'ack2', label: 'Checklist paper marcado', pass: !!cfg.ackPaper },
+    { key: 'cycles',       label: `Ciclos >= ${cfg.minCycles}`,            pass: cycles >= cfg.minCycles },
+    { key: 'pf',           label: `Profit Factor >= ${minPF.toFixed(1)} (atual: ${profitFactor.toFixed(2)})`, pass: profitFactor >= minPF },
+    { key: 'drawdown',     label: `Drawdown <= ${cfg.maxDrawdownPct}%`,     pass: drawdownAbs <= cfg.maxDrawdownPct },
+    { key: 'sharpe',       label: `Sharpe >= ${cfg.minSharpe}`,             pass: sharpe >= cfg.minSharpe },
+    { key: 'ack1', label: 'Checklist risco marcado',           pass: !!cfg.ackLiquidation },
+    { key: 'ack2', label: 'Checklist paper marcado',           pass: !!cfg.ackPaper },
     { key: 'ack3', label: 'Checklist início reduzido marcado', pass: !!cfg.ackSmall },
   ];
 
   const reasons = checks.filter(c => !c.pass).map(c => c.label);
   const passed = reasons.length === 0;
 
-  return { passed, reasons, checks, cfg, metrics: { cycles, winRate, drawdownAbs, sharpe } };
+  return { passed, reasons, checks, cfg, metrics: { cycles, winRate, profitFactor, drawdownAbs, sharpe } };
 }
 
 function renderPreRealPanel(tradeData, perfData) {
@@ -397,7 +402,7 @@ function renderPreRealPanel(tradeData, perfData) {
   setVal('pre-daily-stop', cfgEffective.dailyLossStop);
   setVal('pre-max-risk-pct', cfgEffective.maxRiskPct);
   setVal('pre-min-cycles', cfgEffective.minCycles);
-  setVal('pre-min-winrate', cfgEffective.minWinRate);
+  setVal('pre-min-pf', cfgEffective.minProfitFactor);
   setVal('pre-max-dd', cfgEffective.maxDrawdownPct);
   setChecked('pre-ack-liquidation', cfgEffective.ackLiquidation);
   setChecked('pre-ack-paper', cfgEffective.ackPaper);
@@ -410,7 +415,7 @@ function renderPreRealPanel(tradeData, perfData) {
   }
 
   const lockLimits = !!cfgEffective.autoMode;
-  ['pre-max-lev', 'pre-daily-stop', 'pre-max-risk-pct', 'pre-min-cycles', 'pre-min-winrate', 'pre-max-dd']
+  ['pre-max-lev', 'pre-daily-stop', 'pre-max-risk-pct', 'pre-min-cycles', 'pre-min-pf', 'pre-max-dd']
     .forEach(id => {
       const el = document.getElementById(id);
       if (el) el.disabled = lockLimits;
@@ -468,7 +473,7 @@ function savePreRealConfig() {
     dailyLossStop: Math.max(10, readNum('pre-daily-stop', PRE_REAL_DEFAULT.dailyLossStop)),
     maxRiskPct: Math.max(0.5, Math.min(20, readNum('pre-max-risk-pct', PRE_REAL_DEFAULT.maxRiskPct))),
     minCycles: Math.max(20, readNum('pre-min-cycles', PRE_REAL_DEFAULT.minCycles)),
-    minWinRate: Math.max(40, Math.min(90, readNum('pre-min-winrate', PRE_REAL_DEFAULT.minWinRate))),
+    minProfitFactor: Math.max(1.0, Math.min(10, readNum('pre-min-pf', PRE_REAL_DEFAULT.minProfitFactor))),
     maxDrawdownPct: Math.max(2, Math.min(40, readNum('pre-max-dd', PRE_REAL_DEFAULT.maxDrawdownPct))),
     minSharpe: PRE_REAL_DEFAULT.minSharpe,
     ackLiquidation: !!document.getElementById('pre-ack-liquidation')?.checked,

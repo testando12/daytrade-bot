@@ -5,7 +5,7 @@ Avalia se o bot esta pronto para aumentar capital de forma segura.
 import requests, math, statistics, time, random
 from datetime import datetime
 
-API = "http://localhost:8000"
+API = "https://daytrade-bot-production.up.railway.app"
 CAPITAL_ALVO = 10000  # R$ capital futuro desejado para escala
 
 # ─────────────────────────────────────────────────────────────────────────────

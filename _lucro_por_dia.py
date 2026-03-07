@@ -1,7 +1,7 @@
 ﻿import requests
 from datetime import date
 
-url = "http://localhost:8000"
+url = "https://daytrade-bot-production.up.railway.app"
 d = requests.get(f"{url}/performance", timeout=20).json()["data"]
 cambio = 5.80
 

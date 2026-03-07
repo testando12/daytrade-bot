@@ -1,6 +1,6 @@
 import requests
 
-BASE = "http://localhost:8000"
+BASE = "https://daytrade-bot-production.up.railway.app"
 
 # ---- PnL por timeframe ----
 r = requests.get(f"{BASE}/performance", timeout=20)

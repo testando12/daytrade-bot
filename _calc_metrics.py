@@ -1,7 +1,7 @@
 """Calcula as 4 metricas reais do bot em producao."""
 import requests
 
-r = requests.get('http://localhost:8000/performance', timeout=15)
+r = requests.get('https://daytrade-bot-production.up.railway.app/performance', timeout=15)
 d = r.json()['data']
 
 cycles = d['recent_cycles']

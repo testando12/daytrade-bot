@@ -84,9 +84,16 @@ def _persist_scheduler_state():
 
 
 def _effective_total_cycles() -> int:
-    perf_cycles = len(_perf_state.get("cycles", [])) if isinstance(_perf_state, dict) else 0
-    sched_cycles = int(_scheduler_state.get("total_auto_cycles", 0) or 0)
-    return max(sched_cycles, perf_cycles)
+    """
+    Retorna o total real de ciclos executados.
+    Prioridade: win_count + loss_count (sempre cumulativo e correto)
+    mesmo que o array cycles[] esteja vazio (ex: após reinício/migração).
+    """
+    if not isinstance(_perf_state, dict):
+        return 0
+    wins   = int(_perf_state.get("win_count", 0) or 0)
+    losses = int(_perf_state.get("loss_count", 0) or 0)
+    return wins + losses
 
 # Controle de reinvestimento diário
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
@@ -395,12 +402,23 @@ async def _auto_cycle_loop():
 
 
 # ═══════════════════════════════════════════
-# KEEP-ALIVE: desativado (bot roda localmente)
+# KEEP-ALIVE: pinga o próprio Railway a cada ~10 min para manter conexões ativas
 # ===================================================
 
 async def _keep_alive_loop():
-    """Desativado — bot local não precisa de self-ping."""
-    return  # no-op
+    """Self-ping periódico para manter o serviço Railway ativo."""
+    import httpx
+    RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN", "")
+    if not RAILWAY_URL:
+        return  # não está no Railway, não faz nada
+    url = f"https://{RAILWAY_URL}/health"
+    while True:
+        await asyncio.sleep(600)  # 10 minutos
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.get(url)
+        except Exception:
+            pass
 
 
 async def _reconcile_broker_positions():
@@ -3441,6 +3459,9 @@ async def get_performance():
     wins   = _perf_state.get("win_count", 0)
     losses = _perf_state.get("loss_count", 0)
     total  = wins + losses
+    # Offsets históricos (preservados após migração ou restart sem histórico)
+    _cycles_offset = int(_perf_state.get("total_cycles_offset", 0))
+    _pnl_offset    = float(_perf_state.get("total_pnl_offset", 0.0))
 
     # Calcular Sharpe dos ciclos
     pnls = [c["pnl"] for c in cycles]
@@ -3452,8 +3473,9 @@ async def get_performance():
     else:
         sharpe = 0.0
 
-    total_pnl = sum(pnls)
-    avg_daily = total_pnl / len(cycles) if cycles else 0.0
+    # Usa P&L histórico persistido quando não há ciclos carregados em memória
+    total_pnl = sum(pnls) + _pnl_offset if pnls else _pnl_offset
+    avg_daily = total_pnl / _effective_total_cycles() if _effective_total_cycles() else 0.0
 
     # Max drawdown da equity curve
     max_dd = 0.0
@@ -3498,7 +3520,7 @@ async def get_performance():
     return {
         "success": True,
         "data": {
-            "total_cycles":      len(cycles),
+            "total_cycles":      _effective_total_cycles(),
             "win_count":         wins,
             "loss_count":        losses,
             "win_rate_pct":      round(wins / total * 100, 2) if total > 0 else 0.0,
@@ -3611,10 +3633,10 @@ async def get_performance_history():
             "worst_cycle": round(d["worst_cycle"], 2),
         })
 
-    total_pnl = sum(c.get("pnl", 0) or 0 for c in cycles)
+    total_pnl = sum(c.get("pnl", 0) or 0 for c in cycles) + float(_perf_state.get("total_pnl_offset", 0.0))
     return {
         "success": True,
-        "total_cycles": len(cycles),
+        "total_cycles": _effective_total_cycles(),
         "total_pnl": round(total_pnl, 2),
         "days": daily,
     }
@@ -4911,7 +4933,7 @@ async def get_user_summary():
                 } for k, v in active_positions.items()},
             },
             "performance": {
-                "total_cycles": len(cycles),
+                "total_cycles": _effective_total_cycles(),
                 "win_count": wins,
                 "loss_count": losses,
                 "win_rate_pct": round(win_rate, 1),

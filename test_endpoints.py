@@ -2,7 +2,7 @@
 import urllib.request
 import json
 
-BASE = "http://localhost:8000"
+BASE = "https://daytrade-bot-production.up.railway.app"
 
 endpoints = [
     ("GET", "/health"),

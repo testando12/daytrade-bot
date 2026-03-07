@@ -10,7 +10,7 @@ Custo extra e calculado a partir do notional medio derivado dos custos reais.
 """
 import requests, math
 
-API = "http://localhost:8000"
+API = "https://daytrade-bot-production.up.railway.app"
 print("Buscando dados locais...")
 r = requests.get(f"{API}/performance", timeout=20)
 d = r.json()["data"]
