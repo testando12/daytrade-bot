@@ -2772,6 +2772,24 @@ _atr_cache: dict = {}
 # Cache de momentum anterior para detectar aceleração
 _prev_momentum_cache: dict = {}
 
+# Função para calcular pesos dinâmicos por estratégia
+
+def _calculate_dynamic_weights(metrics):
+    weights = {}
+    for strategy, data in metrics.items():
+        pf_weight = min(max(data['profit_factor'] / 2.0, 0.5), 1.5)  # PF influencia entre 0.5 e 1.5
+        sharpe_weight = min(max(data['sharpe'] / 2.0, 0.5), 1.5)  # Sharpe influencia entre 0.5 e 1.5
+        expectancy_weight = min(max(data['expectancy'] / 0.1, 0.5), 1.5)  # Expectancy recente
+        weights[strategy] = pf_weight * 0.4 + sharpe_weight * 0.4 + expectancy_weight * 0.2
+    return weights
+
+# Exemplo de uso:
+# metrics = {
+#     'MR': {'profit_factor': 2.5, 'sharpe': 1.8, 'expectancy': 0.12},
+#     'BO': {'profit_factor': 1.8, 'sharpe': 1.2, 'expectancy': 0.08},
+# }
+# dynamic_weights = _calculate_dynamic_weights(metrics)
+
 
 def _calculate_atr(prices: list, period: int = None) -> float:
     """
@@ -5392,6 +5410,29 @@ async def get_user_summary():
         },
     }
 
+
+from fastapi import Request
+from fastapi import HTTPException
+
+@app.post("/admin/set-capital")
+async def set_capital(current_capital: float):
+    if current_capital <= 0:
+        raise HTTPException(status_code=400, detail="Capital deve ser maior que zero.")
+
+    # Atualizar o capital no sistema
+    # Substitua pela lógica real de atualização do capital
+    global current_capital_value
+    current_capital_value = current_capital
+
+    return {"success": True, "new_capital": current_capital}
+    """Endpoint temporário para alterar a capital diretamente."""
+    data = await request.json()
+    new_capital = data.get("current_capital")
+    if new_capital:
+        _trade_state["capital"] = float(new_capital)
+        db_state.save_state("trade_state", _trade_state)
+        return {"success": True, "new_capital": _trade_state["capital"]}
+    return {"success": False, "error": "Invalid capital value"}
 
 if __name__ == "__main__":
     import uvicorn
