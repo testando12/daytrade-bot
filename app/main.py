@@ -5419,6 +5419,14 @@ async def set_capital(current_capital: float):
     if current_capital <= 0:
         raise HTTPException(status_code=400, detail="Capital deve ser maior que zero.")
 
+    # Atualizar o capital no estado do trade e salvar no banco de dados
+    _trade_state["capital"] = current_capital
+    db_state.save_state("trade_state", _trade_state)
+
+    return {"success": True, "new_capital": _trade_state["capital"]}
+    if current_capital <= 0:
+        raise HTTPException(status_code=400, detail="Capital deve ser maior que zero.")
+
     # Atualizar o capital no sistema
     # Substitua pela lógica real de atualização do capital
     global current_capital_value
