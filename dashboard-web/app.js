@@ -305,6 +305,9 @@ const PAGE_NAMES = {
 };
 
 function navigate(page) {
+  // Fecha sidebar mobile ao navegar
+  closeMobileSidebar();
+
   // Remove active class de todos nav-items
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   // Adiciona active no item correto
@@ -359,6 +362,29 @@ function toggleSidebar() {
   const main = document.getElementById('main-content');
   sidebar.classList.toggle('collapsed');
   main.classList.toggle('sidebar-collapsed');
+}
+
+// Mobile sidebar (hamburger menu)
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const hamburger = document.getElementById('hamburger-btn');
+  const isOpen = sidebar.classList.contains('mobile-open');
+  sidebar.classList.toggle('mobile-open', !isOpen);
+  if (backdrop) backdrop.classList.toggle('active', !isOpen);
+  if (hamburger) hamburger.classList.toggle('active', !isOpen);
+  // Prevent body scroll when menu is open
+  document.body.style.overflow = !isOpen ? 'hidden' : '';
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const hamburger = document.getElementById('hamburger-btn');
+  sidebar.classList.remove('mobile-open');
+  if (backdrop) backdrop.classList.remove('active');
+  if (hamburger) hamburger.classList.remove('active');
+  document.body.style.overflow = '';
 }
 
 // =============================================

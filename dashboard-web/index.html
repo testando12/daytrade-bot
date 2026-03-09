@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Day Trade Bot</title>
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
 
@@ -144,14 +144,20 @@
 
   </aside>
 
+  <!-- Mobile backdrop overlay -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleMobileSidebar()"></div>
+
   <!-- =================== MAIN =================== -->
   <div class="main-content" id="main-content">
 
     <!-- TOPBAR -->
     <header class="topbar">
+      <button class="hamburger-btn" id="hamburger-btn" onclick="toggleMobileSidebar()" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
       <div class="topbar-breadcrumb">
-        <span>DayTrade Bot</span>
-        <span style="color:var(--border)">›</span>
+        <span class="hide-mobile">DayTrade Bot</span>
+        <span class="hide-mobile" style="color:var(--border)">›</span>
         <span class="current" id="topbar-page-name">Dashboard</span>
         <span id="topbar-countdown" style="font-size:11px;margin-left:8px;font-variant-numeric:tabular-nums;"></span>
       </div>
@@ -1684,6 +1690,6 @@
 <div class="toast-container" id="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
