@@ -1069,18 +1069,19 @@ async def bot_status():
         risk_analysis = RiskAnalyzer.calculate_irq(btc_data["prices"], btc_data["volumes"])
 
         momentum_scores = {asset: data["momentum_score"] for asset, data in momentum_results.items()}
+        real_capital = _trade_state.get("capital", settings.INITIAL_CAPITAL)
         allocation = PortfolioManager.calculate_portfolio_allocation(
             momentum_scores,
             risk_analysis["irq_score"],
-            settings.INITIAL_CAPITAL,
+            real_capital,
         )
-        risk_metrics = PortfolioManager.calculate_risk_metrics(allocation, settings.INITIAL_CAPITAL)
+        risk_metrics = PortfolioManager.calculate_risk_metrics(allocation, real_capital)
 
         status = {
             "is_running": True,
             "last_analysis": datetime.utcnow(),
-            "total_capital": settings.INITIAL_CAPITAL,
-            "current_balance": settings.INITIAL_CAPITAL,
+            "total_capital": real_capital,
+            "current_balance": real_capital,
             "cash_available": risk_metrics["cash_available"],
             "active_positions": risk_metrics["active_positions"],
             "total_unrealized_pnl": 0.0,
