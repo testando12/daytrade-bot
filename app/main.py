@@ -30,6 +30,8 @@ from app.engines.squeeze import SqueezeAnalyzer
 from app.engines.liquidity_sweep import LiquiditySweepAnalyzer
 from app.engines.fvg import FVGAnalyzer
 from app.engines.regime import RegimeDetector
+from app.engines.vwap_reversion import VWAPReversionAnalyzer
+from app.engines.pyramid_breakout import PyramidBreakoutAnalyzer
 from app.engines.risk_manager import risk_manager
 
 # Database
@@ -104,14 +106,17 @@ def _effective_total_cycles() -> int:
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
-# Alocação por timeframe: SHORT 10% + MEDIUM 25% + LONG 37% + MR 10% + BO 8% + SQ 6% + LS 2% + FVG 2% = 100%
-# v3.0 (2026-03-07): 1d reduzido 41%→37% para liberar 4% aos buckets LS+FVG + RegimeDetector multi-sinal
-_TIMEFRAME_ALLOC   = {"5m": 0.10, "1h": 0.25, "1d": 0.37}
-_MR_ALLOC_PCT      = 0.10   # capital dedicado ao bucket de Mean Reversion
-_BO_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Breakout
-_SQ_ALLOC_PCT      = 0.06   # capital dedicado ao bucket de Squeeze (Volatility Compression)
+# Alocação por timeframe: SHORT 8% + MEDIUM 20% + LONG 30% + MR 8% + BO 6% + SQ 5% + LS 2% + FVG 2% + VR 10% + PB 9% = 100%
+# v4.0 (2026-03-09): Adicionados VR (VWAP Reversion) e PB (Pyramid Breakout)
+# VR excela em lateral (ADX<20), PB excela em tendência (ADX>25) — sistema complementar
+_TIMEFRAME_ALLOC   = {"5m": 0.08, "1h": 0.20, "1d": 0.30}
+_MR_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Mean Reversion
+_BO_ALLOC_PCT      = 0.06   # capital dedicado ao bucket de Breakout
+_SQ_ALLOC_PCT      = 0.05   # capital dedicado ao bucket de Squeeze (Volatility Compression)
 _LS_ALLOC_PCT      = 0.02   # capital dedicado ao bucket de Liquidity Sweep (Stop Hunt)
 _FVG_ALLOC_PCT     = 0.02   # capital dedicado ao bucket de Fair Value Gap (Imbalance Fill)
+_VR_ALLOC_PCT      = 0.10   # capital dedicado ao bucket de VWAP Reversion (novo v4.0)
+_PB_ALLOC_PCT      = 0.09   # capital dedicado ao bucket de Pyramid Breakout (novo v4.0)
 # v2.1 (2026-03-05): top-N reduzido para 1 por bucket — operar só o melhor sinal de cada timeframe
 _TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 1, "1d": 1}  # era 1/2/3 — com 1d=3 perdia em dias de queda
 
@@ -255,7 +260,7 @@ def _dynamic_strategy_weights(lookback: int = 30) -> dict:
     """
     cycles = _perf_state.get("cycles", [])[-lookback:]
     if len(cycles) < 5:
-        return {k: 1.0 for k in ("mr", "bo", "sq", "ls", "fvg")}
+        return {k: 1.0 for k in ("mr", "bo", "sq", "ls", "fvg", "vr", "pb")}
 
     def _sharpe(key: str) -> float:
         vals = [c.get(key, 0.0) or 0.0 for c in cycles]
@@ -274,7 +279,7 @@ def _dynamic_strategy_weights(lookback: int = 30) -> dict:
 
     return {
         k: round(_sharpe_to_mult(_sharpe(f"pnl_{k}")), 3)
-        for k in ("mr", "bo", "sq", "ls", "fvg")
+        for k in ("mr", "bo", "sq", "ls", "fvg", "vr", "pb")
     }
 
 
@@ -2049,7 +2054,8 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
                                pnl_5m: float = 0.0, pnl_1h: float = 0.0, pnl_1d: float = 0.0,
                                costs: dict = None,
                                pnl_mr: float = 0.0, pnl_bo: float = 0.0, pnl_sq: float = 0.0,
-                               pnl_ls: float = 0.0, pnl_fvg: float = 0.0):
+                               pnl_ls: float = 0.0, pnl_fvg: float = 0.0,
+                               pnl_vr: float = 0.0, pnl_pb: float = 0.0):
     """Registra o P&L de um ciclo no histórico de performance."""
     global _perf_db_safety_checked, _perf_state
     # ── SAFETY MERGE: no primeiro ciclo após startup, verifica se o DB tem mais ciclos ──
@@ -2083,6 +2089,8 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
         "pnl_sq":    round(pnl_sq, 4),
         "pnl_ls":    round(pnl_ls, 4),
         "pnl_fvg":   round(pnl_fvg, 4),
+        "pnl_vr":    round(pnl_vr, 4),
+        "pnl_pb":    round(pnl_pb, 4),
         "fees_total": round(cst.get("total", 0.0), 6),
         "fees_brokerage": round(cst.get("brokerage", 0.0), 6),
         "fees_exchange": round(cst.get("exchange_fees", 0.0), 6),
@@ -3120,24 +3128,55 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     }
     capital_fvg = round(capital * _FVG_ALLOC_PCT, 2) if top_fvg else 0.0
 
-    # ── Regime Routing v3.0 — aplica multipliers do RegimeDetector ───────
+    # ── VWAP Reversion: bucket de 10% (Reversão ao VWAP) ────────────────
+    # v4.0: entra quando preço desvia >1.5σ do VWAP em mercado lateral (ADX<20)
+    # Score: desvio VWAP 40% + RSI 35% + Volume 25%. SL=0.8 ATR, TP=1.0 ATR
+    vr_results  = VWAPReversionAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=2)
+    top_vr      = list(vr_results.keys())
+    mom_vr      = {
+        a: {**d, "momentum_score": max(d["vr_score"], 0.55)}
+        for a, d in vr_results.items()
+    }
+    capital_vr  = round(capital * _VR_ALLOC_PCT, 2) if top_vr else 0.0
+
+    # ── Pyramid Breakout: bucket de 9% (Breakout com Pirâmide Progressiva) ─
+    # v4.0: detecta rompimentos fortes (BB + ATR expansion + EMA alignment)
+    # Pyramiding: L1=100%, +1ATR→+50%, +2ATR→+30% (max 180%). SL=1.5 ATR, TP=3.0 ATR
+    pb_results  = PyramidBreakoutAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=2)
+    top_pb      = list(pb_results.keys())
+    # Aplica multiplicador de pirâmide ao momentum_score para boost de posição
+    mom_pb      = {}
+    for a, d in pb_results.items():
+        _pyr_mult = d.get("pyramid_multiplier", 1.0)
+        _pb_score = max(d["pb_score"], 0.58)
+        # Boost: score ajustado pelo multiplicador de pirâmide (cap 1.0)
+        _adj_score = min(_pb_score * (1.0 + (_pyr_mult - 1.0) * 0.3), 1.0)
+        mom_pb[a] = {**d, "momentum_score": _adj_score}
+    capital_pb  = round(capital * _PB_ALLOC_PCT, 2) if top_pb else 0.0
+
+    # ── Regime Routing v4.0 — aplica multipliers do RegimeDetector ───────
     # Usa ADX + ATR Ratio + Hurst para rotear capital de forma ótima
     _base_caps = {"mr": capital_mr, "bo": capital_bo, "sq": capital_sq,
-                  "ls": capital_ls, "fvg": capital_fvg}
+                  "ls": capital_ls, "fvg": capital_fvg,
+                  "vr": capital_vr, "pb": capital_pb}
     _regime_caps = RegimeDetector.apply_multipliers(_base_caps, _regime_result)
     capital_mr  = round(_regime_caps["mr"], 2)
     capital_bo  = round(_regime_caps["bo"], 2)
     capital_sq  = round(_regime_caps["sq"], 2)
     capital_ls  = round(_regime_caps["ls"], 2)
     capital_fvg = round(_regime_caps["fvg"], 2)
+    capital_vr  = round(_regime_caps["vr"], 2)
+    capital_pb  = round(_regime_caps["pb"], 2)
 
     # ── Dynamic Strategy Allocation — ajuste fino por Sharpe histórico ───
     _dyn_weights = _dynamic_strategy_weights(lookback=30)
-    capital_mr  = round(capital_mr  * _dyn_weights["mr"],  2)
-    capital_bo  = round(capital_bo  * _dyn_weights["bo"],  2)
-    capital_sq  = round(capital_sq  * _dyn_weights["sq"],  2)
-    capital_ls  = round(capital_ls  * _dyn_weights["ls"],  2)
-    capital_fvg = round(capital_fvg * _dyn_weights["fvg"], 2)
+    capital_mr  = round(capital_mr  * _dyn_weights.get("mr",  1.0), 2)
+    capital_bo  = round(capital_bo  * _dyn_weights.get("bo",  1.0), 2)
+    capital_sq  = round(capital_sq  * _dyn_weights.get("sq",  1.0), 2)
+    capital_ls  = round(capital_ls  * _dyn_weights.get("ls",  1.0), 2)
+    capital_fvg = round(capital_fvg * _dyn_weights.get("fvg", 1.0), 2)
+    capital_vr  = round(capital_vr  * _dyn_weights.get("vr",  1.0), 2)
+    capital_pb  = round(capital_pb  * _dyn_weights.get("pb",  1.0), 2)
 
     # ── Exposure Cap — nenhum bucket ultrapassa 2× sua alocação base ─────
     # Previne que regime + dynamic weights se acumulem e criem alavancagem excessiva
@@ -3147,6 +3186,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     capital_sq  = min(capital_sq,  round(capital * _SQ_ALLOC_PCT  * 2.0, 2))
     capital_ls  = min(capital_ls,  round(capital * _LS_ALLOC_PCT  * 2.0, 2))
     capital_fvg = min(capital_fvg, round(capital * _FVG_ALLOC_PCT * 2.0, 2))
+    capital_vr  = min(capital_vr,  round(capital * _VR_ALLOC_PCT  * 2.0, 2))
+    capital_pb  = min(capital_pb,  round(capital * _PB_ALLOC_PCT  * 2.0, 2))
 
     cycle_costs = {
         "total": 0.0,
@@ -3333,6 +3374,23 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         _trade_log("FVG_SIGNAL", "—", capital_fvg,
             f"📐 FVG {_fvg_dir}: {len(top_fvg)} ativo(s) | {list(top_fvg)} | gap={_fvg_gap:.2f}% | R${capital_fvg:.2f} | P&L: R${pnl_fvg:+.4f}")
 
+    # ── 4a-vr. VWAP Reversion bucket — Reversão ao VWAP (10%) ───────────
+    pnl_vr, pos_vr, costs_vr = _calc_pnl_bucket(top_vr, klines_by_tf["1h"], capital_vr, "vr", mom_vr)
+    if top_vr:
+        _vr_dir   = vr_results.get(list(top_vr)[0], {}).get("direction", "?")
+        _vr_dev   = vr_results.get(list(top_vr)[0], {}).get("vwap_deviation", 0.0)
+        _trade_log("VR_SIGNAL", "—", capital_vr,
+            f"📊 VWAP Rev {_vr_dir}: {len(top_vr)} ativo(s) | {list(top_vr)} | desvio={_vr_dev*100:.2f}% | R${capital_vr:.2f} | P&L: R${pnl_vr:+.4f} | Regime={_adx_regime}")
+
+    # ── 4a-pb. Pyramid Breakout bucket — Breakout Progressivo (9%) ──────
+    pnl_pb, pos_pb, costs_pb = _calc_pnl_bucket(top_pb, klines_by_tf["1h"], capital_pb, "pb", mom_pb)
+    if top_pb:
+        _pb_dir   = pb_results.get(list(top_pb)[0], {}).get("direction", "?")
+        _pb_pyr   = pb_results.get(list(top_pb)[0], {}).get("pyramid_multiplier", 1.0)
+        _pb_level = pb_results.get(list(top_pb)[0], {}).get("pyramid_level", 1)
+        _trade_log("PB_SIGNAL", "—", capital_pb,
+            f"🔺 PyramidBO {_pb_dir}: {len(top_pb)} ativo(s) | {list(top_pb)} | pyramid=L{_pb_level} ({_pb_pyr:.0%}) | R${capital_pb:.2f} | P&L: R${pnl_pb:+.4f} | Regime={_adx_regime}")
+
     # ── 4b. Grid Trading — lucra com mercado lateral ─────────────────────
     grid_capital = round(capital * settings.GRID_CAPITAL_PCT, 2)
     grid_pnl, grid_details = _grid_trading_pnl(klines_by_tf["5m"], grid_capital)
@@ -3341,8 +3399,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
 
     fees_total = round(cycle_costs.get("total", 0.0), 4)
-    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + grid_pnl + fees_total, 4)
-    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + grid_pnl, 4)
+    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + pnl_vr + pnl_pb + grid_pnl + fees_total, 4)
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + pnl_vr + pnl_pb + grid_pnl, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
@@ -3443,6 +3501,23 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             fvg_dir = fvg_results.get(asset, {}).get("direction", "LONG")
             new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "fvg",
                 "pct": round(info["amount"]/capital*100, 1), "classification": f"FVG_{fvg_dir}", "change_pct": info["ret_pct"]}
+    for asset, info in pos_vr.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+vr"
+        else:
+            vr_dir = vr_results.get(asset, {}).get("direction", "LONG")
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "vr",
+                "pct": round(info["amount"]/capital*100, 1), "classification": f"VWAP_REV_{vr_dir}", "change_pct": info["ret_pct"]}
+    for asset, info in pos_pb.items():
+        if asset in new_positions:
+            new_positions[asset]["amount"] = round(new_positions[asset]["amount"] + info["amount"], 2)
+            new_positions[asset]["tf"] += "+pb"
+        else:
+            pb_dir = pb_results.get(asset, {}).get("direction", "LONG")
+            _pb_lvl = pb_results.get(asset, {}).get("pyramid_level", 1)
+            new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "pb",
+                "pct": round(info["amount"]/capital*100, 1), "classification": f"PYRAMID_BO_{pb_dir}_L{_pb_lvl}", "change_pct": info["ret_pct"]}
 
     _trade_state["positions"] = new_positions
     if len(new_positions) == 0:
@@ -3570,12 +3645,15 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     sq_info  = f" | SQ: R${pnl_sq:+.2f}" if top_sq else ""
     ls_info  = f" | LS: R${pnl_ls:+.2f}" if top_ls else ""
     fvg_info = f" | FVG: R${pnl_fvg:+.2f}" if top_fvg else ""
+    vr_info  = f" | VR: R${pnl_vr:+.2f}" if top_vr else ""
+    pb_info  = f" | PB: R${pnl_pb:+.2f}" if top_pb else ""
     _trade_log("CICLO", "—", capital,
-        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info}{bo_info}{sq_info}{ls_info}{fvg_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Regime: {_adx_regime}(ADX={_adx_val:.1f}/ATR={_atr_ratio:.2f}/H={_hurst:.2f}) | Turbo: {'ON' if turbo_active else 'OFF'}")
+        f"🔄 [{session_label}] {data_source} | 5m: R${pnl_5m:+.2f} | 1h: R${pnl_1h:+.2f} | 1d: R${pnl_1d:+.2f}{mr_info}{bo_info}{sq_info}{ls_info}{fvg_info}{vr_info}{pb_info} | Grid: R${grid_pnl:+.2f} | Total: R${cycle_pnl:+.2f} | IRQ: {irq_score:.3f} | Regime: {_adx_regime}(ADX={_adx_val:.1f}/ATR={_atr_ratio:.2f}/H={_hurst:.2f}) | Turbo: {'ON' if turbo_active else 'OFF'}")
 
     _record_cycle_performance(cycle_pnl, capital, irq_score, pnl_5m, pnl_1h, pnl_1d, cycle_costs,
                                pnl_mr=pnl_mr, pnl_bo=pnl_bo, pnl_sq=pnl_sq,
-                               pnl_ls=pnl_ls, pnl_fvg=pnl_fvg)
+                               pnl_ls=pnl_ls, pnl_fvg=pnl_fvg,
+                               pnl_vr=pnl_vr, pnl_pb=pnl_pb)
 
     # ── ML: Salvar amostras de treinamento (features + outcome por ativo) ─
     try:
@@ -3613,6 +3691,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             _save_bucket_ml(pos_5m, mom_5m, "5m")
             _save_bucket_ml(pos_1h, mom_1h, "1h")
             _save_bucket_ml(pos_1d, mom_1d, "1d")
+            _save_bucket_ml(pos_vr, mom_vr, "vr")
+            _save_bucket_ml(pos_pb, mom_pb, "pb")
     except Exception as _ml_err:
         print(f"[ml] Erro ao salvar amostra: {_ml_err}", flush=True)
 

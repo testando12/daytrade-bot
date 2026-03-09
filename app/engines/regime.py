@@ -168,7 +168,7 @@ def _calc_atr_ratio(prices: List[float], short_period: int = 5, long_period: int
 # ─────────────────────────────────────────────────────────────
 
 # (regime, strategy) → multiplier
-# estratégias: "5m", "1h", "1d", "mr", "bo", "sq", "ls", "fvg"
+# estratégias: "5m", "1h", "1d", "mr", "bo", "sq", "ls", "fvg", "vr", "pb"
 _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
     "TREND_STRONG": {
         "5m":  1.05,
@@ -179,6 +179,8 @@ _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
         "sq":  1.20,   # Squeeze pode disparar com tendência
         "ls":  1.15,   # LS ainda válido — grandes players varrem em tendências
         "fvg": 1.10,   # FVGs comuns em movimentos tendenciais
+        "vr":  0.20,   # VWAP Reversion péssimo em tendência — desativar quase totalmente
+        "pb":  1.60,   # Pyramid Breakout IDEAL em tendência forte — máx boost
     },
     "TREND_WEAK": {
         "5m":  1.00,
@@ -189,6 +191,8 @@ _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
         "sq":  1.10,
         "ls":  1.05,
         "fvg": 1.05,
+        "vr":  0.40,   # VWAP Reversion fraco em tendência fraca
+        "pb":  1.35,   # Pyramid Breakout bom em tendência fraca
     },
     "LATERAL": {
         "5m":  0.90,
@@ -199,6 +203,8 @@ _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
         "sq":  1.35,   # Squeeze acumula em lateral (pré-expansão)
         "ls":  1.20,   # LS relevante: topo/fundo do range varre stops
         "fvg": 1.25,   # FVG preenchido dentro do range
+        "vr":  1.50,   # VWAP Reversion EXCELA em lateral — máx boost
+        "pb":  0.20,   # Pyramid Breakout péssimo em lateral — desativar
     },
     "HIGH_VOL": {
         "5m":  0.70,   # ATR alto = posições menores em tudo
@@ -209,6 +215,8 @@ _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
         "sq":  0.80,
         "ls":  1.40,   # LS muito relevante: volatilidade gera mais stop hunts
         "fvg": 0.85,
+        "vr":  0.40,   # VWAP Reversion arriscado com vol alta — stops estourados
+        "pb":  1.45,   # Pyramid Breakout bom: vol alta + tendência = lucro
     },
     "LOW_VOL_SQUEEZE": {
         "5m":  0.90,
@@ -219,6 +227,8 @@ _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
         "sq":  1.60,   # Squeeze IDEAL: compressão → expansão iminente
         "ls":  0.80,   # Baixa vol = menos stops sendo ativados
         "fvg": 1.10,
+        "vr":  1.30,   # VWAP Reversion bom em baixa vol — reversões limpas
+        "pb":  0.30,   # Pyramid Breakout fraco sem vol — sem tendência
     },
     "NEUTRAL": {
         "5m":  1.00,
@@ -229,6 +239,8 @@ _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
         "sq":  1.00,
         "ls":  1.00,
         "fvg": 1.00,
+        "vr":  1.00,
+        "pb":  1.00,
     },
 }
 
