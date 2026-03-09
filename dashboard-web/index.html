@@ -735,7 +735,7 @@
         <div class="card mb-16" id="pre-real-card" style="padding:16px 18px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
-              <span style="font-size:20px">🧪</span>
+              <i class="fas fa-flask" style="font-size:18px;color:var(--accent-green)"></i>
               <span style="font-size:15px;font-weight:700">Modo Pré-Real (Trava de Segurança)</span>
               <span id="pre-real-status-badge" class="badge badge-gray">Aguardando</span>
             </div>
@@ -750,7 +750,7 @@
           </div>
 
           <div class="cards-grid cards-2" style="gap:12px">
-            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
                 <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Limites de Segurança (LIVE)</div>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -788,7 +788,7 @@
               </div>
             </div>
 
-            <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px">
               <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Checklist Obrigatório</div>
               <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text-primary)">
                 <label style="display:flex;align-items:center;gap:8px"><input id="pre-ack-liquidation" type="checkbox" /> Entendo risco de liquidação e vou respeitar stop diário</label>
@@ -801,8 +801,8 @@
           </div>
 
           <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
-            <button class="btn btn-secondary" onclick="loadTradePage()">↻ Revalidar</button>
-            <button class="btn btn-primary" onclick="savePreRealConfig()">💾 Salvar Pré-Real</button>
+            <button class="btn btn-secondary" onclick="loadTradePage()"><i class="fas fa-sync-alt"></i> Revalidar</button>
+            <button class="btn btn-primary" onclick="savePreRealConfig()"><i class="fas fa-save"></i> Salvar Pré-Real</button>
           </div>
         </div>
 
@@ -953,7 +953,7 @@
             </div>
           </div>
           <!-- Reinvestimento info -->
-          <div id="trade-reinvest-info" style="display:none;text-align:center;padding:6px 12px;background:var(--bg-secondary);border-radius:6px;margin:8px;font-size:11px;color:var(--text-muted)">
+          <div id="trade-reinvest-info" style="display:none;text-align:center;padding:6px 12px;background:rgba(255,255,255,0.04);border-radius:6px;margin:8px;font-size:11px;color:var(--text-muted)">
             💰 Reinvestimento automático ativo — lucros reinvestidos ao final de cada dia às 17h BRT
           </div>
         </div>
