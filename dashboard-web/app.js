@@ -32,15 +32,25 @@ function _authHeaders() {
   return h;
 }
 
+let _apiKeyPromptActive = false;
 function promptApiKey() {
+  if (_apiKeyPromptActive) return;  // evita múltiplos prompts simultâneos
+  _apiKeyPromptActive = true;
   const current = getApiKey();
   const key = prompt('Digite sua API Key (X-API-Key):', current);
-  if (key !== null) {
+  _apiKeyPromptActive = false;
+  if (key !== null && key.trim()) {
     setApiKey(key.trim());
-    const lbl = document.getElementById('sidebar-key-label');
-    if (lbl) lbl.textContent = key.trim() ? '🔒 Key OK' : 'API Key';
+    _updateKeyLabel();
+    // Recarrega tudo após inserir a chave
     checkApiConnection();
+    loadPage(currentPage);
   }
+}
+
+function _updateKeyLabel() {
+  const lbl = document.getElementById('sidebar-key-label');
+  if (lbl) lbl.textContent = getApiKey() ? '🔒 Key OK' : 'API Key';
 }
 
 const PRE_REAL_STORAGE_KEY = 'pre_real_gate_v2';
@@ -200,6 +210,11 @@ function _updateCountdownEl(val) {
 // =============================================
 
 document.addEventListener('DOMContentLoaded', () => {
+  _updateKeyLabel();
+  // Se não tem API key salva, pede antes de carregar dados
+  if (!getApiKey()) {
+    promptApiKey();
+  }
   checkApiConnection();
   loadPage('dashboard');
   _startPageRefresh('dashboard');
