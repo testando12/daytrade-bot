@@ -149,3 +149,7 @@
 [2026-03-06T20:59:53] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-06T20:59:53] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 75.0000 | Total P&L: R$ 75.0000
 [2026-03-06T20:59:53] Top posições: ADBE=R$21.41 | PEP=R$19.02 | LYFT=R$18.49 | WMT=R$16.07
+[2026-03-09T16:16:18] Iniciando ciclo — capital: R$ 150.00
+[2026-03-09T16:16:19] Dados obtidos: 105 ativos via yahoo.finance
+[2026-03-09T16:16:19] Ciclo concluído | IRQ: 0.079 (NORMAL) | BUY:3 SELL:0 | P&L estimado: R$ 49.4727 | Total P&L: R$ 49.4727
+[2026-03-09T16:16:19] Top posições: QCOM=R$22.36 | MU=R$15.46 | AVAX=R$11.65
