@@ -364,3 +364,69 @@ Isso evita operar em regime ruim do mercado.
 - gera muitos trades
 - captura movimentos curtos
 - pode atingir metas pequenas diárias.
+
+---
+
+### 4.5.4 Estratégia: Breakout com Piramidagem Progressiva
+
+#### 🎯 Objetivo
+Capturar movimentos grandes de tendência e aumentar posição conforme o trade confirma. Cria ganhos muito grandes quando acerta e perdas pequenas quando erra.
+
+#### 1️⃣ Condição de Entrada
+Rompimento de volatilidade:
+- **Preço rompe máxima de 20 candles**
+- **ATR aumentando**
+- **Volume acima da média**
+→ Abrir posição
+
+**Indicadores:** Bollinger Bands, ATR(14)
+
+#### 2️⃣ Risco Inicial (Agressivo Controlado)
+- **Risco por trade = 1.8% – 2.2% do capital**
+- **Stop loss = 1.5 ATR abaixo da entrada**
+
+#### 3️⃣ Piramidagem (fonte do lucro)
+Aumentar posição apenas quando o trade já está lucrando:
+- **+1 ATR a favor → adicionar 50% da posição**
+- **+2 ATR a favor → adicionar mais 30%**
+
+Exposição total máxima: ~180% da posição original.
+
+#### 4️⃣ Trailing Stop
+Stop móvel baseado em:
+- **EMA20** ou **2 × ATR abaixo do preço**
+- Deixa o trade correr enquanto a tendência existe
+
+#### 5️⃣ Gestão de Risco Global
+- **máx trades simultâneos = 3**
+- **risco total aberto ≤ 5% do capital**
+
+#### 📊 Perfil Estatístico Esperado
+
+| Métrica        | Valor Típico |
+|----------------|-------------|
+| Win rate       | 30–40%      |
+| Risk/Reward    | 4:1 a 8:1   |
+| Profit Factor  | 1.8 – 2.5   |
+| Drawdown       | 10–18%      |
+
+Muitos trades pequenos perdendo, poucos trades gigantes pagando tudo.
+
+#### 🧠 Filtro de Ativação
+- **ADX > 25** (só operar em tendência clara)
+- Mercados laterais destroem essa estratégia
+
+#### ⚠️ Complemento Natural
+Combinar com VWAP Reversion (4.5.2) que opera em ADX < 20. Quando Breakout para (mercado lateral), VWAP Reversion opera e vice-versa.
+
+---
+
+### 4.5.5 Sistema Combinado por Regime (Recomendação)
+
+| Regime (ADX)         | Estratégia                    | Finalidade     |
+|----------------------|-------------------------------|----------------|
+| Tendência (ADX > 25) | Breakout + Piramidagem (4.5.4) | Captura caudas |
+| Lateral (ADX < 20)   | VWAP Reversion (4.5.2)        | Gera caixa     |
+| Transição (ADX 20-25)| Micro-Breakout (4.5.3)        | Scalping       |
+
+O bot já tem `RegimeDetector` com ADX — infraestrutura pronta para implementar.
