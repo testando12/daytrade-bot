@@ -821,6 +821,9 @@ async function loadDashboard() {
     // Render partial KPIs immediately from fast endpoints
     try { renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHistory); } catch (re) { console.warn('renderDashboardKPIsPartial:', re); }
 
+    // Performance chart from history
+    try { renderPerformanceChart(perfHistory, tradeStatus); } catch (re) { console.warn('renderPerformanceChart:', re); }
+
     // Prices separately
     loadMarketPrices();
     setLastUpdate();
@@ -831,6 +834,7 @@ async function loadDashboard() {
       try { renderDashboardKPIs(analysis.data, riskStatus, tradeStatus); } catch (re) { console.warn('renderDashboardKPIs:', re); }
       try { renderMomentumChart(analysis.data); } catch (re) { console.warn('renderMomentumChart:', re); }
       try { renderRiskRadar(analysis.data); } catch (re) { console.warn('renderRiskRadar:', re); }
+      try { renderRiskGauge(analysis.data); } catch (re) { console.warn('renderRiskGauge:', re); }
       try { renderDashboardAllocation(analysis.data); } catch (re) { console.warn('renderDashboardAlloc:', re); }
     }
     setLastUpdate();
@@ -852,7 +856,7 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHisto
   const pnlEl = document.getElementById('kpi-pnl');
   if (pnlEl) {
     pnlEl.textContent = `P&L: ${fmtMoney(pnlVal)}`;
-    pnlEl.className = `kpi-change ${pnlVal >= 0 ? 'up' : 'down'}`;
+    pnlEl.className = `widget-change ${pnlVal >= 0 ? 'positive' : 'negative'}`;
   }
   // Bot status from risk
   const canTrade = riskStatus?.data?.is_locked === false;
@@ -861,7 +865,7 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHisto
   const tradeOkEl = document.getElementById('kpi-trade-ok');
   if (tradeOkEl) {
     tradeOkEl.textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
-    tradeOkEl.className = `kpi-change ${canTrade ? 'up' : 'down'}`;
+    tradeOkEl.className = `widget-sub`;
   }
 
   // Meta R$100 também na aba Dashboard
@@ -898,7 +902,7 @@ function renderDashboardKPIs(data, riskStatus, tradeStatus) {
   const pnlEl = document.getElementById('kpi-pnl');
   if (pnlEl) {
     pnlEl.textContent = `P&L: ${fmtMoney(pnlVal)}`;
-    pnlEl.className = `kpi-change ${pnlVal >= 0 ? 'up' : 'down'}`;
+    pnlEl.className = `widget-change ${pnlVal >= 0 ? 'positive' : 'negative'}`;
   }
 
   // IRQ
@@ -908,7 +912,7 @@ function renderDashboardKPIs(data, riskStatus, tradeStatus) {
     const irqEl = document.getElementById('kpi-irq');
     if (irqEl) irqEl.textContent = `${pct}%`;
     const irqLvl = document.getElementById('kpi-irq-level');
-    if (irqLvl) { irqLvl.textContent = irq.level || irq.protection_level; irqLvl.className = `kpi-change ${irq.irq_score < 0.6 ? 'up' : 'down'}`; }
+    if (irqLvl) { irqLvl.textContent = irq.level || irq.protection_level; irqLvl.className = `widget-change ${irq.irq_score < 0.6 ? 'positive' : 'negative'}`; }
     const badge = document.getElementById('irq-badge-dash');
     if (badge) { badge.textContent = `${irq.color} ${irq.level}`; badge.className = `badge ${irqBadgeClass(irq.level)}`; }
   }
@@ -923,15 +927,15 @@ function renderDashboardKPIs(data, riskStatus, tradeStatus) {
     const baEl = document.getElementById('kpi-best-asset');
     if (baEl) baEl.textContent = best || '--';
     const bsEl = document.getElementById('kpi-best-score');
-    if (bsEl) { bsEl.textContent = `Score: ${bestScore.toFixed(4)}`; bsEl.className = `kpi-change ${bestScore >= 0 ? 'up' : 'down'}`; }
+    if (bsEl) { bsEl.textContent = `Score: ${bestScore.toFixed(4)}`; bsEl.className = `widget-change ${bestScore >= 0 ? 'positive' : 'negative'}`; }
   }
 
   // Bot status
   const canTrade = riskStatus?.data?.is_locked === false;
   const bsEl2 = document.getElementById('kpi-bot-status');
-  if (bsEl2) bsEl2.textContent = canTrade ? '✅ Operacional' : '🔒 Bloqueado';
+  if (bsEl2) bsEl2.textContent = canTrade ? 'Operacional' : 'Bloqueado';
   const toEl = document.getElementById('kpi-trade-ok');
-  if (toEl) { toEl.textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || ''); toEl.className = `kpi-change ${canTrade ? 'up' : 'down'}`; }
+  if (toEl) { toEl.textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || ''); toEl.className = `widget-sub`; }
   // Atualiza banners BRL/USD em ambas as páginas
   const td2 = tradeStatus?.data || {};
   renderCapitalSplitBanners(td2);
@@ -965,8 +969,10 @@ function renderCapitalSplitBanners(td) {
 function round2(n) { return Math.round(n * 100) / 100; }
 
 async function loadMarketPrices() {
+  // Legacy table (hidden compat element)
   const el = document.getElementById('dash-prices-table');
-  if (!el) return;
+  // New crypto-list style
+  const listEl = document.getElementById('dash-prices-list');
 
   try {
     const data = await api('/market/prices');
@@ -974,17 +980,47 @@ async function loadMarketPrices() {
 
     const prices = data.data;
     const keys = Object.keys(prices).slice(0, 8);
-    let html = '<table><thead><tr><th>Ativo</th><th>Preço</th></tr></thead><tbody>';
-    for (const asset of keys) {
-      html += `<tr>
-        <td><strong>${asset}</strong></td>
-        <td>${fmtPrice(prices[asset])}</td>
-      </tr>`;
+
+    // Render old table if element exists
+    if (el) {
+      let html = '<table><thead><tr><th>Ativo</th><th>Preço</th></tr></thead><tbody>';
+      for (const asset of keys) {
+        html += `<tr><td><strong>${asset}</strong></td><td>${fmtPrice(prices[asset])}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
     }
-    html += '</tbody></table>';
-    el.innerHTML = html;
+
+    // Render crypto-list style for new dashboard
+    if (listEl) {
+      const iconMap = {
+        'BTCUSDT': { icon: 'fab fa-bitcoin', bg: '#f7931a' },
+        'ETHUSDT': { icon: 'fab fa-ethereum', bg: '#627eea' },
+        'SOLUSDT': { icon: 'fas fa-sun', bg: 'linear-gradient(135deg, #9945FF, #14F195)' },
+        'BNBUSDT': { icon: 'fas fa-coins', bg: '#f0b90b' },
+        'XRPUSDT': { icon: 'fas fa-water', bg: '#006097' },
+        'ADAUSDT': { icon: 'fas fa-leaf', bg: '#0033ad' },
+        'DOGEUSDT': { icon: 'fas fa-dog', bg: '#c2a633' },
+        'DOTUSDT': { icon: 'fas fa-circle-nodes', bg: '#e6007a' },
+      };
+      const defaultIcon = { icon: 'fas fa-chart-line', bg: 'rgba(255,255,255,0.12)' };
+      let listHtml = '';
+      keys.slice(0, 5).forEach((asset, i) => {
+        const info = iconMap[asset] || defaultIcon;
+        const price = prices[asset];
+        const sym = asset.replace('USDT', '');
+        listHtml += `<div class="crypto-item">
+          <span class="crypto-rank">${i + 1}</span>
+          <div class="crypto-icon" style="background:${info.bg}"><i class="${info.icon}"></i></div>
+          <span class="crypto-name">${sym} <span class="crypto-symbol">${asset}</span></span>
+          <span style="font-size:11px;color:rgba(255,255,255,0.6)">$${typeof price === 'number' ? price.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price}</span>
+        </div>`;
+      });
+      listEl.innerHTML = listHtml;
+    }
   } catch (e) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📡</div><p>Binance offline ou sem conexão</p></div>`;
+    if (el) el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-satellite-dish"></i></div><p>Binance offline</p></div>';
+    if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:12px;color:rgba(255,255,255,0.3);font-size:12px"><i class="fas fa-satellite-dish"></i> Offline</div>';
   }
 }
 
@@ -1121,8 +1157,166 @@ function renderDashboardAllocation(data) {
 }
 
 // =============================================
-// PAGE: ANÁLISE AO VIVO
+// PERFORMANCE CHART (area chart like S&P 500)
 // =============================================
+
+let perfChartRange = 7;
+let perfChartData = null;
+let perfChartCapital = 2000;
+
+function renderPerformanceChart(perfHistory, tradeStatus) {
+  if (typeof Chart === 'undefined') return;
+  const ctx = document.getElementById('chart-performance');
+  if (!ctx) return;
+
+  const td = tradeStatus?.data || {};
+  perfChartCapital = td.capital_efetivo || td.capital || 2000;
+  const days = Array.isArray(perfHistory?.days) ? perfHistory.days : [];
+  perfChartData = days;
+
+  // Update capital display
+  const capDisplay = document.getElementById('dash-capital-display');
+  if (capDisplay) capDisplay.textContent = fmtMoney(perfChartCapital);
+
+  // Calculate total PnL
+  const totalPnl = days.reduce((s, d) => s + Number(d.pnl || 0), 0);
+  const pnlPct = perfChartCapital > 0 ? ((totalPnl / (perfChartCapital - totalPnl)) * 100).toFixed(2) : 0;
+  const pnlDisplay = document.getElementById('dash-pnl-change');
+  if (pnlDisplay) {
+    const sign = totalPnl >= 0 ? '+' : '';
+    pnlDisplay.textContent = `${sign}${fmtMoney(totalPnl)} (${sign}${pnlPct}%)`;
+    pnlDisplay.style.color = totalPnl >= 0 ? '#4caf50' : '#ef5350';
+  }
+
+  drawPerformanceChart(days);
+}
+
+function drawPerformanceChart(allDays) {
+  if (typeof Chart === 'undefined') return;
+  destroyChart('perf-equity');
+  const ctx = document.getElementById('chart-performance');
+  if (!ctx) return;
+
+  let days = [...allDays];
+  if (perfChartRange > 0) days = days.slice(-perfChartRange);
+  if (!days.length) {
+    // Show placeholder with no data
+    days = [{ date: new Date().toISOString().split('T')[0], pnl: 0 }];
+  }
+
+  // Build cumulative equity curve
+  let cum = perfChartCapital;
+  // wind back to start
+  const totalSlice = days.reduce((s, d) => s + Number(d.pnl || 0), 0);
+  cum = perfChartCapital - totalSlice; // starting capital before these days
+  const equityData = [];
+  const labels = [];
+  for (const d of days) {
+    cum += Number(d.pnl || 0);
+    equityData.push(cum);
+    const dt = d.date || '';
+    labels.push(dt.slice(5) || dt); // MM-DD
+  }
+
+  charts['perf-equity'] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Capital',
+        data: equityData,
+        borderColor: 'rgba(255,255,255,0.5)',
+        borderWidth: 1.5,
+        backgroundColor: (context) => {
+          const chart = context.chart;
+          const { ctx: c, chartArea } = chart;
+          if (!chartArea) return 'rgba(255,255,255,0.05)';
+          const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+          gradient.addColorStop(0, 'rgba(255,255,255,0.08)');
+          gradient.addColorStop(1, 'rgba(255,255,255,0)');
+          return gradient;
+        },
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          callbacks: {
+            label: (item) => fmtMoney(item.parsed.y),
+          }
+        }
+      },
+      scales: {
+        y: {
+          display: false,
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: 'rgba(255,255,255,0.25)', font: { size: 10 } },
+        }
+      },
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+    }
+  });
+}
+
+// Chart tabs click handler
+document.addEventListener('click', (e) => {
+  const tab = e.target.closest('#perf-chart-tabs .chart-tab');
+  if (!tab) return;
+  document.querySelectorAll('#perf-chart-tabs .chart-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  perfChartRange = parseInt(tab.dataset.range) || 0;
+  if (perfChartData) drawPerformanceChart(perfChartData);
+});
+
+// =============================================
+// RISK GAUGE
+// =============================================
+
+function renderRiskGauge(data) {
+  const risk = data.risk_analysis;
+  if (!risk) return;
+
+  const score = risk.irq_score || 0;
+  const pct = (score * 100).toFixed(0);
+  const level = risk.level || risk.protection_level || '--';
+
+  // Update gauge value
+  const valEl = document.getElementById('risk-gauge-value');
+  if (valEl) valEl.textContent = pct;
+
+  const lblEl = document.getElementById('risk-gauge-label');
+  if (lblEl) lblEl.textContent = level;
+
+  // Needle rotation: 0 = far left (high risk), 1 = far right (low risk/safe)
+  // Template gauge: -90deg = left, 0 = center, +90deg = right
+  // For risk: low score = safe (right), high score = danger (left)
+  // Invert: angle = (score * 180) - 90 → score 0 = -90 (safe), score 1 = +90 (danger)
+  // Actually: score 0 = safe, score 1 = max risk
+  // So: high score → needle left (danger), low score → needle right (safe)
+  const angle = (score * 180) - 90; // -90 to +90
+  const needleEl = document.getElementById('risk-gauge-needle');
+  if (needleEl) needleEl.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+
+  const prevEl = document.getElementById('risk-gauge-prev');
+  if (prevEl) prevEl.textContent = `${risk.color || ''} ${level}`;
+}
+
+// =============================================
+// MARKET PRICES (crypto-list style)
+// =============================================
+
 
 async function loadLiveAnalysis() {
   const el = document.getElementById('live-analysis-result');
@@ -3294,3 +3488,136 @@ async function loadLeverage() {
   document.getElementById('lev-verdict').innerHTML = verdictHtml;
 
 }
+// =============================================
+// DASHBOARD TODO WIDGET
+// =============================================
+(function() {
+  const todoWidget  = document.getElementById('dash-todo-widget');
+  const todoCompact = document.getElementById('dash-todo-compact');
+  const todoExpWrap = document.getElementById('dash-todo-expanded');
+  const metaWidget  = document.querySelector('.dash-meta-widget');
+  if (!todoWidget) return;
+  let expanded = false;
+  let filter = 'all';
+
+  const DEFAULT_TASKS = [
+    { id: 1, text: 'Verificar sinais de risco', when: 'today', priority: 'high', done: false },
+    { id: 2, text: 'Rebalancear portfólio', when: 'upcoming', priority: 'medium', done: false },
+    { id: 3, text: 'Revisar meta semanal', when: 'upcoming', priority: 'low', done: false },
+  ];
+
+  let tasks = JSON.parse(localStorage.getItem('dashTodoTasks') || 'null') || DEFAULT_TASKS;
+
+  function save() { localStorage.setItem('dashTodoTasks', JSON.stringify(tasks)); }
+  function label(p) { return p === 'high' ? 'Alta' : p === 'medium' ? 'Média' : 'Baixa'; }
+
+  function renderTasks() {
+    const list = document.getElementById('dash-todo-list');
+    if (!list) return;
+    const view = filter === 'all' ? tasks : tasks.filter(t => t.when === filter);
+    if (!view.length) {
+      list.innerHTML = '<div class="todo-empty">Sem tarefas aqui <i class="fas fa-check"></i></div>';
+    } else {
+      list.innerHTML = view.map(t => `
+        <div class="todo-exp-item${t.done ? ' todo-done' : ''}" data-id="${t.id}">
+          <input type="checkbox" ${t.done ? 'checked' : ''} onchange="dashTodoToggle(${t.id})">
+          <span class="todo-exp-text">${t.text}</span>
+          <span class="todo-priority ${t.priority}">${label(t.priority)}</span>
+          <i class="fas fa-trash todo-del-btn" onclick="dashTodoDelete(${t.id})"></i>
+        </div>`).join('');
+    }
+    const pending = tasks.filter(t => !t.done).length;
+    const countEl = document.getElementById('dash-todo-count');
+    if (countEl) countEl.textContent = `${pending} pendente${pending !== 1 ? 's' : ''}`;
+    const pendingEl = document.getElementById('dash-todo-pending');
+    if (pendingEl) pendingEl.textContent = pending;
+  }
+
+  window.dashTodoToggle = function(id) {
+    const t = tasks.find(t => t.id === id);
+    if (t) { t.done = !t.done; save(); renderTasks(); }
+  };
+  window.dashTodoDelete = function(id) {
+    tasks = tasks.filter(t => t.id !== id);
+    save(); renderTasks();
+  };
+
+  // Filter tabs
+  document.getElementById('dash-todo-tabs')?.addEventListener('click', e => {
+    const tab = e.target.closest('.todo-tab');
+    if (!tab) return;
+    filter = tab.dataset.filter;
+    document.querySelectorAll('#dash-todo-tabs .todo-tab').forEach(b => b.classList.remove('active'));
+    tab.classList.add('active');
+    renderTasks();
+  });
+
+  // Add task
+  document.getElementById('dash-todo-add')?.addEventListener('click', () => {
+    document.getElementById('dash-todo-modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('dash-todo-modal-text')?.focus(), 50);
+  });
+  document.getElementById('dash-todo-modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('dash-todo-modal')?.addEventListener('click', e => {
+    if (e.target.id === 'dash-todo-modal') closeModal();
+  });
+  document.getElementById('dash-todo-modal-text')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('dash-todo-modal-save')?.click();
+  });
+  document.getElementById('dash-todo-modal-save')?.addEventListener('click', () => {
+    const text = document.getElementById('dash-todo-modal-text')?.value.trim();
+    if (!text) return;
+    tasks.push({
+      id: Date.now(),
+      text,
+      when: document.getElementById('dash-todo-modal-when')?.value || 'today',
+      priority: document.getElementById('dash-todo-modal-priority')?.value || 'low',
+      done: false
+    });
+    save(); renderTasks(); closeModal();
+    document.getElementById('dash-todo-modal-text').value = '';
+  });
+  function closeModal() {
+    document.getElementById('dash-todo-modal').style.display = 'none';
+  }
+
+  // Expand / Collapse
+  function openTodo() {
+    expanded = true;
+    todoCompact.style.display = 'none';
+    todoExpWrap.style.display = 'flex';
+    todoWidget.classList.add('todo-expanded', 'todo-expanding');
+    if (metaWidget) {
+      metaWidget.style.transition = 'opacity 0.18s ease, transform 0.18s ease';
+      metaWidget.style.opacity = '0';
+      metaWidget.style.transform = 'scale(0.96)';
+      metaWidget.style.pointerEvents = 'none';
+    }
+    todoWidget.addEventListener('animationend', () => {
+      todoWidget.classList.remove('todo-expanding');
+    }, { once: true });
+    renderTasks();
+  }
+
+  function closeTodo() {
+    expanded = false;
+    todoWidget.classList.remove('todo-expanded');
+    todoWidget.classList.add('todo-collapsing');
+    todoWidget.addEventListener('animationend', () => {
+      todoWidget.classList.remove('todo-collapsing');
+      todoExpWrap.style.display = 'none';
+      todoCompact.style.display = '';
+      if (metaWidget) {
+        metaWidget.style.transition = 'opacity 0.28s ease, transform 0.28s ease';
+        metaWidget.style.opacity = '1';
+        metaWidget.style.transform = 'scale(1)';
+        metaWidget.style.pointerEvents = '';
+      }
+    }, { once: true });
+  }
+
+  todoWidget.addEventListener('click', e => {
+    if (e.target.closest('#dash-todo-expand-btn')) { openTodo(); return; }
+    if (e.target.closest('.dash-todo-close')) { closeTodo(); return; }
+  });
+})();

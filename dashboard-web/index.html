@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=11" />
+  <link rel="stylesheet" href="style.css?v=12" />
 </head>
 <body>
 
@@ -195,160 +195,180 @@
            PAGE: DASHBOARD
            ========================================= -->
       <div id="page-dashboard" class="page active">
-        <div class="page-title">Dashboard</div>
-        <div class="page-subtitle">Visão geral do bot em tempo real</div>
+        <div class="dash-grid">
 
-        <!-- KPIs -->
-        <div class="cards-grid cards-4" id="dashboard-kpis">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Capital Total</span>
-              <div class="card-icon blue"><i class="fas fa-wallet"></i></div>
+          <!-- ── Row 1: 3 stat cards ── -->
+          <div class="widget-card">
+            <div class="widget-header">
+              <span class="widget-title">Melhor Ativo</span>
+              <i class="fas fa-external-link-alt widget-link" onclick="navigate('live')" style="cursor:pointer"></i>
             </div>
-            <div class="kpi-value" id="kpi-capital">R$ --</div>
-            <div class="kpi-label">Capital atual do bot</div>
-            <div class="kpi-change" id="kpi-pnl" style="margin-top:4px">P&L: --</div>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">IRQ Risco</span>
-              <div class="card-icon green"><i class="fas fa-shield-alt"></i></div>
+            <div class="widget-big-value" id="kpi-best-asset">--</div>
+            <div class="widget-footer">
+              <span class="widget-sub">Maior momentum score</span>
+              <span class="widget-change positive" id="kpi-best-score">Score: --</span>
             </div>
-            <div class="kpi-value" id="kpi-irq">--%</div>
-            <div class="kpi-label" id="kpi-irq-label">Nível de risco do mercado</div>
-            <div class="kpi-change neutral" id="kpi-irq-level">—</div>
           </div>
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Melhor Ativo</span>
-              <div class="card-icon yellow"><i class="fas fa-star"></i></div>
-            </div>
-            <div class="kpi-value" id="kpi-best-asset">--</div>
-            <div class="kpi-label">Maior momentum score</div>
-            <div class="kpi-change up" id="kpi-best-score">Score: --</div>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Status Bot</span>
-              <div class="card-icon green"><i class="fas fa-robot"></i></div>
-            </div>
-            <div class="kpi-value" id="kpi-bot-status" style="font-size:18px">--</div>
-            <div class="kpi-label">Estado do sistema</div>
-            <div class="kpi-change" id="kpi-trade-ok">—</div>
-          </div>
-        </div>
 
-        <div class="card mt-16 mb-16" style="padding:12px 16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-            <div style="font-size:12px;font-weight:700;color:var(--text-primary)">🎯 Meta diária</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:10px;color:var(--text-muted)">↺ reseta 00:00 BRT</span>
-              <span class="badge badge-blue">R$ 100/dia</span>
+          <div class="widget-card">
+            <div class="widget-header">
+              <span class="widget-title">IRQ Risco</span>
+              <span class="badge badge-green" id="irq-badge-dash" style="font-size:10px;padding:2px 8px;border-radius:10px">NORMAL</span>
+            </div>
+            <div class="widget-big-value" id="kpi-irq">--%</div>
+            <div class="widget-footer">
+              <span class="widget-sub">Nível de risco do mercado</span>
+              <span class="widget-change" id="kpi-irq-level">—</span>
             </div>
           </div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px">
-            <div style="min-width:120px;flex:1">
-              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Hoje (líquido)</div>
-              <div id="dash-goal-today" style="font-size:18px;font-weight:800;color:var(--text-primary)">R$ --</div>
-            </div>
-            <div style="min-width:120px;flex:1">
-              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Gap para 100</div>
-              <div id="dash-goal-gap" style="font-size:18px;font-weight:800;color:var(--text-primary)">R$ --</div>
-            </div>
-            <div style="min-width:120px;flex:1">
-              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Média 7 dias</div>
-              <div id="dash-goal-avg7" style="font-size:18px;font-weight:800;color:var(--text-primary)">R$ --</div>
-            </div>
-            <div style="min-width:160px;flex:1">
-              <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Custos hoje</div>
-              <div id="dash-costs-today" style="font-size:18px;font-weight:800;color:var(--red)">R$ --</div>
-            </div>
-          </div>
-        </div>
 
-        <!-- ── Banner BRL / USD Split ────────────────────────────────── -->
-        <!-- ── Banner BRL / USD redesigned ────────────────────────── -->
-        <div class="card mb-16 mt-16" id="dash-split-banner" style="padding:16px 20px">
-          <!-- Cabeçalho -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px">💼 Alocação de Capital</span>
-            <span style="font-size:11px;color:var(--text-muted)">USD/BRL&nbsp;<span id="dash-usd-rate" style="font-weight:700;color:var(--text-primary)">R$ --</span></span>
+          <div class="widget-card">
+            <div class="widget-header">
+              <span class="widget-title">Capital Total</span>
+              <i class="fas fa-wallet" style="font-size:11px;color:rgba(255,255,255,0.3)"></i>
+            </div>
+            <div class="widget-big-value" id="kpi-capital">R$ --</div>
+            <div class="widget-footer">
+              <span class="widget-sub" id="kpi-bot-status">--</span>
+              <span class="widget-change" id="kpi-pnl">P&L: --</span>
+            </div>
           </div>
-          <!-- Barra de split 40 / 60 -->
-          <div style="height:6px;border-radius:4px;overflow:hidden;display:flex;margin-bottom:16px;gap:2px">
-            <div style="width:40%;background:#3b82f6;border-radius:4px 0 0 4px"></div>
-            <div style="width:60%;background:#10b981;border-radius:0 4px 4px 0"></div>
-          </div>
-          <!-- Dois painéis -->
-          <div style="display:grid;grid-template-columns:1fr 1px 1fr;gap:0;align-items:start">
-            <!-- BRL -->
-            <div style="padding-right:16px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#3b82f6;flex-shrink:0"></span>
-                <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Bolsão BRL · B3</span>
-                <span style="margin-left:auto;font-size:10px;font-weight:700;color:#3b82f6;background:rgba(59,130,246,.12);padding:1px 7px;border-radius:10px">40%</span>
+
+          <!-- ── Row 2: Performance Chart (2 cols) + To-Do ── -->
+          <div class="widget-card dash-chart-widget">
+            <div class="widget-header">
+              <span class="widget-title">Performance</span>
+              <div class="chart-tabs" id="perf-chart-tabs">
+                <span class="chart-tab active" data-range="7">7D</span>
+                <span class="chart-tab" data-range="15">15D</span>
+                <span class="chart-tab" data-range="30">30D</span>
+                <span class="chart-tab" data-range="0">Max</span>
               </div>
-              <div id="dash-capital-brl" style="font-size:26px;font-weight:800;color:#3b82f6;line-height:1.1">R$ --</div>
-              <div style="font-size:10px;color:var(--text-muted);margin-top:4px">🇧🇷 Ações brasileiras</div>
             </div>
-            <!-- Divisor -->
-            <div style="background:var(--border);margin:0 4px"></div>
-            <!-- USD -->
-            <div style="padding-left:16px">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#10b981;flex-shrink:0"></span>
-                <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600">Bolsão USD · Intl</span>
-                <span style="margin-left:auto;font-size:10px;font-weight:700;color:#10b981;background:rgba(16,185,129,.12);padding:1px 7px;border-radius:10px">60%</span>
+            <div class="dash-chart-value">
+              <span id="dash-capital-display">R$ --</span>
+              <span class="dash-chart-change" id="dash-pnl-change">--</span>
+            </div>
+            <div class="dash-chart-area">
+              <canvas id="chart-performance"></canvas>
+            </div>
+          </div>
+
+          <div class="widget-card dash-todo-widget" id="dash-todo-widget">
+            <div id="dash-todo-compact">
+              <div class="widget-header">
+                <span class="widget-title">Para Você</span>
+                <i class="fas fa-plus widget-link" id="dash-todo-expand-btn" style="cursor:pointer"></i>
               </div>
-              <div id="dash-capital-usd" style="font-size:26px;font-weight:800;color:#10b981;line-height:1.1">$ --</div>
-              <div id="dash-capital-usd-brl" style="font-size:10px;color:var(--text-muted);margin-top:4px">🌍 ≈ R$ --</div>
+              <div class="todo-section">
+                <span class="todo-label">Hoje</span>
+                <div class="todo-item"><input type="checkbox"><span>Verificar sinais de risco</span><span class="todo-priority high">Alta</span></div>
+              </div>
+              <div class="todo-section">
+                <span class="todo-label">Pendente</span>
+                <div class="todo-item"><input type="checkbox"><span>Rebalancear portfólio</span><span class="todo-priority medium">Média</span></div>
+                <div class="todo-item"><input type="checkbox"><span>Revisar meta semanal</span><span class="todo-priority low">Baixa</span></div>
+              </div>
+              <div class="todo-footer">
+                <span class="widget-sub">Pendentes</span>
+                <span class="todo-count" id="dash-todo-pending">3</span>
+              </div>
+            </div>
+            <div id="dash-todo-expanded" style="display:none;height:100%;flex-direction:column;gap:8px;overflow:hidden">
+              <div class="widget-header">
+                <span class="widget-title">Para Você</span>
+                <i class="fas fa-times dash-todo-close" style="cursor:pointer;color:rgba(255,255,255,0.5);font-size:16px"></i>
+              </div>
+              <div class="todo-tabs" id="dash-todo-tabs">
+                <button class="todo-tab active" data-filter="all">Todos</button>
+                <button class="todo-tab" data-filter="today">Hoje</button>
+                <button class="todo-tab" data-filter="tomorrow">Amanhã</button>
+                <button class="todo-tab" data-filter="upcoming">Pendentes</button>
+              </div>
+              <div class="todo-exp-list" id="dash-todo-list"></div>
+              <div class="todo-bottom-bar">
+                <span class="todo-bottom-count" id="dash-todo-count">0 pendentes</span>
+                <button class="todo-add-fab" id="dash-todo-add"><i class="fas fa-plus"></i></button>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Row: Momentum Chart + Risk Radar -->
-        <div class="cards-grid cards-2-1 mt-16">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Momentum por Ativo</span>
-              <span id="dashboard-momentum-time" style="font-size:11px;color:var(--text-muted)"></span>
-            </div>
-            <div class="chart-container" style="height:240px">
-              <canvas id="chart-momentum"></canvas>
+          <!-- Todo Add Modal -->
+          <div class="todo-modal-overlay" id="dash-todo-modal" style="display:none">
+            <div class="todo-modal">
+              <div class="todo-modal-header">
+                <span class="todo-modal-title">Nova Tarefa</span>
+                <i class="fas fa-times" id="dash-todo-modal-close"></i>
+              </div>
+              <input type="text" class="todo-modal-input" id="dash-todo-modal-text" placeholder="O que precisa fazer?">
+              <select class="todo-modal-select" id="dash-todo-modal-when">
+                <option value="today">Hoje</option>
+                <option value="tomorrow">Amanhã</option>
+                <option value="upcoming">Pendente</option>
+              </select>
+              <select class="todo-modal-select" id="dash-todo-modal-priority">
+                <option value="low">Prioridade: Baixa</option>
+                <option value="medium">Prioridade: Média</option>
+                <option value="high">Prioridade: Alta</option>
+              </select>
+              <button class="todo-modal-save" id="dash-todo-modal-save">Salvar</button>
             </div>
           </div>
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Sinais de Risco</span>
-              <span class="badge badge-green" id="irq-badge-dash">NORMAL</span>
-            </div>
-            <div class="chart-container" style="height:240px">
-              <canvas id="chart-risk-radar"></canvas>
-            </div>
-          </div>
-        </div>
 
-        <!-- Row: Prices + Allocation -->
-        <div class="cards-grid cards-2 mt-16">
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Preços ao Vivo (Binance)</span>
-              <button class="btn btn-secondary btn-sm" onclick="loadMarketPrices()">↻</button>
+          <!-- ── Row 3: Crypto + Gauge + Meta ── -->
+          <div class="widget-card dash-crypto-widget">
+            <div class="widget-header">
+              <span class="widget-title">Preços ao Vivo</span>
+              <i class="fas fa-sync-alt widget-link" onclick="loadMarketPrices()" style="cursor:pointer"></i>
             </div>
-            <div id="dash-prices-table">
-              <div class="loading-overlay"><div class="spinner"></div> Carregando...</div>
+            <div class="crypto-list" id="dash-prices-list">
+              <div style="text-align:center;padding:20px;color:rgba(255,255,255,0.3)"><div class="spinner"></div></div>
             </div>
-          </div>
-          <div class="card">
-            <div class="card-header">
-              <span class="card-title">Alocação de Capital</span>
-              <span id="allocation-total" class="text-muted" style="font-size:12px"></span>
-            </div>
-            <div id="dash-allocation">
-              <div class="loading-overlay"><div class="spinner"></div> Calculando...</div>
+            <div class="crypto-dots">
+              <span class="dot active"></span><span class="dot"></span>
             </div>
           </div>
+
+          <div class="widget-card dash-gauge-widget">
+            <div class="widget-header">
+              <span class="widget-title">Nível de Risco</span>
+            </div>
+            <div class="gauge-container">
+              <div class="gauge">
+                <div class="gauge-bg"></div>
+                <div class="gauge-needle" id="risk-gauge-needle"></div>
+                <div class="gauge-center">
+                  <span class="gauge-value" id="risk-gauge-value">--</span>
+                  <span class="gauge-label" id="risk-gauge-label">--</span>
+                </div>
+              </div>
+            </div>
+            <div class="gauge-footer">
+              <span class="widget-sub" id="kpi-trade-ok">—</span>
+              <span class="gauge-prev" id="risk-gauge-prev">--</span>
+            </div>
+          </div>
+
+          <div class="widget-card dash-meta-widget">
+            <div class="widget-header">
+              <span class="widget-title">Meta Diária</span>
+              <i class="fas fa-info-circle" style="font-size:11px;color:rgba(255,255,255,0.3)"></i>
+            </div>
+            <span class="bills-sublabel"><i class="fas fa-bullseye"></i> R$ 100/dia · reseta 00:00 BRT</span>
+            <div class="bills-list">
+              <div class="bill-item"><i class="fas fa-chart-line"></i><span>Hoje (líquido)</span><span class="bill-amount" id="dash-goal-today">R$ --</span></div>
+              <div class="bill-item"><i class="fas fa-bullseye"></i><span>Gap para R$100</span><span class="bill-amount" id="dash-goal-gap">R$ --</span></div>
+              <div class="bill-item"><i class="fas fa-calendar-week"></i><span>Média 7 dias</span><span class="bill-amount" id="dash-goal-avg7">R$ --</span></div>
+            </div>
+            <div class="bills-footer">
+              <span class="widget-sub">Custos hoje</span>
+              <span class="todo-count" id="dash-costs-today">R$ --</span>
+            </div>
+          </div>
+
         </div>
+        <!-- Hidden elements for JS compat -->
+        <div style="display:none"><span id="dash-usd-rate"></span><span id="dash-capital-brl"></span><span id="dash-capital-usd"></span><span id="dash-capital-usd-brl"></span><span id="dash-prices-table"></span><span id="dash-allocation"></span><span id="allocation-total"></span><span id="dashboard-momentum-time"></span></div>
       </div>
 
       <!-- =========================================
@@ -1765,6 +1785,6 @@
 <div class="toast-container" id="toast-container"></div>
 
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script defer src="app.js?v=11"></script>
+<script defer src="app.js?v=12"></script>
 </body>
 </html>

@@ -997,6 +997,622 @@ tbody tr:last-child {
 .hamburger-btn.active span:nth-child(2) { opacity: 0; }
 .hamburger-btn.active span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
+/* =============================================
+   DASHBOARD WIDGET GRID (template-style)
+   ============================================= */
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 10px;
+  width: 100%;
+}
+
+/* ── Widget Card Base ── */
+.widget-card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #fff;
+}
+
+.widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.widget-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.7);
+}
+
+.widget-link {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.widget-link:hover { color: rgba(255,255,255,0.6); }
+
+.widget-big-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.widget-unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.4);
+  margin-left: 4px;
+}
+
+.widget-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.widget-sub {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+}
+
+.widget-change {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+}
+.widget-change.positive { color: #4caf50; }
+.widget-change.negative { color: #ef5350; }
+
+/* ── Chart Widget (spans 2 columns in row 2) ── */
+.dash-chart-widget {
+  grid-column: 1 / 3;
+  padding: 18px 20px 12px;
+  overflow: hidden;
+}
+
+.chart-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.chart-tab {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  padding: 4px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.chart-tab:hover { color: rgba(255,255,255,0.6); }
+.chart-tab.active {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+}
+
+.dash-chart-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.dash-chart-change {
+  font-size: 12px;
+  font-weight: 400;
+  color: #4caf50;
+  margin-left: 8px;
+}
+
+.dash-chart-area {
+  flex: 1;
+  min-height: 140px;
+  position: relative;
+}
+
+.dash-chart-area canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Todo Widget (row 2, col 3) ── */
+.dash-todo-widget {
+  gap: 10px;
+  overflow: hidden;
+}
+
+.todo-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.todo-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  margin-bottom: 2px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.75);
+}
+
+.todo-item input[type="checkbox"] {
+  accent-color: #666;
+  width: 14px;
+  height: 14px;
+}
+
+.todo-priority {
+  margin-left: auto;
+  font-size: 11px;
+}
+.todo-priority.high { color: #ef5350; }
+.todo-priority.medium { color: #ffa726; }
+.todo-priority.low { color: rgba(255,255,255,0.35); }
+
+.todo-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.todo-count {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.6);
+}
+
+/* Todo expand animation */
+.dash-todo-widget.todo-expanded {
+  grid-row: span 2;
+  z-index: 10;
+  overflow: hidden;
+}
+.dash-todo-widget.todo-expanding {
+  animation: todoExpandIn 0.45s cubic-bezier(0.34,1.15,0.64,1) forwards;
+}
+.dash-todo-widget.todo-collapsing {
+  animation: todoCollapseOut 0.32s cubic-bezier(0.4,0,0.2,1) forwards;
+}
+@keyframes todoExpandIn {
+  from { clip-path: inset(0 0 52% 0 round 14px); opacity: 0.5; }
+  to   { clip-path: inset(0 0 0%  0 round 14px); opacity: 1;   }
+}
+@keyframes todoCollapseOut {
+  from { clip-path: inset(0 0 0%  0 round 14px); opacity: 1;   }
+  to   { clip-path: inset(0 0 52% 0 round 14px); opacity: 0.5; }
+}
+
+/* Todo tabs + expanded list */
+.todo-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.todo-tab {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: none;
+  border-radius: 8px;
+  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  padding: 6px 4px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.todo-tab.active {
+  background: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.9);
+}
+.todo-tab:hover:not(.active) {
+  background: rgba(255,255,255,0.09);
+  color: rgba(255,255,255,0.6);
+}
+.todo-exp-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.todo-exp-list::-webkit-scrollbar { display: none; }
+.todo-exp-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: background 0.18s;
+}
+.todo-exp-item:hover { background: rgba(255,255,255,0.07); }
+.todo-exp-item input[type="checkbox"] {
+  accent-color: #aaa;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.todo-exp-text { flex: 1; transition: opacity 0.2s; }
+.todo-done .todo-exp-text { opacity: 0.3; text-decoration: line-through; }
+.todo-del-btn {
+  font-size: 11px;
+  color: rgba(255,255,255,0.18);
+  cursor: pointer;
+  transition: color 0.18s;
+  flex-shrink: 0;
+}
+.todo-del-btn:hover { color: #ef5350; }
+.todo-empty {
+  text-align: center;
+  color: rgba(255,255,255,0.22);
+  font-size: 12px;
+  padding-top: 24px;
+}
+.todo-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 10px;
+  flex-shrink: 0;
+}
+.todo-bottom-count {
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+}
+.todo-add-fab {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+}
+.todo-add-fab:hover { background: rgba(255,255,255,0.2); transform: scale(1.1); }
+
+/* Todo modal */
+.todo-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.todo-modal {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(38,38,48,0.97);
+  backdrop-filter: blur(24px);
+  border-radius: 18px 18px 0 0;
+  padding: 20px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: todoModalUp 0.3s cubic-bezier(0.34,1.15,0.64,1) forwards;
+}
+@keyframes todoModalUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.todo-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.todo-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+}
+.todo-modal-header .fa-times {
+  color: rgba(255,255,255,0.4);
+  font-size: 15px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.todo-modal-header .fa-times:hover { color: rgba(255,255,255,0.8); }
+.todo-modal-input {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: rgba(255,255,255,0.9);
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.todo-modal-input:focus { border-color: rgba(255,255,255,0.25); }
+.todo-modal-input::placeholder { color: rgba(255,255,255,0.25); }
+.todo-modal-select {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: rgba(255,255,255,0.75);
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.todo-modal-select option { background: #2a2a38; color: #fff; }
+.todo-modal-save {
+  background: rgba(255,255,255,0.14);
+  border: none;
+  border-radius: 10px;
+  padding: 11px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+}
+.todo-modal-save:hover { background: rgba(255,255,255,0.22); }
+
+/* ── Crypto Widget (row 3, col 1) ── */
+.dash-crypto-widget {
+  gap: 6px;
+  padding: 12px 14px;
+  overflow: hidden;
+}
+
+.crypto-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.crypto-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.crypto-rank {
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.crypto-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.12);
+}
+
+.crypto-name {
+  color: rgba(255,255,255,0.85);
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.crypto-symbol {
+  color: rgba(255,255,255,0.35);
+  font-size: 10px;
+  margin-left: 3px;
+}
+
+.crypto-change {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.crypto-change.positive { color: #4caf50; }
+.crypto-change.negative { color: #ef5350; }
+
+.crypto-dots {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+}
+.dot.active { background: rgba(255,255,255,0.5); }
+
+/* ── Gauge Widget (row 3, col 2) ── */
+.dash-gauge-widget {
+  align-items: center;
+  padding: 12px 14px;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.gauge-container {
+  position: relative;
+  width: 120px;
+  height: 65px;
+  margin: 4px auto;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gauge {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.gauge-bg {
+  width: 120px;
+  height: 60px;
+  border-radius: 60px 60px 0 0;
+  background: conic-gradient(
+    from 180deg at 50% 100%,
+    #ef5350 0deg,
+    #ffa726 60deg,
+    #ffee58 90deg,
+    #66bb6a 120deg,
+    #4caf50 180deg
+  );
+  position: relative;
+  overflow: hidden;
+}
+
+.gauge-bg::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 84px;
+  height: 42px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 42px 42px 0 0;
+}
+
+.gauge-needle {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  height: 48px;
+  background: #fff;
+  transform-origin: bottom center;
+  transform: translateX(-50%) rotate(0deg);
+  border-radius: 2px;
+  transition: transform 0.8s cubic-bezier(0.34,1.15,0.64,1);
+}
+
+.gauge-center {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.gauge-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+  display: block;
+  line-height: 1;
+}
+
+.gauge-label {
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+}
+
+.gauge-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-top: auto;
+}
+
+.gauge-prev {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+}
+
+/* ── Meta Diária / Bills Widget (row 3, col 3) ── */
+.dash-meta-widget {
+  gap: 4px;
+  padding: 12px 14px;
+  overflow: hidden;
+}
+
+.bills-sublabel {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+}
+
+.bills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.bill-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+}
+
+.bill-item i {
+  font-size: 13px;
+  color: rgba(255,255,255,0.35);
+  width: 18px;
+  text-align: center;
+}
+
+.bill-amount {
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+}
+
+.bills-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+}
+
 /* ── Sidebar backdrop (mobile overlay) ── */
 .sidebar-backdrop {
   display: none;
@@ -1016,6 +1632,8 @@ tbody tr:last-child {
 @media (max-width: 1200px) {
   .cards-5 { grid-template-columns: repeat(3, 1fr); }
   .cards-4 { grid-template-columns: repeat(2, 1fr); }
+  .dash-grid { grid-template-columns: 1fr 1fr; }
+  .dash-chart-widget { grid-column: 1 / 3; }
 }
 
 /* ── Small tablet / landscape: 601-900px ── */
@@ -1028,6 +1646,8 @@ tbody tr:last-child {
   .cards-5, .cards-4, .cards-3 { grid-template-columns: repeat(2, 1fr); }
   .cards-2-1, .cards-1-2 { grid-template-columns: 1fr; }
   .row { flex-direction: column; }
+  .dash-grid { grid-template-columns: 1fr 1fr; }
+  .dash-chart-widget { grid-column: 1 / 3; }
 }
 
 /* ── Mobile: <=768px — Purple theme + Bottom nav ── */
@@ -1145,6 +1765,18 @@ tbody tr:last-child {
     grid-template-columns: 1fr;
     gap: 12px;
   }
+
+  /* ── Dashboard Widget Grid mobile ── */
+  .dash-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .dash-chart-widget {
+    grid-column: 1;
+  }
+  .widget-big-value { font-size: 26px; }
+  .dash-chart-value { font-size: 22px; }
+  .dash-chart-area { min-height: 120px; }
 
   /* ── Tables ── */
   table { min-width: 500px; color: #fff; }
