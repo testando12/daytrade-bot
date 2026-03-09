@@ -1078,7 +1078,7 @@ async def health_check():
     _brt = _tz(_td(hours=-3))
     return {
         "status": "ok",
-        "deploy_version": "v2026.03.09-debug2",
+        "deploy_version": "v2026.03.09-fix-perms",
         "timestamp": datetime.now(_brt).isoformat(),
         "auto_trading": _trade_state.get("auto_trading", False),
         "scheduler_running": _scheduler_state.get("running", False),
@@ -2148,7 +2148,10 @@ _STATE_FILE = _DATA_DIR / "trade_state.json"
 _PERF_FILE  = _DATA_DIR / "performance.json"
 
 def _ensure_data_dir():
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
 def _load_json(path: Path, default: dict) -> dict:
     try:

@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# BUILD_VERSION=2026-03-09-debug2
+# BUILD_VERSION=2026-03-09-fix-perms
 WORKDIR /app
 
 # Dependências do sistema (necessárias para algumas libs)
@@ -17,9 +17,9 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 COPY . .
 
 # Criar diretório de dados persistente e usuário não-root
-RUN mkdir -p /app/data \
+RUN mkdir -p /app/data /data/daytrade \
     && adduser --disabled-password --no-create-home --gecos "" appuser \
-    && chown -R appuser:appuser /app/data
+    && chown -R appuser:appuser /app/data /data/daytrade
 
 # Rodar como usuário não-root (segurança)
 USER appuser

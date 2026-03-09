@@ -108,7 +108,10 @@ def save_state(key: str, obj: dict):
             log.error(f"db_state save_state({key}) PG error: {e} — falling back to JSON")
 
     # Sempre salva JSON local como backup
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass  # Permission denied on Railway (non-root user)
     try:
         path = _DATA_DIR / f"{key}.json"
         path.write_text(json.dumps(obj, indent=2, default=str), encoding="utf-8")
