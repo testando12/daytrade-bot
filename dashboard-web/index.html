@@ -8,7 +8,30 @@
 </head>
 <body>
 
-<div class="app-layout">
+<!-- =================== LOGIN SCREEN =================== -->
+<div id="login-screen" class="login-overlay">
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="login-logo-icon">📈</span>
+      <h1>Day<span class="login-accent">Trade</span> Bot</h1>
+    </div>
+    <p class="login-subtitle">Insira sua API Key para acessar o painel</p>
+    <form id="login-form" onsubmit="handleLogin(event)">
+      <div class="login-input-group">
+        <label for="login-key">API Key</label>
+        <div class="login-input-wrapper">
+          <input type="password" id="login-key" placeholder="Cole sua API Key aqui..." autocomplete="off" />
+          <button type="button" class="login-toggle-vis" onclick="toggleKeyVisibility()" title="Mostrar/ocultar">👁️</button>
+        </div>
+      </div>
+      <button type="submit" class="login-btn" id="login-btn">Entrar</button>
+      <p class="login-error" id="login-error"></p>
+    </form>
+    <p class="login-footer">Acesso restrito • Conexão criptografada</p>
+  </div>
+</div>
+
+<div class="app-layout" id="app-layout" style="display:none">
 
   <!-- =================== SIDEBAR =================== -->
   <aside class="sidebar" id="sidebar">
@@ -104,9 +127,9 @@
     </nav>
 
     <div class="sidebar-footer">
-      <div class="nav-item" style="cursor:pointer; margin-bottom:6px;" onclick="promptApiKey()" title="Configurar API Key">
-        <span class="nav-icon">🔑</span>
-        <span class="nav-label" id="sidebar-key-label" style="font-size:12px;">API Key</span>
+      <div class="nav-item" style="cursor:pointer; margin-bottom:6px;" onclick="handleLogout()" title="Sair / Trocar API Key">
+        <span class="nav-icon">🚪</span>
+        <span class="nav-label" style="font-size:12px;">Sair</span>
       </div>
       <div class="nav-item" style="pointer-events:none; margin-bottom:6px;">
         <span class="nav-icon">🔌</span>

@@ -23,8 +23,9 @@ let _perfSnapshot = null;
 // API KEY (SEGURANÇA)
 // =============================================
 const API_KEY_STORAGE = 'dt_api_key';
-function getApiKey() { return sessionStorage.getItem(API_KEY_STORAGE) || ''; }
-function setApiKey(key) { sessionStorage.setItem(API_KEY_STORAGE, key); }
+function getApiKey() { return localStorage.getItem(API_KEY_STORAGE) || ''; }
+function setApiKey(key) { localStorage.setItem(API_KEY_STORAGE, key); }
+function removeApiKey() { localStorage.removeItem(API_KEY_STORAGE); }
 function _authHeaders() {
   const k = getApiKey();
   const h = { 'Content-Type': 'application/json' };
@@ -32,25 +33,64 @@ function _authHeaders() {
   return h;
 }
 
-let _apiKeyPromptActive = false;
-function promptApiKey() {
-  if (_apiKeyPromptActive) return;  // evita múltiplos prompts simultâneos
-  _apiKeyPromptActive = true;
-  const current = getApiKey();
-  const key = prompt('Digite sua API Key (X-API-Key):', current);
-  _apiKeyPromptActive = false;
-  if (key !== null && key.trim()) {
-    setApiKey(key.trim());
-    _updateKeyLabel();
-    // Recarrega tudo após inserir a chave
-    checkApiConnection();
-    loadPage(currentPage);
+// ── Login / Logout ──────────────────────────────
+function showLogin(errorMsg) {
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('app-layout').style.display = 'none';
+  const err = document.getElementById('login-error');
+  if (err) err.textContent = errorMsg || '';
+}
+
+function showDashboard() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-layout').style.display = '';
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const input = document.getElementById('login-key');
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-error');
+  const key = input.value.trim();
+  if (!key) { err.textContent = 'Digite a API Key.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Verificando...';
+  err.textContent = '';
+  try {
+    const res = await fetch(`${API_BASE}/health`, {
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+    });
+    // Health é público, então testa um endpoint protegido
+    const res2 = await fetch(`${API_BASE}/trade/status`, {
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+    });
+    if (res2.status === 401 || res2.status === 403) {
+      err.textContent = 'API Key inválida. Verifique e tente novamente.';
+    } else {
+      setApiKey(key);
+      showDashboard();
+      checkApiConnection();
+      loadPage('dashboard');
+      _startPageRefresh('dashboard');
+    }
+  } catch (ex) {
+    err.textContent = 'Erro de conexão. Verifique se a API está online.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
   }
 }
 
-function _updateKeyLabel() {
-  const lbl = document.getElementById('sidebar-key-label');
-  if (lbl) lbl.textContent = getApiKey() ? '🔒 Key OK' : 'API Key';
+function handleLogout() {
+  if (!confirm('Deseja sair? Você precisará digitar a API Key novamente.')) return;
+  removeApiKey();
+  if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+  showLogin();
+}
+
+function toggleKeyVisibility() {
+  const input = document.getElementById('login-key');
+  input.type = input.type === 'password' ? 'text' : 'password';
 }
 
 const PRE_REAL_STORAGE_KEY = 'pre_real_gate_v2';
@@ -209,15 +249,31 @@ function _updateCountdownEl(val) {
 // INIT
 // =============================================
 
-document.addEventListener('DOMContentLoaded', () => {
-  _updateKeyLabel();
-  // Se não tem API key salva, pede antes de carregar dados
-  if (!getApiKey()) {
-    promptApiKey();
+document.addEventListener('DOMContentLoaded', async () => {
+  const savedKey = getApiKey();
+  if (savedKey) {
+    // Valida a chave salva
+    try {
+      const res = await fetch(`${API_BASE}/trade/status`, { headers: _authHeaders() });
+      if (res.status === 401 || res.status === 403) {
+        removeApiKey();
+        showLogin('Sessão expirada. Digite a API Key novamente.');
+        return;
+      }
+      showDashboard();
+      checkApiConnection();
+      loadPage('dashboard');
+      _startPageRefresh('dashboard');
+    } catch (e) {
+      // API offline — mostra dashboard mesmo assim (vai mostrar "API Offline")
+      showDashboard();
+      checkApiConnection();
+      loadPage('dashboard');
+      _startPageRefresh('dashboard');
+    }
+  } else {
+    showLogin();
   }
-  checkApiConnection();
-  loadPage('dashboard');
-  _startPageRefresh('dashboard');
 });
 
 // =============================================
@@ -311,8 +367,8 @@ async function api(path, options = {}, timeoutMs = 30000) {
       ...options,
     });
     if (res.status === 401 || res.status === 403) {
-      promptApiKey();
-      throw new Error(`API ${path}: autenticação necessária (${res.status}). Configure a API Key.`);
+      showLogin('Sessão inválida. Digite a API Key novamente.');
+      throw new Error(`API ${path}: autenticação necessária (${res.status}).`);
     }
     if (!res.ok) throw new Error(`API ${path} retornou ${res.status}`);
     return res.json();
