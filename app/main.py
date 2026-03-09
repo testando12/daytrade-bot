@@ -520,7 +520,9 @@ async def _auto_cycle_loop():
     print("[scheduler] Iniciado - intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
     # Aguarda o servidor subir completamente E o DB estar pronto antes do primeiro ciclo
     await asyncio.sleep(60)
+    _consecutive_errors = 0
     while _scheduler_state["running"]:
+      try:
         from datetime import timezone, timedelta
         brt = timezone(timedelta(hours=-3))
         now_brt = datetime.now(brt)
@@ -588,6 +590,7 @@ async def _auto_cycle_loop():
         try:
             result = await _run_trade_cycle_internal(assets=active_assets)
             _scheduler_state["total_auto_cycles"] += 1
+            _consecutive_errors = 0  # reset on success
             _persist_scheduler_state()
             pnl = result.get("cycle_pnl", 0)
             irq = result.get("irq", 0)
@@ -623,6 +626,21 @@ async def _auto_cycle_loop():
                 ))
 
         await asyncio.sleep(interval_sec)
+
+      except asyncio.CancelledError:
+        print("[scheduler] Task cancelada.", flush=True)
+        break
+      except Exception as _loop_err:
+        _consecutive_errors += 1
+        print(f"[scheduler] ❌ Erro GERAL no loop (#{_consecutive_errors}): {_loop_err}", flush=True)
+        # Back-off: espera 30s * n erros consecutivos (max 5min)
+        backoff = min(30 * _consecutive_errors, 300)
+        print(f"[scheduler] Aguardando {backoff}s antes de tentar novamente...", flush=True)
+        await asyncio.sleep(backoff)
+        if _consecutive_errors >= 20:
+            print("[scheduler] ❌ 20 erros consecutivos — parando scheduler.", flush=True)
+            break
+        continue
 
     print("[scheduler] Parado.", flush=True)
 
@@ -2641,16 +2659,22 @@ async def run_trade_cycle(request: Request):
     Executa um ciclo de análise e simula as ordens que o bot colocaria.
     Registra cada decisão no log de trading.
     """
-    result = await _run_trade_cycle_internal()
     try:
-        db_state.save_state("trade_state", _trade_state)
-        db_state.save_state("performance", _perf_state)
-    except Exception:
-        pass
-    return {
-        "success": True,
-        "data": result,
-    }
+        result = await _run_trade_cycle_internal()
+        try:
+            db_state.save_state("trade_state", _trade_state)
+            db_state.save_state("performance", _perf_state)
+        except Exception:
+            pass
+        return {
+            "success": True,
+            "data": result,
+        }
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[trade/cycle] ❌ Erro: {e}\n{tb}", flush=True)
+        raise HTTPException(status_code=500, detail=f"Cycle error: {str(e)[:300]}")
 
 
 # ═══════════════════════════════════════════
