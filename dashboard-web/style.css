@@ -1004,8 +1004,8 @@ tbody tr:last-child {
 .dash-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: auto auto auto;
-  gap: 10px;
+  grid-template-rows: 135px 200px 148px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -1014,11 +1014,12 @@ tbody tr:last-child {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 14px;
-  padding: 18px 20px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   color: #fff;
+  overflow: hidden;
 }
 
 .widget-header {
@@ -1042,7 +1043,7 @@ tbody tr:last-child {
 .widget-link:hover { color: rgba(255,255,255,0.6); }
 
 .widget-big-value {
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 700;
   color: #fff;
   line-height: 1.1;
@@ -1076,7 +1077,7 @@ tbody tr:last-child {
 /* ── Chart Widget (spans 2 columns in row 2) ── */
 .dash-chart-widget {
   grid-column: 1 / 3;
-  padding: 18px 20px 12px;
+  padding: 10px 14px 6px;
   overflow: hidden;
 }
 
@@ -1100,7 +1101,7 @@ tbody tr:last-child {
 }
 
 .dash-chart-value {
-  font-size: 28px;
+  font-size: 20px;
   font-weight: 700;
   color: #fff;
   line-height: 1.2;
@@ -1115,7 +1116,7 @@ tbody tr:last-child {
 
 .dash-chart-area {
   flex: 1;
-  min-height: 140px;
+  min-height: 0;
   position: relative;
 }
 
@@ -1126,7 +1127,7 @@ tbody tr:last-child {
 
 /* ── Todo Widget (row 2, col 3) ── */
 .dash-todo-widget {
-  gap: 10px;
+  gap: 6px;
   overflow: hidden;
 }
 
@@ -1388,8 +1389,8 @@ tbody tr:last-child {
 
 /* ── Crypto Widget (row 3, col 1) ── */
 .dash-crypto-widget {
-  gap: 6px;
-  padding: 12px 14px;
+  gap: 4px;
+  padding: 10px 14px;
   overflow: hidden;
 }
 
@@ -1466,16 +1467,16 @@ tbody tr:last-child {
 /* ── Gauge Widget (row 3, col 2) ── */
 .dash-gauge-widget {
   align-items: center;
-  padding: 12px 14px;
-  gap: 4px;
+  padding: 10px 14px;
+  gap: 2px;
   overflow: hidden;
 }
 
 .gauge-container {
   position: relative;
-  width: 120px;
-  height: 65px;
-  margin: 4px auto;
+  width: 100px;
+  height: 55px;
+  margin: 2px auto;
   flex: 1;
   display: flex;
   align-items: center;
@@ -1489,9 +1490,9 @@ tbody tr:last-child {
 }
 
 .gauge-bg {
-  width: 120px;
-  height: 60px;
-  border-radius: 60px 60px 0 0;
+  width: 100px;
+  height: 50px;
+  border-radius: 50px 50px 0 0;
   background: conic-gradient(
     from 180deg at 50% 100%,
     #ef5350 0deg,
@@ -1510,10 +1511,10 @@ tbody tr:last-child {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 84px;
-  height: 42px;
+  width: 70px;
+  height: 35px;
   background: rgba(255,255,255,0.06);
-  border-radius: 42px 42px 0 0;
+  border-radius: 35px 35px 0 0;
 }
 
 .gauge-needle {
@@ -1521,7 +1522,7 @@ tbody tr:last-child {
   bottom: 0;
   left: 50%;
   width: 2px;
-  height: 48px;
+  height: 40px;
   background: #fff;
   transform-origin: bottom center;
   transform: translateX(-50%) rotate(0deg);
@@ -1538,7 +1539,7 @@ tbody tr:last-child {
 }
 
 .gauge-value {
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 700;
   color: #fff;
   display: block;
@@ -1565,8 +1566,8 @@ tbody tr:last-child {
 
 /* ── Meta Diária / Bills Widget (row 3, col 3) ── */
 .dash-meta-widget {
-  gap: 4px;
-  padding: 12px 14px;
+  gap: 3px;
+  padding: 10px 14px;
   overflow: hidden;
 }
 
