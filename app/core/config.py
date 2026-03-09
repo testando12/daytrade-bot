@@ -60,8 +60,8 @@ class Settings:
 
     # ── Partial Take Profit ────────────────────────────────────────────
     PARTIAL_TP_ENABLED: bool = True
-    PARTIAL_TP_FIRST_PCT: float = 0.40  # tira 40% no primeiro alvo (deixa 60% correr)
-    PARTIAL_TP_FIRST_TARGET: float = 0.010  # primeiro alvo = 1.0% (era 0.7%)
+    PARTIAL_TP_FIRST_PCT: float = 0.35  # tira 35% no primeiro alvo (deixa 65% correr — mais profit runs)
+    PARTIAL_TP_FIRST_TARGET: float = 0.012  # primeiro alvo = 1.2% (era 1.0% — deixa winner crescer)
 
     # ── Momentum Acceleration ──────────────────────────────────────────
     MOMENTUM_ACCEL_ENABLED: bool = True

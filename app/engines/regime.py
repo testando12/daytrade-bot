@@ -225,12 +225,12 @@ _REGIME_MULTIPLIERS: Dict[str, Dict[str, float]] = {
         "5m":  0.90,
         "1h":  1.00,
         "1d":  0.85,
-        "mr":  1.45,   # MR excela em laterais
+        "mr":  1.55,   # MR excela em laterais (era 1.45 — boost)
         "bo":  0.25,   # Breakout gera falsos sinais em lateral
-        "sq":  1.35,   # Squeeze acumula em lateral (pré-expansão)
+        "sq":  1.40,   # Squeeze acumula em lateral (era 1.35 — boost)
         "ls":  1.20,   # LS relevante: topo/fundo do range varre stops
         "fvg": 1.25,   # FVG preenchido dentro do range
-        "vr":  1.50,   # VWAP Reversion EXCELA em lateral — máx boost
+        "vr":  1.60,   # VWAP Reversion EXCELA em lateral — máx boost (era 1.50)
         "pb":  0.20,   # Pyramid Breakout péssimo em lateral — desativar
     },
     "HIGH_VOL": {

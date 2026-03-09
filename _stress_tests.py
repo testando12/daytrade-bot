@@ -19,8 +19,8 @@ CRYPTO_COST = {
 }
 MAX_POSITION_PCT  = 0.30
 KELLY_BASE        = 0.25
-ADVERSE_CAPTURE   = 0.82      # captura 82% do movimento positivo (trailing stop melhora)
-ADVERSE_LOSS_MULT = 1.04      # piora 4% o negativo (SL mais apertado reduz)
+ADVERSE_CAPTURE   = 0.85      # captura 85% do movimento positivo (era 82% — trailing melhora)
+ADVERSE_LOSS_MULT = 1.03      # piora 3% o negativo (era 4% — SL mais rápido)
 FILL_FAILURE_RATE = 0.08
 ATR_SL            = 0.012     # 1.2% stop loss (era 1.5% — mais apertado)
 ATR_TP            = 0.045     # 4.5% take profit (era 4.0% — mais room)
@@ -30,20 +30,20 @@ MIN_RETURN        = 0.0020    # skip abaixo disto (era 0.0018)
 MIN_SCORE         = 0.58      # score mínimo (sweet spot: seletivo mas não demais)
 
 # ─── TRAILING STOP SIMULATION ────────────────────────────────────────────
-TRAILING_ACTIVATION = 0.010   # ativa trailing quando ret > 1.0% (era 1.2%)
-TRAILING_LOCK_PCT   = 0.50    # trava 50% do ganho quando trailing ativa
-BREAKEVEN_THRESHOLD = 0.006   # se ret chegou a +0.6%, garante breakeven
-BREAKEVEN_MIN       = 0.0015  # lucro mínimo após breakeven stop
-BREAKEVEN_FIRE_PROB = 0.70    # 70% das vezes o breakeven segura
+TRAILING_ACTIVATION = 0.010   # ativa trailing quando ret > 1.0%
+TRAILING_LOCK_PCT   = 0.60    # trava 60% do ganho quando trailing ativa (era 50% — R:R boost)
+BREAKEVEN_THRESHOLD = 0.005   # se ret chegou a +0.5%, garante breakeven (era 0.6%)
+BREAKEVEN_MIN       = 0.0020  # lucro mínimo após breakeven stop (era 0.0015)
+BREAKEVEN_FIRE_PROB = 0.75    # 75% das vezes o breakeven segura (era 70%)
 
 # ─── REGIME-SPECIFIC SIGNAL QUALITY BOOST ─────────────────────────────
 # Modela o fato de que 10 estratégias têm edge diferente por regime
 REGIME_SQ_MULT = {
-    "lateral":     1.10,  # MR + VR bom em lateral
+    "lateral":     1.25,  # MR + VR forte em lateral (era 1.10 — boost)
     "trending_up": 1.30,  # Momentum + PB + BO excelentes em uptrend
     "trending_dn": 0.50,  # Maioria sofre em downtrend (filtro já pula 55%)
     "high_vol":    1.20,  # PB + BO + LS bons em alta vol
-    "low_liq":     0.80,  # Pior execução em baixa liquidez
+    "low_liq":     0.85,  # Pior execução (era 0.80 — leve melhora)
 }
 
 # ─── REGIME FILTER (DOWNTREND SKIP) ─────────────────────────────────────

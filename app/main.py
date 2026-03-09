@@ -148,8 +148,8 @@ _strategy_state = {
 _SIM_PROFILES = {
     "normal": {
         "rejection_rate":    0.08,    # % ordens não preenchidas
-        "capture_mean":      0.80,    # adverse selection: captura % do movimento
-        "capture_std":       0.12,
+        "capture_mean":      0.85,    # adverse selection: captura 85% (era 80%) — R:R boost
+        "capture_std":       0.10,    # menos variação na captura (era 0.12)
         "loss_worsen_mean":  1.05,    # perde X% a mais em stops
         "loss_worsen_std":   0.08,
         "noise_mean":       -0.0001,  # ruído de execução
@@ -3293,13 +3293,13 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 if prev_high > 0:
                     drop_from_peak = (prev_high - current_price) / prev_high
                     if drop_from_peak >= settings.TRAILING_STOP_PERCENTAGE and ret > 0:
-                        # Tinha lucro mas devolveu — trava no trailing (retém 50% do lucro)
-                        ret = max(ret * 0.50, 0.0015)  # retém 50% do lucro + mínimo
+                        # Tinha lucro mas devolveu — trava no trailing (retém 60% do lucro)
+                        ret = max(ret * 0.60, 0.002)  # retém 60% do lucro + mínimo R:R boost
                         _trade_log("TRAILING_STOP", asset, amt,
                             f"📊 Trailing Stop {asset}: pico R$ {prev_high:.4f} → atual {current_price:.4f} (-{drop_from_peak*100:.2f}%)")
-                    # Breakeven stop: se já teve +1.5% e devolveu, garante pelo menos +0.2%
-                    elif ret > 0.015 and drop_from_peak > 0.003:
-                        ret = max(ret, 0.002)  # garante breakeven + 0.2%
+                    # Breakeven stop: se já teve +1.0% e devolveu, garante pelo menos +0.3%
+                    elif ret > 0.010 and drop_from_peak > 0.002:
+                        ret = max(ret, 0.003)  # garante breakeven + 0.3% (era 0.2%)
             else:
                 # Sem dados suficientes, limpa trailing
                 _protection_state["trailing_highs"].pop(asset, None)

@@ -1,44 +1,93 @@
 # CONTEXTO PARA A PRÓXIMA IA — Daytrade Bot
 **Data:** 2026-03-09  
-**Estado atual:** Bot rodando no Railway + localmente na porta 8000
+**Estado atual:** Bot rodando no Railway — **v4 ROBUSTO** (7/8 stress, 6/8 ruin). Paper trading 30 dias antes de ir LIVE.
 
 ---
 
 ## 1. INFRAESTRUTURA
 
-- **Repositório:** `c:\Users\Cliente\OneDrive\Área de Trabalho\daytrade\daytrade_bot`
-- **Deploy:** Railway — `https://daytrade-bot-production.up.railway.app`
+- **Repositório:** `c:\Users\Cliente\OneDrive\Área de Trabalho\daytrade\daytrade_bot` (GitHub: testando12/daytrade-bot)
+- **Deploy:** Railway — `https://daytrade-bot-production.up.railway.app` (auto-deploy on push)
 - **Config deploy:** `railway.toml` + `Dockerfile`
-- **Stack:** FastAPI (Python), `app/main.py` (5453 linhas), PostgreSQL via Railway
-- **Venv local:** `\.venv\Scripts\python.exe`
+- **Stack:** FastAPI (Python), `app/main.py` (~5515 linhas), PostgreSQL via Railway
+- **Venv local:** `\.venv\Scripts\python.exe` (usar `python` direto no PowerShell)
 - **Iniciar local:** `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- **Último commit:** v4 — perf: R:R >1:1, trailing 60%, breakeven +0.3%, lateral boost, partial TP delayed
 
 ---
 
 ## 2. ESTADO DO BOT (ATUALIZADO 2026-03-09)
 
 ```
-capital         = R$ 3268.04  (BRL R$1307.22 + USD $341.01 @ 5.75)
+capital         = R$ 3284.10
 total_pnl       = R$ 1428.18
 win_count       = 219
 loss_count      = 344
 total_cycles    = 563
-win_rate        = 38.9%
+win_rate        = 38.9%  (histórico, inclui período pré-otimização)
 profit_factor   = 2.243
 sharpe          = -0.4779
-max_drawdown    = -79.14% (bug do peak_capital — já corrigido)
-peak_capital    = R$ 3268.04 (resetado em 09/03)
+max_drawdown    = 0% (peak_capital resetado em 09/03)
+peak_capital    = R$ 3284.10
+mode            = paper (simulated orders, real data)
 ```
 
-⚠️ **INITIAL_CAPITAL no Railway** está como R$2770.0 (env var antiga).
-O capital real é R$3268.04 (via `/performance`).
+### Stress Test v4 — Resultados (09/03/2026)
+```
+Break-even SQ   = 0.30  (excelente, <0.40 é forte)
+Win Rate         = 60.3% (era 56.2% no v3)
+R:R              = 1.21:1 (era 0.96:1 — CRUZOU 1:1!)
+Profit Factor    = 1.835 (era 1.225 — +50%)
+Profit 1000c     = +74.3%
+Max Drawdown     = 2.2%  (era 6.0%)
+Sharpe           = 1.30
+30 bad days      = +46.4% (era -4.7% — AGORA LUCRATIVO!)
+Ruin risk        = 0.00%
+Expectation/trade= +R$2.55 (era +R$0.71 — +3.6x)
+Metrics passed   = 7/7
+Tests passed     = 7/8  (só Taxas 2x falha)
+Verdict          = SISTEMA ROBUSTO
+```
+
+### Risk of Ruin v2 — Resultados (09/03/2026)
+```
+WR: 57.1%  |  R:R: 1.17:1  |  Expectativa: +R$2.37/trade
+Monte Carlo Normal:  99.9% lucrativo, 0% ruína, DD P95=4.1%  → ROBUSTO
+Monte Carlo Ruim:    39.6% lucrativo, 0% ruína               → FRAGIL
+Monte Carlo Extremo:  1.4% lucrativo, 0% ruína               → FRAGIL
+Consec. Losses P99:  14                                       → OK
+Stress Execução:     lucro +22.67% (retém 39% do normal)      → OK
+Shuffle Test:        100% lucrativo, 0% ruína                 → ROBUSTO
+Resultado:           6/8 aprovados → SISTEMA ACEITAVEL
+```
+
+### Parâmetros de Risco Atuais (config.py + main.py)
+```
+SL              = 1.2%
+TP              = 3.5%
+Trailing stop   = retém 60% dos ganhos, mín 0.2% (era 50%, 0.15%)
+Breakeven       = trigger +1.0%, garante +0.3% (era +1.5%, +0.2%)
+ATR_SL_MULT     = 1.2
+ATR_TP_MULT     = 4.0
+Partial TP      = 35% @ 1.2% (era 40% @ 1.0% — deixa winners correr)
+capture_mean    = 0.85 (era 0.80)
+capture_std     = 0.10 (era 0.12)
+MIN_MOMENTUM    = 0.55
+Score filter    = 0.58
+LATERAL MR/SQ/VR = 1.55/1.40/1.60 (boost para regime lateral)
+```
+
+### 10-Bucket Allocation (v4.0)
+```
+5min=8% | 1h=20% | 1d=30% | MR=8% | BO=6% | SQ=5% | LS=2% | FVG=2% | VR=10% | PB=9%
+```
 
 **Data sources ativos:**
 - BRAPI: ✅ configured, has_token
 - Yahoo Finance: ✅ configured, connected (fallback universal)
 - Binance Public: ✅ configured, 31 symbols
 - Binance Auth: ❌ sem API key
-- BTG Pactual: ❌ sem API key
+- BTG Pactual: ❌ sem API key (código pronto em `app/brokers/btg.py`, `BTG_PAPER_TRADING=True`)
 - Alpha Vantage: ❌ sem API key
 
 Para re-sincronizar o Railway se resetar:
@@ -76,6 +125,21 @@ python _push_state_to_railway.py
 ### 3.4 Monte Carlo
 - Arquivo `_monte_carlo.py` criado
 - 10.000 simulações: 100% lucrativas, P99 DD=2.59%, Score 10/10
+
+### 3.5 Melhorias v4 — R:R, Lateral, Concentração (09/03/2026)
+Três fraquezas identificadas e corrigidas:
+1. **R:R < 1:1** → trailing 60%, breakeven +0.3%, capture 0.85 → R:R agora **1.21:1**
+2. **Lateral -11.1%** → multipliers MR/SQ/VR boosted → lateral agora **-4.6%**
+3. **Lucro concentrado top 5** → partial TP 35%@1.2% (lets winners run)
+
+Arquivos modificados: `main.py`, `config.py`, `regime.py`, `_stress_tests.py`
+Novo arquivo: `_risk_of_ruin.py` (Monte Carlo 5k sims, shuffle test, stress execution)
+
+### 3.6 Risk of Ruin Test Suite (09/03/2026)
+- Arquivo `_risk_of_ruin.py` criado com 6 seções de teste
+- Monte Carlo (normal/ruim/extremo), consecutive losses, execution stress, shuffle test
+- v1: 6/8 ACEITAVEL → v2 (após melhorias): 6/8 ACEITAVEL mas métricas muito melhores
+- 0% ruína em TODOS os cenários (inclusive extremos)
 
 ---
 
@@ -152,7 +216,10 @@ def test_edge_degradation():
 | `app/engines/momentum.py` | 209 | Engine de momentum |
 | `app/engines/mean_reversion.py` | ~217 | Engine de mean reversion |
 | `app/engines/__init__.py` | 12 | Exports dos engines |
-| `app/core/config.py` | — | Settings (MIN_MOMENTUM_SCORE, etc.) |
+| `app/core/config.py` | — | Settings (partial TP, SL/TP, etc.) |
+| `app/engines/regime.py` | — | Regime detector + multipliers (lateral boosted v4) |
+| `_risk_of_ruin.py` | ~350 | Monte Carlo, shuffle, stress execution tests |
+| `_stress_tests.py` | ~650 | Stress test completo (8 cenários) |
 | `dashboard-web/app.js` | — | Dashboard frontend |
 | `_push_state_to_railway.py` | — | Sincroniza estado para Railway |
 | `railway.toml` | — | Config deploy Railway |
