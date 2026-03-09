@@ -153,6 +153,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "font-src 'self'; "
             "frame-ancestors 'none';"
         )
+        # Evita cache de HTML (para que deploy novo apareça imediatamente)
+        path = request.url.path
+        if path.endswith('.html') or path == '/ui/' or path == '/ui':
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
         return response
 
 
