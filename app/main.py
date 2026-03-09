@@ -166,6 +166,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # ═══════════════════════════════════════════
 
 _last_scheduler_errors: list = []  # últimos 10 erros do scheduler
+_scheduler_debug = {"step": "init", "ts": "", "loop_count": 0}  # debug tracker
 
 _scheduler_state = {
     "running": False,
@@ -519,12 +520,19 @@ async def _auto_cycle_loop():
     """Loop interno do scheduler: executa ciclos de trading automaticamente."""
     global _last_reinvestment_date, _last_daily_summary_date
     _scheduler_state["running"] = True
+    _scheduler_debug["step"] = "warmup"
+    _scheduler_debug["ts"] = datetime.now().isoformat()
     print("[scheduler] Iniciado - intervalo:", _scheduler_state["interval_minutes"], "min", flush=True)
     # Aguarda o servidor subir completamente E o DB estar pronto antes do primeiro ciclo
     await asyncio.sleep(60)
+    _scheduler_debug["step"] = "warmup_done"
+    _scheduler_debug["ts"] = datetime.now().isoformat()
     _consecutive_errors = 0
     while _scheduler_state["running"]:
       try:
+        _scheduler_debug["loop_count"] += 1
+        _scheduler_debug["step"] = "loop_tick"
+        _scheduler_debug["ts"] = datetime.now().isoformat()
         print(f"[scheduler] Loop tick - {datetime.now().isoformat()}", flush=True)
         from datetime import timezone, timedelta
         brt = timezone(timedelta(hours=-3))
@@ -586,10 +594,14 @@ async def _auto_cycle_loop():
 
         # ── Proteção: se hard stopped, só verifica a cada 5min sem operar ──
         if _protection_state.get("hard_stopped", False):
+            _scheduler_debug["step"] = "hard_stopped"
+            _scheduler_debug["ts"] = datetime.now().isoformat()
             print(f"[scheduler] 🔴 HARD STOP ativo — drawdown máximo atingido. Aguardando /trade/unfreeze", flush=True)
             await asyncio.sleep(300)  # verifica a cada 5min
             continue
 
+        _scheduler_debug["step"] = "before_cycle"
+        _scheduler_debug["ts"] = datetime.now().isoformat()
         try:
             result = await asyncio.wait_for(
                 _run_trade_cycle_internal(assets=active_assets),
@@ -597,6 +609,8 @@ async def _auto_cycle_loop():
             )
             _scheduler_state["total_auto_cycles"] += 1
             _consecutive_errors = 0  # reset on success
+            _scheduler_debug["step"] = "cycle_done"
+            _scheduler_debug["ts"] = datetime.now().isoformat()
             _persist_scheduler_state()
             pnl = result.get("cycle_pnl", 0)
             irq = result.get("irq", 0)
@@ -624,6 +638,8 @@ async def _auto_cycle_loop():
                 print(f"[scheduler] 🚀 Turbo Mode! Próximo ciclo em {settings.TURBO_CYCLE_SECONDS}s", flush=True)
         except asyncio.TimeoutError:
             err_msg = "Ciclo excedeu timeout de 180s"
+            _scheduler_debug["step"] = "timeout"
+            _scheduler_debug["ts"] = datetime.now().isoformat()
             print(f"[scheduler] ⏱️ TIMEOUT: {err_msg}", flush=True)
             _last_scheduler_errors.append({"time": datetime.now().isoformat(), "error": err_msg, "traceback": "", "count": 0})
             if len(_last_scheduler_errors) > 10:
@@ -4027,6 +4043,7 @@ async def scheduler_status():
             "b3_open":            _is_market_open(),
             "crypto_always_on":   True,
             "recent_errors":      _last_scheduler_errors[-5:],
+            "debug":              _scheduler_debug,
         },
     }
 
