@@ -568,10 +568,10 @@ async function healthMonitorCheck() {
 
     // Se saudável, esconde banner
     if (severity === 'healthy') {
+      banner.style.display = 'none';
       banner.className = 'health-banner hidden';
       _healthDismissed = false;
       _healthNotifSent = {};
-      // Atualiza pill do topbar para refletir saúde
       _updateHealthPill('healthy');
       return;
     }
@@ -583,7 +583,8 @@ async function healthMonitorCheck() {
     }
     if (severity === 'critical') _healthDismissed = false;
 
-    // Atualiza banner
+    // Mostra e atualiza banner
+    banner.style.display = '';
     banner.className = `health-banner ${severity}`;
 
     const icon = document.getElementById('health-icon');
@@ -631,8 +632,9 @@ async function healthMonitorCheck() {
     }
 
   } catch (e) {
-    // Se /diagnostics falha, provavelmente API offline — banner de API offline já cuida
+    // Se /diagnostics falha, esconde banner — indicador de API offline já cuida
     console.warn('[healthMonitor] Erro:', e.message);
+    if (banner) { banner.style.display = 'none'; banner.className = 'health-banner hidden'; }
   }
 }
 
@@ -684,7 +686,7 @@ function _sendHealthNotification(issues) {
 
 function dismissHealthBanner() {
   const banner = document.getElementById('health-banner');
-  if (banner) banner.className = 'health-banner hidden';
+  if (banner) { banner.style.display = 'none'; banner.className = 'health-banner hidden'; }
   _healthDismissed = true;
 }
 
