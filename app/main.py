@@ -1078,7 +1078,7 @@ async def health_check():
     _brt = _tz(_td(hours=-3))
     return {
         "status": "ok",
-        "deploy_version": "v2026.03.09-timeout180",
+        "deploy_version": "v2026.03.09-debug2",
         "timestamp": datetime.now(_brt).isoformat(),
         "auto_trading": _trade_state.get("auto_trading", False),
         "scheduler_running": _scheduler_state.get("running", False),
