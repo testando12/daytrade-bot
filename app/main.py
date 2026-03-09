@@ -165,6 +165,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # SCHEDULER AUTOMÁTICO
 # ═══════════════════════════════════════════
 
+_last_scheduler_errors: list = []  # últimos 10 erros do scheduler
+
 _scheduler_state = {
     "running": False,
     "interval_minutes": 30,   # ciclo a cada 30 minutos (B3); mín 60min fora do B3
@@ -632,7 +634,13 @@ async def _auto_cycle_loop():
         break
       except Exception as _loop_err:
         _consecutive_errors += 1
-        print(f"[scheduler] ❌ Erro GERAL no loop (#{_consecutive_errors}): {_loop_err}", flush=True)
+        import traceback
+        _tb = traceback.format_exc()
+        _err_entry = {"time": datetime.now().isoformat(), "error": str(_loop_err), "traceback": _tb, "count": _consecutive_errors}
+        _last_scheduler_errors.append(_err_entry)
+        if len(_last_scheduler_errors) > 10:
+            _last_scheduler_errors.pop(0)
+        print(f"[scheduler] ❌ Erro GERAL no loop (#{_consecutive_errors}): {_loop_err}\n{_tb}", flush=True)
         # Back-off: espera 30s * n erros consecutivos (max 5min)
         backoff = min(30 * _consecutive_errors, 300)
         print(f"[scheduler] Aguardando {backoff}s antes de tentar novamente...", flush=True)
@@ -4004,6 +4012,7 @@ async def scheduler_status():
             "session":            _scheduler_state.get("session", _current_session()[1]),
             "b3_open":            _is_market_open(),
             "crypto_always_on":   True,
+            "recent_errors":      _last_scheduler_errors[-5:],
         },
     }
 
