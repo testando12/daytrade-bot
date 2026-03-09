@@ -5,6 +5,14 @@
 
 'use strict';
 
+// ── Global error handler — captura erros silenciosos ──
+window.addEventListener('error', (e) => {
+  console.error('[GLOBAL ERROR]', e.message, e.filename, e.lineno);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[UNHANDLED PROMISE]', e.reason);
+});
+
 // =============================================
 // CONFIG
 // =============================================
@@ -421,9 +429,9 @@ function applyApiUrl() {
 function setLastUpdate() {
   const pill = document.getElementById('last-update-pill');
   const time = document.getElementById('last-update-time');
-  pill.style.display = 'flex';
+  if (pill) pill.style.display = 'flex';
   const now = new Date();
-  time.textContent = now.toLocaleTimeString('pt-BR');
+  if (time) time.textContent = now.toLocaleTimeString('pt-BR');
 }
 
 function _loadPreRealConfig() {
@@ -705,7 +713,7 @@ async function loadDashboard() {
     ]);
 
     // Render partial KPIs immediately from fast endpoints
-    renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHistory);
+    try { renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHistory); } catch (re) { console.warn('renderDashboardKPIsPartial:', re); }
 
     // Prices separately
     loadMarketPrices();
@@ -714,15 +722,16 @@ async function loadDashboard() {
     // 2) Heavy analysis in background (90s timeout)
     const analysis = await api('/analyze/full', { method: 'POST' }, 90000).catch(() => null);
     if (analysis && analysis.success) {
-      renderDashboardKPIs(analysis.data, riskStatus, tradeStatus);
-      renderMomentumChart(analysis.data);
-      renderRiskRadar(analysis.data);
-      renderDashboardAllocation(analysis.data);
+      try { renderDashboardKPIs(analysis.data, riskStatus, tradeStatus); } catch (re) { console.warn('renderDashboardKPIs:', re); }
+      try { renderMomentumChart(analysis.data); } catch (re) { console.warn('renderMomentumChart:', re); }
+      try { renderRiskRadar(analysis.data); } catch (re) { console.warn('renderRiskRadar:', re); }
+      try { renderDashboardAllocation(analysis.data); } catch (re) { console.warn('renderDashboardAlloc:', re); }
     }
     setLastUpdate();
   } catch (e) {
+    console.error('loadDashboard error:', e);
     setApiStatus(false);
-    toast('Erro ao conectar com a API', 'error');
+    toast('Erro ao conectar com a API: ' + (e.message || e), 'error');
   }
 }
 
@@ -731,7 +740,8 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHisto
   const td = tradeStatus?.data || {};
   const perf = perfData?.data || {};
   const capital = td.capital_efetivo || td.capital || 2000;
-  document.getElementById('kpi-capital').textContent = fmtMoney(capital);
+  const kpiCapEl = document.getElementById('kpi-capital');
+  if (kpiCapEl) kpiCapEl.textContent = fmtMoney(capital);
   const pnlVal = perf.total_pnl || td.total_pnl || 0;
   const pnlEl = document.getElementById('kpi-pnl');
   if (pnlEl) {
@@ -776,7 +786,8 @@ function renderDashboardKPIsPartial(tradeStatus, riskStatus, perfData, perfHisto
 function renderDashboardKPIs(data, riskStatus, tradeStatus) {
   // Capital — usa capital_efetivo (capital base + pnl hoje)
   const capital = tradeStatus?.data?.capital_efetivo || tradeStatus?.data?.capital || data.market_data?.capital || data.portfolio?.capital || 2000;
-  document.getElementById('kpi-capital').textContent = fmtMoney(capital);
+  const kc = document.getElementById('kpi-capital');
+  if (kc) kc.textContent = fmtMoney(capital);
   const pnlVal = tradeStatus?.data?.total_pnl || 0;
   const pnlEl = document.getElementById('kpi-pnl');
   if (pnlEl) {
@@ -788,12 +799,12 @@ function renderDashboardKPIs(data, riskStatus, tradeStatus) {
   const irq = data.risk_analysis;
   if (irq) {
     const pct = (irq.irq_score * 100).toFixed(1);
-    document.getElementById('kpi-irq').textContent = `${pct}%`;
-    document.getElementById('kpi-irq-level').textContent = irq.level || irq.protection_level;
-    document.getElementById('kpi-irq-level').className = `kpi-change ${irq.irq_score < 0.6 ? 'up' : 'down'}`;
+    const irqEl = document.getElementById('kpi-irq');
+    if (irqEl) irqEl.textContent = `${pct}%`;
+    const irqLvl = document.getElementById('kpi-irq-level');
+    if (irqLvl) { irqLvl.textContent = irq.level || irq.protection_level; irqLvl.className = `kpi-change ${irq.irq_score < 0.6 ? 'up' : 'down'}`; }
     const badge = document.getElementById('irq-badge-dash');
-    badge.textContent = `${irq.color} ${irq.level}`;
-    badge.className = `badge ${irqBadgeClass(irq.level)}`;
+    if (badge) { badge.textContent = `${irq.color} ${irq.level}`; badge.className = `badge ${irqBadgeClass(irq.level)}`; }
   }
 
   // Best asset
@@ -803,16 +814,18 @@ function renderDashboardKPIs(data, riskStatus, tradeStatus) {
     for (const [asset, d] of Object.entries(mom)) {
       if (d.momentum_score > bestScore) { bestScore = d.momentum_score; best = asset; }
     }
-    document.getElementById('kpi-best-asset').textContent = best || '--';
-    document.getElementById('kpi-best-score').textContent = `Score: ${bestScore.toFixed(4)}`;
-    document.getElementById('kpi-best-score').className = `kpi-change ${bestScore >= 0 ? 'up' : 'down'}`;
+    const baEl = document.getElementById('kpi-best-asset');
+    if (baEl) baEl.textContent = best || '--';
+    const bsEl = document.getElementById('kpi-best-score');
+    if (bsEl) { bsEl.textContent = `Score: ${bestScore.toFixed(4)}`; bsEl.className = `kpi-change ${bestScore >= 0 ? 'up' : 'down'}`; }
   }
 
   // Bot status
   const canTrade = riskStatus?.data?.is_locked === false;
-  document.getElementById('kpi-bot-status').textContent = canTrade ? '✅ Operacional' : '🔒 Bloqueado';
-  document.getElementById('kpi-trade-ok').textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || '');
-  document.getElementById('kpi-trade-ok').className = `kpi-change ${canTrade ? 'up' : 'down'}`;
+  const bsEl2 = document.getElementById('kpi-bot-status');
+  if (bsEl2) bsEl2.textContent = canTrade ? '✅ Operacional' : '🔒 Bloqueado';
+  const toEl = document.getElementById('kpi-trade-ok');
+  if (toEl) { toEl.textContent = canTrade ? 'Permitido operar' : (riskStatus?.data?.lock_reason || ''); toEl.className = `kpi-change ${canTrade ? 'up' : 'down'}`; }
   // Atualiza banners BRL/USD em ambas as páginas
   const td2 = tradeStatus?.data || {};
   renderCapitalSplitBanners(td2);
@@ -967,6 +980,7 @@ function renderRiskRadar(data) {
 
 function renderDashboardAllocation(data) {
   const el = document.getElementById('dash-allocation');
+  if (!el) return;
   const allocs = data.allocations;
   if (!allocs) {
     el.innerHTML = '<div class="empty-state"><p>Sem dados de alocação</p></div>';
