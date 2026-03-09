@@ -5364,9 +5364,17 @@ async def get_audit_log(limit: int = 100, severity: str = None):
 @app.get("/security/status")
 async def get_security_status():
     """Status de seguranca: API keys, rate limits, protecoes ativas."""
-    from datetime import timedelta
-    cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
-    recent_critical = sum(1 for e in _audit_log if e.get("severity") == "critical" and e.get("timestamp", "") > cutoff)
+    try:
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+        recent_critical = sum(1 for e in _audit_log if e.get("severity") == "critical" and e.get("timestamp", "") > cutoff)
+    except Exception:
+        recent_critical = 0
+
+    try:
+        risk_data = risk_manager.to_dict() if risk_manager else {}
+    except Exception:
+        risk_data = {}
 
     return {
         "success": True,
@@ -5404,7 +5412,7 @@ async def get_security_status():
                 "IRQ com protecao em 3 niveis",
                 "Dados de fontes oficiais (B3/Binance/Yahoo)",
             ],
-            "risk_score": risk_manager.to_dict() if risk_manager else {},
+            "risk_score": risk_data,
         },
     }
 

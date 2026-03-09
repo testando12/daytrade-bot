@@ -57,15 +57,14 @@ async function handleLogin(e) {
   btn.textContent = 'Verificando...';
   err.textContent = '';
   try {
-    const res = await fetch(`${API_BASE}/health`, {
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
-    });
-    // Health é público, então testa um endpoint protegido
+    // Testa endpoint protegido com a chave
     const res2 = await fetch(`${API_BASE}/trade/status`, {
       headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
     });
     if (res2.status === 401 || res2.status === 403) {
       err.textContent = 'API Key inválida. Verifique e tente novamente.';
+    } else if (!res2.ok) {
+      err.textContent = `Erro do servidor (${res2.status}). Tente novamente.`;
     } else {
       setApiKey(key);
       showDashboard();
@@ -75,6 +74,7 @@ async function handleLogin(e) {
     }
   } catch (ex) {
     err.textContent = 'Erro de conexão. Verifique se a API está online.';
+    console.error('Login error:', ex);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Entrar';
