@@ -668,12 +668,14 @@ function scoreColor(score) {
 // CHART HELPERS
 // =============================================
 
-Chart.defaults.color = '#8b949e';
-Chart.defaults.borderColor = '#30363d';
+if (typeof Chart !== 'undefined') {
+  Chart.defaults.color = '#8b949e';
+  Chart.defaults.borderColor = '#30363d';
+}
 
 function destroyChart(id) {
   if (charts[id]) {
-    charts[id].destroy();
+    try { charts[id].destroy(); } catch (_) {}
     delete charts[id];
   }
 }
@@ -868,6 +870,7 @@ async function loadMarketPrices() {
 }
 
 function renderMomentumChart(data) {
+  if (typeof Chart === 'undefined') return;
   destroyChart('momentum');
   const mom = data.momentum_analysis;
   if (!mom) return;
@@ -913,6 +916,7 @@ function renderMomentumChart(data) {
 }
 
 function renderRiskRadar(data) {
+  if (typeof Chart === 'undefined') return;
   destroyChart('risk-radar');
   const risk = data.risk_analysis;
   if (!risk) return;
@@ -1369,7 +1373,7 @@ async function loadPortfolio() {
       : entries.filter(([, d]) => (d.recommended_amount || 0) > 0);
     const pieColors = ['#388bfd','#3fb950','#d29922','#f85149','#db6d28','#8b949e','#a5d6ff','#7ee787','#c9d1d9','#f778ba','#56d4dd','#d2a8ff'];
 
-    if (pieEntries.length > 0 && pieCtx) {
+    if (typeof Chart !== 'undefined' && pieEntries.length > 0 && pieCtx) {
       charts['portfolio-pie'] = new Chart(pieCtx, {
         type: 'doughnut',
         data: {
@@ -1659,7 +1663,7 @@ async function loadTradePage() {
   try {
     const [res, perfRes, perfHistRes] = await Promise.all([
       api('/trade/status'),
-      api('/performance'),
+      api('/performance').catch(() => null),
       api('/performance/history').catch(() => null),
     ]);
     if (!res.success) return;
@@ -1913,7 +1917,7 @@ async function loadTradePage() {
     destroyChart('trade-donut');
     const donutCtx = document.getElementById('chart-trade-donut');
     const nonZero = posEntries.filter(([, p]) => p.amount > 0);
-    if (nonZero.length > 0 && donutCtx) {
+    if (typeof Chart !== 'undefined' && nonZero.length > 0 && donutCtx) {
       const palette = ['#388bfd','#3fb950','#d29922','#f85149','#db6d28','#8b949e','#a5d6ff','#7ee787','#ff9500','#bf00ff'];
       charts['trade-donut'] = new Chart(donutCtx, {
         type: 'doughnut',
@@ -1971,6 +1975,7 @@ async function loadTradePage() {
     renderPreRealPanel(d, perf);
 
   } catch (e) {
+    console.error('loadTradePage error:', e);
     toast('Erro ao carregar Trade', 'error');
   }
 }
