@@ -324,6 +324,9 @@ function navigate(page) {
   // Atualiza breadcrumb
   document.getElementById('topbar-page-name').textContent = PAGE_NAMES[page] || page;
 
+  // Sync bottom nav active state (mobile)
+  if (typeof _syncBottomNavActive === 'function') _syncBottomNavActive(page);
+
   currentPage = page;
   loadPage(page);
   _startPageRefresh(page);
@@ -385,6 +388,74 @@ function closeMobileSidebar() {
   if (backdrop) backdrop.classList.remove('active');
   if (hamburger) hamburger.classList.remove('active');
   document.body.style.overflow = '';
+}
+
+// =============================================
+// BOTTOM NAV + MAIS PANEL (mobile)
+// =============================================
+
+function navigateBottom(page) {
+  // Update bottom nav active state
+  document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
+  const btn = document.querySelector(`.bottom-nav-item[data-nav="${page}"]`);
+  if (btn) btn.classList.add('active');
+  // Close Mais panel if open
+  closeMaisPanel();
+  // Use existing navigate function
+  navigate(page);
+}
+
+function toggleMaisPanel() {
+  const panel = document.getElementById('mais-panel');
+  const backdrop = document.getElementById('mais-backdrop');
+  if (!panel) return;
+  const isOpen = panel.classList.contains('active');
+  
+  // Update bottom nav active state for "Mais"
+  const maisBtn = document.querySelector('.bottom-nav-item[data-nav="mais"]');
+  
+  if (isOpen) {
+    panel.classList.remove('active');
+    if (backdrop) backdrop.classList.remove('active');
+    if (maisBtn) maisBtn.classList.remove('active');
+    // Restore the correct active tab
+    _syncBottomNavActive();
+    document.body.style.overflow = '';
+  } else {
+    panel.classList.add('active');
+    if (backdrop) backdrop.classList.add('active');
+    // Highlight "Mais" button
+    document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
+    if (maisBtn) maisBtn.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+}
+
+function closeMaisPanel() {
+  const panel = document.getElementById('mais-panel');
+  const backdrop = document.getElementById('mais-backdrop');
+  if (panel) panel.classList.remove('active');
+  if (backdrop) backdrop.classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+function navigateFromMais(page) {
+  closeMaisPanel();
+  // Update bottom nav — deselect all, correct one will be highlighted if it matches
+  _syncBottomNavActive(page);
+  navigate(page);
+}
+
+// Sync bottom nav active state based on current page
+function _syncBottomNavActive(page) {
+  const p = page || currentPage;
+  document.querySelectorAll('.bottom-nav-item').forEach(el => el.classList.remove('active'));
+  // Only highlight if it's one of the 4 main bottom nav pages
+  const mainPages = ['dashboard', 'trade', 'market', 'portfolio'];
+  if (mainPages.includes(p)) {
+    const btn = document.querySelector(`.bottom-nav-item[data-nav="${p}"]`);
+    if (btn) btn.classList.add('active');
+  }
 }
 
 // =============================================

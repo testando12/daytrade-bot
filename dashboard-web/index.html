@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Day Trade Bot</title>
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
 
@@ -1684,12 +1684,75 @@
     </main>
   </div><!-- /main-content -->
 
+  <!-- =================== BOTTOM NAV (mobile-only) =================== -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="bottom-nav-item active" data-nav="dashboard" onclick="navigateBottom('dashboard')">
+      <span class="bottom-nav-icon">🏠</span>
+      <span class="bottom-nav-label">Dashboard</span>
+    </button>
+    <button class="bottom-nav-item" data-nav="trade" onclick="navigateBottom('trade')">
+      <span class="bottom-nav-icon">💱</span>
+      <span class="bottom-nav-label">Trade</span>
+    </button>
+    <button class="bottom-nav-item" data-nav="market" onclick="navigateBottom('market')">
+      <span class="bottom-nav-icon">💹</span>
+      <span class="bottom-nav-label">Mercado</span>
+    </button>
+    <button class="bottom-nav-item" data-nav="portfolio" onclick="navigateBottom('portfolio')">
+      <span class="bottom-nav-icon">💼</span>
+      <span class="bottom-nav-label">Portfólio</span>
+    </button>
+    <button class="bottom-nav-item" data-nav="mais" onclick="toggleMaisPanel()">
+      <span class="bottom-nav-icon">☰</span>
+      <span class="bottom-nav-label">Mais</span>
+    </button>
+  </nav>
+
+  <!-- =================== MAIS PANEL (mobile slide-up) =================== -->
+  <div class="mais-backdrop" id="mais-backdrop" onclick="closeMaisPanel()"></div>
+  <div class="mais-panel" id="mais-panel">
+    <div class="mais-handle"></div>
+    <div class="mais-title">Mais opções</div>
+    <div class="mais-grid">
+      <button class="mais-item" onclick="navigateFromMais('live')">
+        <span class="mais-icon">⚡</span><span>Análise ao Vivo</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('leverage')">
+        <span class="mais-icon">⚖️</span><span>Alavanca</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('risk')">
+        <span class="mais-icon">🛡️</span><span>Gestão de Risco</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('history')">
+        <span class="mais-icon">📚</span><span>Histórico</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('indicators')">
+        <span class="mais-icon">📊</span><span>Indicadores</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('finance')">
+        <span class="mais-icon">🧮</span><span>Finanças</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('events')">
+        <span class="mais-icon">📅</span><span>Eventos</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('security')">
+        <span class="mais-icon">🔒</span><span>Segurança</span>
+      </button>
+      <button class="mais-item" onclick="navigateFromMais('settings')">
+        <span class="mais-icon">⚙️</span><span>Configurações</span>
+      </button>
+      <button class="mais-item mais-item-logout" onclick="handleLogout()">
+        <span class="mais-icon">🚪</span><span>Sair</span>
+      </button>
+    </div>
+  </div>
+
 </div><!-- /app-layout -->
 
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
