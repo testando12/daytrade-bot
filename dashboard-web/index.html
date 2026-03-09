@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Day Trade Bot</title>
-  <link rel="stylesheet" href="style.css?v=7" />
+  <link rel="stylesheet" href="style.css?v=8" />
 </head>
 <body>
 
@@ -1688,15 +1688,15 @@
   <nav class="bottom-nav" id="bottom-nav">
     <button class="bottom-nav-item active" data-nav="dashboard" onclick="navigateBottom('dashboard')">
       <span class="bottom-nav-icon">🏠</span>
-      <span class="bottom-nav-label">Dashboard</span>
-    </button>
-    <button class="bottom-nav-item" data-nav="trade" onclick="navigateBottom('trade')">
-      <span class="bottom-nav-icon">💱</span>
-      <span class="bottom-nav-label">Trade</span>
+      <span class="bottom-nav-label">Home</span>
     </button>
     <button class="bottom-nav-item" data-nav="market" onclick="navigateBottom('market')">
       <span class="bottom-nav-icon">💹</span>
       <span class="bottom-nav-label">Mercado</span>
+    </button>
+    <button class="bottom-nav-item bottom-nav-center" data-nav="trade" onclick="navigateBottom('trade')">
+      <span class="bottom-nav-fab">💱</span>
+      <span class="bottom-nav-label">Trade</span>
     </button>
     <button class="bottom-nav-item" data-nav="portfolio" onclick="navigateBottom('portfolio')">
       <span class="bottom-nav-icon">💼</span>
@@ -1753,6 +1753,6 @@
 <div class="toast-container" id="toast-container"></div>
 
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script defer src="app.js?v=7"></script>
+<script defer src="app.js?v=8"></script>
 </body>
 </html>
