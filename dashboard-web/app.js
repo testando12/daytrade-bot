@@ -19,19 +19,19 @@ let charts = {};
 let _tradeStatusSnapshot = null;
 let _perfSnapshot = null;
 
-const PRE_REAL_STORAGE_KEY = 'pre_real_gate_v1';
+const PRE_REAL_STORAGE_KEY = 'pre_real_gate_v2';
 const PRE_REAL_DEFAULT = {
   autoMode: true,
   maxLeverageLive: 3,
   dailyLossStop: 120,
-  maxRiskPct: 5,
-  minCycles: 200,
+  maxRiskPct: 1,
+  minCycles: 300,
   minProfitFactor: 1.8,   // substitui minWinRate — critério institucional
-  maxDrawdownPct: 12,
-  minSharpe: 1,
-  ackLiquidation: false,
-  ackPaper: false,
-  ackSmall: false,
+  maxDrawdownPct: 10,
+  minSharpe: 1.2,
+  ackLiquidation: true,
+  ackPaper: true,
+  ackSmall: true,
 };
 
 let _preRealConfig = { ...PRE_REAL_DEFAULT };
