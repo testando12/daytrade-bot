@@ -590,7 +590,10 @@ async def _auto_cycle_loop():
             continue
 
         try:
-            result = await _run_trade_cycle_internal(assets=active_assets)
+            result = await asyncio.wait_for(
+                _run_trade_cycle_internal(assets=active_assets),
+                timeout=180  # max 3 min por ciclo
+            )
             _scheduler_state["total_auto_cycles"] += 1
             _consecutive_errors = 0  # reset on success
             _persist_scheduler_state()
@@ -618,6 +621,12 @@ async def _auto_cycle_loop():
             if turbo and settings.TURBO_ENABLED:
                 interval_sec = settings.TURBO_CYCLE_SECONDS
                 print(f"[scheduler] 🚀 Turbo Mode! Próximo ciclo em {settings.TURBO_CYCLE_SECONDS}s", flush=True)
+        except asyncio.TimeoutError:
+            err_msg = "Ciclo excedeu timeout de 180s"
+            print(f"[scheduler] ⏱️ TIMEOUT: {err_msg}", flush=True)
+            _last_scheduler_errors.append({"time": datetime.now().isoformat(), "error": err_msg, "traceback": "", "count": 0})
+            if len(_last_scheduler_errors) > 10:
+                _last_scheduler_errors.pop(0)
         except Exception as e:
             err_msg = str(e)
             print(f"[scheduler] Erro no ciclo automático: {err_msg}", flush=True)
@@ -2668,7 +2677,10 @@ async def run_trade_cycle(request: Request):
     Registra cada decisão no log de trading.
     """
     try:
-        result = await _run_trade_cycle_internal()
+        result = await asyncio.wait_for(
+            _run_trade_cycle_internal(),
+            timeout=180
+        )
         try:
             db_state.save_state("trade_state", _trade_state)
             db_state.save_state("performance", _perf_state)
