@@ -9,3 +9,4 @@ aiofiles>=23.0.0
 psycopg2-binary>=2.9.0
 scikit-learn==1.4.2
 numpy==1.26.4
+slowapi>=0.1.9

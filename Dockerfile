@@ -15,8 +15,13 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 # Copiar código
 COPY . .
 
-# Criar diretório de dados persistente
-RUN mkdir -p /app/data
+# Criar diretório de dados persistente e usuário não-root
+RUN mkdir -p /app/data \
+    && adduser --disabled-password --no-create-home --gecos "" appuser \
+    && chown -R appuser:appuser /app/data
+
+# Rodar como usuário não-root (segurança)
+USER appuser
 
 # Expor porta (Railway injeta $PORT)
 EXPOSE 8001

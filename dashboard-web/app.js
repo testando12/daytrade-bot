@@ -19,6 +19,30 @@ let charts = {};
 let _tradeStatusSnapshot = null;
 let _perfSnapshot = null;
 
+// =============================================
+// API KEY (SEGURANÇA)
+// =============================================
+const API_KEY_STORAGE = 'dt_api_key';
+function getApiKey() { return sessionStorage.getItem(API_KEY_STORAGE) || ''; }
+function setApiKey(key) { sessionStorage.setItem(API_KEY_STORAGE, key); }
+function _authHeaders() {
+  const k = getApiKey();
+  const h = { 'Content-Type': 'application/json' };
+  if (k) h['X-API-Key'] = k;
+  return h;
+}
+
+function promptApiKey() {
+  const current = getApiKey();
+  const key = prompt('Digite sua API Key (X-API-Key):', current);
+  if (key !== null) {
+    setApiKey(key.trim());
+    const lbl = document.getElementById('sidebar-key-label');
+    if (lbl) lbl.textContent = key.trim() ? '🔒 Key OK' : 'API Key';
+    checkApiConnection();
+  }
+}
+
 const PRE_REAL_STORAGE_KEY = 'pre_real_gate_v2';
 const PRE_REAL_DEFAULT = {
   autoMode: true,
@@ -267,10 +291,14 @@ async function api(path, options = {}, timeoutMs = 30000) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: _authHeaders(),
       signal: controller.signal,
       ...options,
     });
+    if (res.status === 401 || res.status === 403) {
+      promptApiKey();
+      throw new Error(`API ${path}: autenticação necessária (${res.status}). Configure a API Key.`);
+    }
     if (!res.ok) throw new Error(`API ${path} retornou ${res.status}`);
     return res.json();
   } catch (e) {
@@ -2709,9 +2737,9 @@ async function loadLeverage() {
   if (tradeCacheValid) tradeData = _levTradeCache.data;
 
   const pending = [];
-  if (!tradeCacheValid) pending.push({ key: 'trade', promise: fetch(`${API_BASE}/trade/status`) });
-  if (!perfCacheValid) pending.push({ key: 'performance', promise: fetch(`${API_BASE}/performance`) });
-  if (!historyCacheValid) pending.push({ key: 'history', promise: fetch(`${API_BASE}/performance/history`) });
+  if (!tradeCacheValid) pending.push({ key: 'trade', promise: fetch(`${API_BASE}/trade/status`, { headers: _authHeaders() }) });
+  if (!perfCacheValid) pending.push({ key: 'performance', promise: fetch(`${API_BASE}/performance`, { headers: _authHeaders() }) });
+  if (!historyCacheValid) pending.push({ key: 'history', promise: fetch(`${API_BASE}/performance/history`, { headers: _authHeaders() }) });
 
   if (pending.length > 0) {
     const settled = await Promise.allSettled(pending.map(p => p.promise));

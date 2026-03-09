@@ -10,16 +10,23 @@ except ImportError:
     pass
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Depends, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.security import APIKeyHeader
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from datetime import datetime
 from pathlib import Path
 import asyncio
 import json
 import random as _rnd
 import os
+import hashlib
+import secrets
+import time
 
 from app.core.config import settings
 from app import db_state
@@ -64,6 +71,89 @@ try:
 except ImportError:
     MLEnsemble = None
     ML_AVAILABLE = False
+
+# ═══════════════════════════════════════════
+# SEGURANÇA — API KEY AUTHENTICATION
+# ═══════════════════════════════════════════
+
+# Gera uma API key aleatória se nenhuma foi configurada (exibe no log na primeira vez)
+_API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
+if not _API_SECRET_KEY:
+    _API_SECRET_KEY = secrets.token_urlsafe(32)
+    print(f"[SECURITY] ⚠️  Nenhuma API_SECRET_KEY configurada. Chave temporária gerada:", flush=True)
+    print(f"[SECURITY] 🔑 {_API_SECRET_KEY}", flush=True)
+    print(f"[SECURITY] ➡️  Configure API_SECRET_KEY nas env vars do Railway para persistir.", flush=True)
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+# Endpoints que NÃO precisam de autenticação (públicos)
+_PUBLIC_ENDPOINTS = {
+    "/", "/health", "/docs", "/openapi.json", "/redoc",
+    "/ui", "/dashboard", "/simulador",
+}
+# Prefixos públicos (static files, etc)
+_PUBLIC_PREFIXES = ("/ui/",)
+
+def _is_public_endpoint(path: str) -> bool:
+    """Verifica se um endpoint é público (não requer auth)."""
+    if path in _PUBLIC_ENDPOINTS:
+        return True
+    for prefix in _PUBLIC_PREFIXES:
+        if path.startswith(prefix):
+            return True
+    return False
+
+async def verify_api_key(request: Request, api_key: str = Security(_api_key_header)):
+    """Dependency de autenticação — valida X-API-Key header."""
+    if _is_public_endpoint(request.url.path):
+        return None  # endpoints públicos não precisam de auth
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key ausente. Envie header X-API-Key.")
+    if not secrets.compare_digest(api_key, _API_SECRET_KEY):
+        raise HTTPException(status_code=403, detail="API key inválida.")
+    return api_key
+
+
+# ═══════════════════════════════════════════
+# SEGURANÇA — RATE LIMITING
+# ═══════════════════════════════════════════
+
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    _limiter = Limiter(key_func=get_remote_address, default_limits=["120/minute"])
+    RATE_LIMIT_AVAILABLE = True
+except ImportError:
+    _limiter = None
+    RATE_LIMIT_AVAILABLE = False
+    print("[SECURITY] ⚠️  slowapi não instalado — rate limiting desativado. pip install slowapi", flush=True)
+
+
+# ═══════════════════════════════════════════
+# SEGURANÇA — SECURITY HEADERS MIDDLEWARE
+# ═══════════════════════════════════════════
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Adiciona headers de segurança em todas as respostas."""
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # CSP: permite inline scripts/styles para o dashboard
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self' https://*.up.railway.app http://localhost:*; "
+            "frame-ancestors 'none';"
+        )
+        return response
+
 
 # ═══════════════════════════════════════════
 # SCHEDULER AUTOMÁTICO
@@ -733,16 +823,38 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="Bot de Day Trade Automatizado com Análise de Momentum e Risco",
     lifespan=lifespan,
+    dependencies=[Depends(verify_api_key)],
 )
 
-# CORS
+# ── CORS — restrito ao domínio do Railway + localhost dev ──────────
+_ALLOWED_ORIGINS = [
+    "https://daytrade-bot-production.up.railway.app",
+    "https://*.up.railway.app",
+    "http://localhost:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8001",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+# ── Security Headers ──────────────────────────────────────────────
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ── Rate Limiting ─────────────────────────────────────────────────
+if RATE_LIMIT_AVAILABLE and _limiter:
+    app.state.limiter = _limiter
+    @app.exception_handler(RateLimitExceeded)
+    async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit excedido. Tente novamente em breve."},
+        )
 
 # Static files — serve o dashboard web
 _dashboard_dir = Path(__file__).parent.parent / "dashboard-web"
@@ -1211,9 +1323,15 @@ async def alerts_history(limit: int = 20):
     }
 
 
+class _TelegramSetup(BaseModel):
+    bot_token: str
+    chat_id: str
+
 @app.post("/alerts/setup-telegram")
-async def setup_telegram_alerts(bot_token: str, chat_id: str):
-    """Configura alertas Telegram"""
+async def setup_telegram_alerts(body: _TelegramSetup):
+    """Configura alertas Telegram (via JSON body — nunca passe tokens na URL)."""
+    bot_token = body.bot_token
+    chat_id = body.chat_id
     if not ALERTS_AVAILABLE or alert_manager is None:
         raise HTTPException(status_code=503, detail="Módulo de alertas não disponível. Instale: pip install httpx")
     try:
@@ -1227,9 +1345,13 @@ async def setup_telegram_alerts(bot_token: str, chat_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class _DiscordSetup(BaseModel):
+    webhook_url: str
+
 @app.post("/alerts/setup-discord")
-async def setup_discord_alerts(webhook_url: str):
-    """Configura alertas Discord"""
+async def setup_discord_alerts(body: _DiscordSetup):
+    """Configura alertas Discord (via JSON body — nunca passe tokens na URL)."""
+    webhook_url = body.webhook_url
     if not ALERTS_AVAILABLE or alert_manager is None:
         raise HTTPException(status_code=503, detail="Módulo de alertas não disponível. Instale: pip install httpx")
     try:
@@ -2255,9 +2377,8 @@ async def stop_auto_trading():
     return {"success": True, "auto_trading": False}
 
 
-@app.get("/trade/reset")
 @app.post("/trade/reset")
-async def reset_trade_state():
+async def reset_trade_state(request: Request):
     """Zera o histórico de P&L, ciclos e restaura capital ao valor padrão."""
     _trade_state["total_pnl"] = 0.0
     _trade_state["capital"]   = settings.INITIAL_CAPITAL
@@ -2290,7 +2411,7 @@ async def reset_trade_state():
 
 
 @app.post("/admin/restore-perf")
-async def admin_restore_perf(payload: dict):
+async def admin_restore_perf(request: Request, payload: dict):
     """
     Restaura manualmente o estado de performance (para recuperação de histórico perdido).
     Aceita campos parciais — apenas os fornecidos são atualizados.
@@ -2328,7 +2449,7 @@ async def admin_restore_perf(payload: dict):
 
 
 @app.post("/admin/restore-trade")
-async def admin_restore_trade(payload: dict):
+async def admin_restore_trade(request: Request, payload: dict):
     """
     Restaura manualmente campos do trade_state (capital, total_pnl, etc).
     Campos aceitos: capital, total_pnl, auto_trading
@@ -2350,9 +2471,8 @@ async def admin_restore_trade(payload: dict):
     }
 
 
-@app.get("/trade/unfreeze")
 @app.post("/trade/unfreeze")
-async def unfreeze_bot():
+async def unfreeze_bot(request: Request):
     """Desbloqueia o bot após Hard Stop (drawdown máximo). Reseta proteção mas mantém capital atual."""
     was_stopped = _protection_state["hard_stopped"]
     _protection_state["paused"] = False
@@ -2510,7 +2630,7 @@ async def trade_strategies():
 
 
 @app.post("/trade/cycle")
-async def run_trade_cycle():
+async def run_trade_cycle(request: Request):
     """
     Executa um ciclo de análise e simula as ordens que o bot colocaria.
     Registra cada decisão no log de trading.
@@ -5530,4 +5650,6 @@ if __name__ == "__main__":
     import os
 
     port = int(os.getenv("PORT", 8001))
-    uvicorn.run(app, host="0.0.0.0", port=port, debug=settings.DEBUG)
+    # debug desligado automaticamente em produção (Railway)
+    _debug = settings.DEBUG and not os.getenv("RAILWAY_ENVIRONMENT")
+    uvicorn.run(app, host="0.0.0.0", port=port, debug=_debug)

@@ -1,0 +1,414 @@
+﻿
+#################################################################
+  STRESS TEST v3 - TRAILING STOP + REGIME FILTER + SCORE 0.60
+  Capital: R$3284.00  |  SL: 1.2%  |  TP: 4.5%  |  R:R 3.8:1
+  Trailing: >1.0% trava 60%  |  Breakeven: >0.5% (75%)
+  Downtrend skip: 55%  |  Downtrend size: 35%  |  Regime SQ boost: on
+#################################################################
+
+=================================================================
+  CALIBRACAO - Signal Quality minimo para ser lucrativo
+=================================================================
+     SQ    Lucro%      WR      PF     DD%   Sharpe  Veredicto
+  _____  ________  ______  ______  ______  _______  ____________
+  0.00     -30.4%   44.7%   0.585   30.8%   -1.934  [XX] RUIM
+  0.05     -28.8%   45.1%   0.616   29.8%   -1.732  [XX] RUIM
+  0.10      -5.8%   50.8%   0.922    7.4%   -0.293  [XX] RUIM
+  0.15     -13.6%   46.8%   0.798   13.6%   -0.801  [XX] RUIM
+  0.20     -12.0%   48.0%   0.826   13.2%   -0.682  [XX] RUIM
+  0.25      -1.7%   51.4%   0.976   11.3%   -0.084  [XX] RUIM
+  0.30     +50.4%   60.3%   1.835    2.2%    2.029  [OK] EXCELENTE  << BREAK-EVEN
+  0.35     +58.5%   60.1%   1.901    2.1%    2.200  [OK] EXCELENTE
+  0.40     +68.1%   60.6%   1.914    2.5%    2.238  [OK] EXCELENTE
+  0.45     +71.4%   62.3%   2.158    1.9%    2.596  [OK] EXCELENTE
+  0.50     +99.2%   66.0%   2.638    1.5%    3.182  [OK] EXCELENTE
+  0.55     +98.2%   64.2%   2.666    2.3%    3.290  [OK] EXCELENTE
+  0.60    +125.2%   69.5%   3.038    1.2%    3.847  [OK] EXCELENTE
+  0.65    +127.1%   68.3%   3.084    1.2%    3.686  [OK] EXCELENTE
+  0.70    +157.9%   69.3%   3.676    1.1%    4.238  [OK] EXCELENTE
+  0.75    +202.0%   72.5%   4.914    0.9%    4.874  [OK] EXCELENTE
+  0.80    +263.3%   72.9%   5.499    0.9%    4.917  [OK] EXCELENTE
+  0.85    +231.1%   75.1%   5.443    1.0%    5.187  [OK] EXCELENTE
+  0.90    +259.1%   76.0%   6.679    0.8%    5.351  [OK] EXCELENTE
+  0.95    +298.6%   76.4%   6.491    0.8%    5.279  [OK] EXCELENTE
+  1.00    +362.2%   76.8%   7.608    1.2%    5.487  [OK] EXCELENTE
+
+  Signal Quality minimo para breakeven: 0.30
+  Usando SQ pessimista=0.20, realista=0.30, otimista=0.45
+
+=================================================================
+  TESTE 1 - AMOSTRA 1.000 CICLOS (3 cenarios)
+=================================================================
+
+  [PESSIMISTA SQ=0.20]
+  Capital : R$2889.64  |  Lucro: R$-394.36 (-12.0%)
+  Ciclos  : 1000 (ativos: 664, skip: 336)  |  W: 319 (48.0%)  L: 345
+  Avg W/L : R$5.88 / R$6.58  |  R:R 0.89:1
+  PF: 0.826  |  Sharpe: -0.682  |  Max DD: 13.2%  |  Ruina: 99.9%
+  Aprox 11 dias
+  Veredicto: [XX] RUIM
+
+  [REALISTA SQ=0.30]
+  Capital : R$4938.25  |  Lucro: R$+1654.25 (+50.4%)
+  Ciclos  : 1000 (ativos: 648, skip: 352)  |  W: 391 (60.3%)  L: 257
+  Avg W/L : R$9.30 / R$7.71  |  R:R 1.21:1
+  PF: 1.835  |  Sharpe: 2.029  |  Max DD: 2.2%  |  Ruina: 0.0%
+  Aprox 11 dias
+  Veredicto: [OK] EXCELENTE
+
+  [OTIMISTA SQ=0.45]
+  Capital : R$5627.96  |  Lucro: R$+2343.96 (+71.4%)
+  Ciclos  : 1000 (ativos: 668, skip: 332)  |  W: 416 (62.3%)  L: 252
+  Avg W/L : R$10.50 / R$8.03  |  R:R 1.31:1
+  PF: 2.158  |  Sharpe: 2.596  |  Max DD: 1.9%  |  Ruina: 0.0%
+  Aprox 11 dias
+  Veredicto: [OK] EXCELENTE
+
+  Por regime (250 ciclos, SQ=0.30):
+    [-] Lateral              Lucro:   -4.6%  WR: 51.6%  PF: 0.77
+    [+] Tend├¬ncia alta       Lucro:  +34.5%  WR: 75.9%  PF: 4.14
+    [-] Tend├¬ncia queda      Lucro:   -5.5%  WR: 27.8%  PF: 0.20
+    [+] Alta volatilidade    Lucro:  +21.5%  WR: 61.2%  PF: 2.06
+    [-] Baixa liquidez       Lucro:   -4.5%  WR: 48.7%  PF: 0.64
+
+=================================================================
+  TESTE 2 - SEQUENCIA DE PERDAS CONSECUTIVAS
+=================================================================
+   5 losses -> min R$3149.59 (queda 4.1%) -> final R$3167.50  [Sobrevive]
+   8 losses -> min R$3126.18 (queda 4.8%) -> final R$3143.93  [Sobrevive]
+  10 losses -> min R$3141.26 (queda 4.3%) -> final R$3320.20  [Sobrevive]
+
+=================================================================
+  TESTE 3 - DRAWDOWN REALISTA (500 ciclos)
+=================================================================
+  Capital : R$3541.15  |  Lucro: R$+257.15 (+7.8%)
+  Ciclos  : 500 (ativos: 333, skip: 167)  |  W: 182 (54.7%)  L: 151
+  Avg W/L : R$6.66 / R$6.33  |  R:R 1.05:1
+  PF: 1.269  |  Sharpe: 0.870  |  Max DD: 3.3%  |  Ruina: 0.0%
+  Drawdown: Excelente (< 10%)
+
+=================================================================
+  TESTE 4 - SLIPPAGE EXTRA
+=================================================================
+  Cenario                          Lucro      WR      PF  Veredicto
+  ____________________________ _________  ______  ______  ____________
+  Sem extra                       +11.1%   56.8%   1.361  [OK] BOM
+  +0.1%                           +11.0%   56.8%   1.357  [OK] BOM
+  +0.2%                           +10.8%   56.8%   1.352  [OK] BOM
+
+=================================================================
+  TESTE 5 - TAXAS DOBRADAS
+=================================================================
+  Cenario                          Lucro      WR      PF  Veredicto
+  ____________________________ _________  ______  ______  ____________
+  Taxas normais                   +11.1%   56.8%   1.361  [OK] BOM
+  Taxas 2x                        -12.3%   47.9%   0.675  [XX] RUIM
+  [!!] Negativo com taxas 2x - edge precisa das taxas atuais
+
+=================================================================
+  TESTE 6 - REMOCAO DOS 5 MELHORES TRADES
+=================================================================
+  Lucro total     : R$+364.33
+  Top 5 trades    : R$+126.04
+  Sem top 5       : R$+238.29
+  [OK] Nao depende de outliers (concentracao top5: 34.6%)
+
+=================================================================
+  TESTE 7 - VOLATILIDADE EXTREMA (3x)
+=================================================================
+  Cenario                                 Lucro       DD  Veredicto
+  ___________________________________ _________  _______  ____________
+  Normal                                 +11.1%     2.5%  [OK] BOM
+  Vol 3x neutro                          +57.9%     3.3%  [OK] EXCELENTE
+  Vol 3x + queda                          -8.7%     9.2%  [XX] RUIM
+
+=================================================================
+  TESTE 8 - CAPITAL PELA METADE
+=================================================================
+  Capital                Lucro R$         %      PF
+  ____________________ __________  ________  ______
+  R$3284               R$ +364.27    +11.1%   1.361
+  R$1642 (metade)      R$ +182.02    +11.1%   1.361
+  [OK] Consistente (diff: 0.0%)
+
+=================================================================
+  TESTE 9 - RISCO DE RUINA (1000 ciclos)
+=================================================================
+  Win rate  : 60.3% (de 648 trades ativos)
+  R:R Ratio : 1.21:1
+  %/trade   : 0.235%
+  Expectat. : R$+2.5538/trade ativo
+  Ruina     : 0.00%
+
+  [OK] Profit Factor > 1.5       1.835
+  [OK] Sharpe > 1.5              2.029
+  [OK] Max DD < 20%              2.2%
+  [OK] Win Rate > 50%            60.3%
+  [OK] Risco/trade < 1%          0.235%
+  [OK] Expectativa > 0           R$+2.5538
+  [OK] Risco ruina < 5%          0.00%
+
+  Metricas: 7/7
+
+=================================================================
+  TESTE 10 - 30 DIAS RUINS
+=================================================================
+  30 dias de mercado ruim (2520 ciclos)
+  Capital : R$4806.71  |  Lucro: R$+1522.71 (+46.4%)
+  Ciclos  : 2520 (ativos: 1555, skip: 965)  |  W: 804 (51.7%)  L: 751
+  Avg W/L : R$8.20 / R$6.75  |  R:R 1.21:1
+  PF: 1.300  |  Sharpe: 0.870  |  Max DD: 8.1%  |  Ruina: 0.0%
+
+  Evolucao semanal:
+    Sem 1: R$3719.30 (+435.30)  [+]
+    Sem 2: R$3815.69 (+531.69)  [+]
+    Sem 3: R$4235.48 (+951.48)  [+]
+    Sem 4: R$4374.88 (+1090.88)  [+]
+
+  Aguenta? [OK] Sim (>60% capital)
+
+#################################################################
+  RESUMO FINAL - SQ realista = 0.30
+#################################################################
+
+  Teste                            Lucro%      DD%      PF  Veredicto
+  ______________________________ ________  _______  ______  ____________
+  1. Amostra 1.000 ciclos          +50.4%     2.2%   1.835  [OK] EXCELENTE
+  2. 10 losses seguidos             +1.1%     4.3%   1.082  [~~] MARGINAL
+  3. Drawdown 500c                  +7.8%     3.3%   1.269  [~~] MARGINAL
+  4. Slippage +0.2%                +10.8%     2.5%   1.352  [OK] BOM
+  5. Taxas 2x                      -12.3%    14.6%   0.675  [XX] RUIM
+  7. Volatilidade 3x               +57.9%     3.3%   1.925  [OK] EXCELENTE
+  8. Capital metade                +11.1%     2.5%   1.361  [OK] BOM
+  10. 30 dias ruins                +46.4%     8.1%   1.300  [~~] MARGINAL
+
+  Passou: 7/8 testes
+  >>> SISTEMA ROBUSTO - pronto para capital real pequeno (sem alavancagem)
+
+  NOTA IMPORTANTE:
+  Signal Quality breakeven = 0.30
+  Para o bot ser viavel, seus sinais precisam ter
+  pelo menos 30% de poder preditivo.
+  Rode o bot em paper 30 dias e compare win rate real vs simulado.
+  Se WR real > 50% e PF real > 1.3 -> os sinais tem qualidade suficiente.
+
+
+######################################################################
+  RISK OF RUIN - Teste Completo com Monte Carlo Simulation
+  Capital: R$3284.00  |  SQ: 0.35  |  5,000 sims
+######################################################################
+
+======================================================================
+  1. DADOS BASE DO BOT
+======================================================================
+
+  Amostra: 2000 ciclos, 1388 trades ativos
+  +--------------------------------------+
+  |  Win Rate      :   57.1%             |
+  |  Risk/Reward   :   1.17:1             |
+  |  Risco/trade   :  0.301%             |
+  |  Avg Win       : R$  11.58            |
+  |  Avg Loss      : R$   9.90            |
+  |  Expectativa   : R$+2.3740/trade     |
+  |  SL config     : 1.2%                |
+  |  TP config     : 4.5%                |
+  +--------------------------------------+
+
+======================================================================
+  2. SEQU?NCIA M?XIMA DE LOSSES CONSECUTIVOS
+======================================================================
+
+  Win Rate = 57.1%
+  N trades = 1388
+
+  F├│rmula: L Ôëê log(N) / log(1/(1-WR))
+  L Ôëê log(1388) / log(1/0.429)
+  L Ôëê 8.5 losses consecutivos poss├¡veis
+
+  ÔöÇÔöÇ Simula├º├úo real (100 amostras) ÔöÇÔöÇ
+  M├®dia m├íx losses seguidos : 7.7
+  P95 m├íx losses seguidos   : 11
+  P99 m├íx losses seguidos   : 14
+  Pior caso (100 amostras)  : 14
+  Te├│rico (f├│rmula)         : 9
+
+======================================================================
+  3. IMPACTO NO CAPITAL (DRAWDOWN POR LOSSES CONSECUTIVOS)
+======================================================================
+
+  Avg loss por trade: R$9.90
+  Capital inicial: R$3284.00
+
+   Losses Seguidos   Drawdown R$      DD %   Capital Resta  Status
+  ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ  ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ  ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ  ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ  ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+                 5  R$     49.51      1.5%  R$     3234.49  [OK] OK
+                 8  R$     79.21      2.4%  R$     3204.79  [OK] OK
+                10  R$     99.01      3.0%  R$     3184.99  [OK] OK
+                12  R$    118.81      3.6%  R$     3165.19  [OK] OK
+                14  R$    138.62      4.2%  R$     3145.38  [OK] OK
+                15  R$    148.52      4.5%  R$     3135.48  [OK] OK
+
+  ÔöÇÔöÇ Simula├º├úo com engine real (force_loss) ÔöÇÔöÇ
+   5 losses -> min R$3163.56 (DD: 3.7%) -> recupera p/ R$3395.53  [OK]
+  10 losses -> min R$3139.11 (DD: 4.4%) -> recupera p/ R$3314.37  [OK]
+  15 losses -> min R$3067.52 (DD: 6.6%) -> recupera p/ R$3259.43  [OK]
+
+======================================================================
+  4. MONTE CARLO ? 10.000 SIMULA??ES
+======================================================================
+
+  ÔöÇÔöÇ Cen├írio NORMAL: WR hist├│rico, slippage normal ÔöÇÔöÇ
+  (28.2s para 5,000 simula├º├Áes, 500 trades cada)
+
+  +---------------------------------------------+
+  |  Simulacoes lucrativas :   99.9%              |
+  |  Risco de ruina (<50%) :   0.00%              |
+  |  Retorno medio         :  +16.3%              |
+  |  Retorno mediana       :  +16.0%              |
+  |  Drawdown medio        :    2.5%              |
+  |  Drawdown P95          :    4.1%              |
+  |  Drawdown P99          :    5.2%              |
+  +---------------------------------------------+
+
+  Distribui├º├úo de capital final:
+    P5  : R$ 3519.88  (+7.2%)
+    P25 : R$ 3685.50  (+12.2%)
+    P50 : R$ 3810.40  (+16.0%)
+    P75 : R$ 3946.21  (+20.2%)
+    P95 : R$ 4144.04  (+26.2%)
+
+  Veredicto: [OK] ROBUSTO
+
+  ÔöÇÔöÇ Cen├írio RUIM: WR -10%, slippage 2x ÔöÇÔöÇ
+  (29.5s para 5,000 simula├º├Áes, 500 trades cada)
+
+  +---------------------------------------------+
+  |  Simulacoes lucrativas :   39.6%              |
+  |  Risco de ruina (<50%) :   0.00%              |
+  |  Retorno medio         :   -1.4%              |
+  |  Retorno mediana       :   -1.5%              |
+  |  Drawdown medio        :    7.2%              |
+  |  Drawdown P95          :   12.7%              |
+  |  Drawdown P99          :   15.8%              |
+  +---------------------------------------------+
+
+  Distribui├º├úo de capital final:
+    P5  : R$ 2939.73  (-10.5%)
+    P25 : R$ 3112.22  (-5.2%)
+    P50 : R$ 3234.48  (-1.5%)
+    P75 : R$ 3359.36  (+2.3%)
+    P95 : R$ 3557.16  (+8.3%)
+
+  Veredicto: [XX] FR├üGIL
+
+  ÔöÇÔöÇ Cen├írio EXTREMO: WR -15%, slippage 3x ÔöÇÔöÇ
+  (29.7s para 5,000 simula├º├Áes, 500 trades cada)
+
+  +---------------------------------------------+
+  |  Simulacoes lucrativas :    1.4%              |
+  |  Risco de ruina (<50%) :   0.00%              |
+  |  Retorno medio         :  -13.0%              |
+  |  Retorno mediana       :  -13.1%              |
+  |  Drawdown medio        :   15.1%              |
+  |  Drawdown P95          :   22.8%              |
+  |  Drawdown P99          :   25.7%              |
+  +---------------------------------------------+
+
+  Distribui├º├úo de capital final:
+    P5  : R$ 2570.84  (-21.7%)
+    P25 : R$ 2732.05  (-16.8%)
+    P50 : R$ 2852.71  (-13.1%)
+    P75 : R$ 2971.96  (-9.5%)
+    P95 : R$ 3158.64  (-3.8%)
+
+  Veredicto: [XX] FR├üGIL
+
+  ÔöÇÔöÇ COMPARA├ç├âO DOS 3 CEN├üRIOS ÔöÇÔöÇ
+  Cen├írio       Lucrativas    Ru├¡na  Ret M├®dio   DD P95 Veredicto
+  ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  NORMAL             99.9%    0.00%     +16.3%     4.1% [OK] ROBUSTO
+  RUIM               39.6%    0.00%      -1.4%    12.7% [XX] FR├üGIL
+  EXTREMO             1.4%    0.00%     -13.0%    22.8% [XX] FR├üGIL
+
+  ÔöÇÔöÇ Vs. Metas de Robustez ÔöÇÔöÇ
+  [OK] Simula├º├Áes lucrativas > 80%         ÔåÆ 99.9%
+  [OK] Drawdown P95 < 25%                  ÔåÆ 4.1%
+  [OK] Risco de ru├¡na < 5%                 ÔåÆ 0.00%
+
+======================================================================
+  5. STRESS DE EXECU??O
+======================================================================
+  Simula: 20% ordens rejeitadas + slippage 2x + lat├¬ncia 500ms
+
+  ÔöÇÔöÇ Cen├írio Normal (baseline) ÔöÇÔöÇ
+
+  ÔöÇÔöÇ Cen├írio Stress de Execu├º├úo ÔöÇÔöÇ
+
+  M├®trica                         Normal  Stress Exec      Delta
+  ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  Lucro %                          58.53        22.67     -35.86
+  Win Rate %                       60.10        51.70      -8.40
+  Profit Factor                     1.90         1.33      -0.57
+  Max DD %                          2.10         3.24      +1.14
+  Sharpe                            2.20         1.00      -1.20
+
+  [OK] Bot AINDA LUCRATIVO sob stress de execu├º├úo
+      (20% rejei├º├úo + slippage 2x + lat├¬ncia)
+      Ret├®m 39% do lucro normal
+
+======================================================================
+  6. SHUFFLE TEST ? Embaralhar Ordem dos Trades
+======================================================================
+  Se mudar a ordem dos trades quebrar o sistema,
+  ele N├âO ├® robusto (depende de sequ├¬ncia espec├¡fica).
+
+  Trades na amostra: 1388
+  Capital original (ordem real): R$6579.08 (+100.3%)
+
+  (3.6s para 5,000 shuffles)
+
+  +----------------------------------------------+
+  |  Shuffles lucrativas :  100.0%               |
+  |  Risco de ruina      :   0.00%               |
+  |  Capital medio       : R$ 6579.08            |
+  |  Capital mediana     : R$ 6579.08            |
+  |  Std capital         : R$    0.00            |
+  |  Drawdown medio      :    4.1%               |
+  |  Drawdown P95        :    6.2%               |
+  |  Drawdown P99        :    7.6%               |
+  +----------------------------------------------+
+
+  Distribui├º├úo de capital final (embaralhado):
+    P5  : R$ 6579.08  (+100.3%)
+    P50 : R$ 6579.08  (+100.3%)
+    P95 : R$ 6579.08  (+100.3%)
+
+  Veredicto: [OK] ROBUSTO ÔÇö ordem dos trades N├âO afeta resultado
+
+======================================================================
+  RESUMO FINAL ? RISK OF RUIN
+======================================================================
+
+  Capital: R$3284.00  |  SQ: 0.35
+  WR: 57.1%  |  R:R: 1.17:1  |  Risco/trade: 0.301%
+  Expectativa: R$+2.3740/trade
+
+  #    Teste                          Resultado 
+  ÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+  1    [OK] Monte Carlo Normal          Lucr:100% Ru├¡na:0.0% DD95:4%
+  2    [XX] Monte Carlo Ruim            Lucr:40% Ru├¡na:0.0%
+  3    [XX] Monte Carlo Extremo         Lucr:1% Ru├¡na:0.0%
+  4    [OK] Losses consecutivos P99     14 (m├íx observado: 14)
+  5    [OK] Stress execu├º├úo             Lucr: Sim
+  6    [OK] Shuffle Test                Lucr:100% Ru├¡na:0.0%
+  7    [OK] Expectativa positiva        R$+2.3740/trade
+  8    [OK] DD P95 < 25%                4.1%
+
+  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+  RESULTADO: 6/8 testes aprovados
+  ÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöüÔöü
+  >>> SISTEMA ACEIT├üVEL ÔÇö monitorar de perto
+  >>> Rodar 30 dias paper e reavaliar
+
+  Tempo total: 91.5s
+
