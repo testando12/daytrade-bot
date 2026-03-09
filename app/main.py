@@ -4019,6 +4019,8 @@ async def get_performance():
     pnl_total_sq  = round(sum(c.get("pnl_sq",  0) or 0 for c in cycles), 2)
     pnl_total_ls  = round(sum(c.get("pnl_ls",  0) or 0 for c in cycles), 2)
     pnl_total_fvg = round(sum(c.get("pnl_fvg", 0) or 0 for c in cycles), 2)
+    pnl_total_vr  = round(sum(c.get("pnl_vr",  0) or 0 for c in cycles), 2)
+    pnl_total_pb  = round(sum(c.get("pnl_pb",  0) or 0 for c in cycles), 2)
 
     # Per-bucket win rates (ciclos onde o bucket gerou pnl > 0)
     def _bucket_wr(key: str) -> float:
@@ -4082,11 +4084,15 @@ async def get_performance():
             "pnl_total_sq":      pnl_total_sq,
             "pnl_total_ls":      pnl_total_ls,
             "pnl_total_fvg":     pnl_total_fvg,
+            "pnl_total_vr":      pnl_total_vr,
+            "pnl_total_pb":      pnl_total_pb,
             "wr_mr_pct":         _bucket_wr("pnl_mr"),
             "wr_bo_pct":         _bucket_wr("pnl_bo"),
             "wr_sq_pct":         _bucket_wr("pnl_sq"),
             "wr_ls_pct":         _bucket_wr("pnl_ls"),
             "wr_fvg_pct":        _bucket_wr("pnl_fvg"),
+            "wr_vr_pct":         _bucket_wr("pnl_vr"),
+            "wr_pb_pct":         _bucket_wr("pnl_pb"),
             # Readiness Assessment
             "readiness_score":   readiness_score,
             "readiness_label":   readiness_label,
@@ -4130,6 +4136,8 @@ async def get_performance():
             "alloc_sq_pct":      int(_SQ_ALLOC_PCT * 100),
             "alloc_ls_pct":      int(_LS_ALLOC_PCT * 100),
             "alloc_fvg_pct":     int(_FVG_ALLOC_PCT * 100),
+            "alloc_vr_pct":      int(_VR_ALLOC_PCT * 100),
+            "alloc_pb_pct":      int(_PB_ALLOC_PCT * 100),
         },
     }
 
