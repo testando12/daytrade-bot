@@ -13,6 +13,15 @@ window.addEventListener('unhandledrejection', (e) => {
   console.error('[UNHANDLED PROMISE]', e.reason);
 });
 
+// ── Page loader — hide when fully loaded ──
+window.addEventListener('load', () => {
+  const loader = document.getElementById('page-loader');
+  if (loader) {
+    loader.classList.add('loader-hide');
+    setTimeout(() => { loader.style.display = 'none'; }, 500);
+  }
+});
+
 // =============================================
 // CONFIG
 // =============================================

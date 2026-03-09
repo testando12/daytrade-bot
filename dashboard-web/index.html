@@ -4,15 +4,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Day Trade Bot</title>
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css?v=10" />
 </head>
 <body>
+
+<!-- Page Loader -->
+<div id="page-loader">
+  <div class="loader-spinner">
+    <div class="loader-dot"></div>
+    <div class="loader-dot"></div>
+  </div>
+</div>
 
 <!-- =================== LOGIN SCREEN =================== -->
 <div id="login-screen" class="login-overlay">
   <div class="login-card">
     <div class="login-logo">
-      <span class="login-logo-icon">📈</span>
+      <span class="login-logo-icon"><i class="fas fa-chart-line"></i></span>
       <h1>Day<span class="login-accent">Trade</span> Bot</h1>
     </div>
     <p class="login-subtitle">Insira sua API Key para acessar o painel</p>
@@ -21,7 +33,7 @@
         <label for="login-key">API Key</label>
         <div class="login-input-wrapper">
           <input type="password" id="login-key" placeholder="Cole sua API Key aqui..." autocomplete="off" />
-          <button type="button" class="login-toggle-vis" onclick="toggleKeyVisibility()" title="Mostrar/ocultar">👁️</button>
+          <button type="button" class="login-toggle-vis" onclick="toggleKeyVisibility()" title="Mostrar/ocultar"><i class="fas fa-eye"></i></button>
         </div>
       </div>
       <button type="submit" class="login-btn" id="login-btn">Entrar</button>
@@ -37,7 +49,7 @@
   <aside class="sidebar" id="sidebar">
 
     <a class="sidebar-logo" href="#" onclick="navigate('dashboard')">
-      <div class="logo-icon">📈</div>
+      <div class="logo-icon"><i class="fas fa-chart-line"></i></div>
       <div class="logo-text">Day<span>Trade</span> Bot</div>
     </a>
 
@@ -46,27 +58,27 @@
       <div class="nav-section">
         <div class="nav-section-label">Principal</div>
         <a class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
-          <span class="nav-icon">🏠</span>
+          <span class="nav-icon"><i class="fas fa-home"></i></span>
           <span class="nav-label">Dashboard</span>
           <span class="nav-tooltip">Dashboard</span>
         </a>
         <a class="nav-item" data-page="live" onclick="navigate('live')">
-          <span class="nav-icon">⚡</span>
+          <span class="nav-icon"><i class="fas fa-bolt"></i></span>
           <span class="nav-label">Análise ao Vivo</span>
           <span class="nav-tooltip">Análise ao Vivo</span>
         </a>
         <a class="nav-item" data-page="market" onclick="navigate('market')">
-          <span class="nav-icon">💹</span>
+          <span class="nav-icon"><i class="fas fa-chart-area"></i></span>
           <span class="nav-label">Mercado</span>
           <span class="nav-tooltip">Mercado</span>
         </a>
         <a class="nav-item" data-page="trade" onclick="navigate('trade')">
-          <span class="nav-icon">💱</span>
+          <span class="nav-icon"><i class="fas fa-exchange-alt"></i></span>
           <span class="nav-label">Trade</span>
           <span class="nav-tooltip">Trade</span>
         </a>
         <a class="nav-item" data-page="leverage" onclick="navigate('leverage')">
-          <span class="nav-icon">⚖️</span>
+          <span class="nav-icon"><i class="fas fa-balance-scale"></i></span>
           <span class="nav-label">Alavanca</span>
           <span class="nav-tooltip">Simulador de Alavanca</span>
         </a>
@@ -75,17 +87,17 @@
       <div class="nav-section">
         <div class="nav-section-label">Gestão</div>
         <a class="nav-item" data-page="portfolio" onclick="navigate('portfolio')">
-          <span class="nav-icon">💼</span>
+          <span class="nav-icon"><i class="fas fa-briefcase"></i></span>
           <span class="nav-label">Portfólio</span>
           <span class="nav-tooltip">Portfólio</span>
         </a>
         <a class="nav-item" data-page="risk" onclick="navigate('risk')">
-          <span class="nav-icon">🛡️</span>
+          <span class="nav-icon"><i class="fas fa-shield-alt"></i></span>
           <span class="nav-label">Gestão de Risco</span>
           <span class="nav-tooltip">Gestão de Risco</span>
         </a>
         <a class="nav-item" data-page="history" onclick="navigate('history')">
-          <span class="nav-icon">📚</span>
+          <span class="nav-icon"><i class="fas fa-history"></i></span>
           <span class="nav-label">Histórico</span>
           <span class="nav-tooltip">Histórico</span>
         </a>
@@ -94,22 +106,22 @@
       <div class="nav-section">
         <div class="nav-section-label">Análise</div>
         <a class="nav-item" data-page="indicators" onclick="navigate('indicators')">
-          <span class="nav-icon">📊</span>
+          <span class="nav-icon"><i class="fas fa-chart-bar"></i></span>
           <span class="nav-label">Indicadores</span>
           <span class="nav-tooltip">Indicadores Técnicos</span>
         </a>
         <a class="nav-item" data-page="finance" onclick="navigate('finance')">
-          <span class="nav-icon">🧮</span>
+          <span class="nav-icon"><i class="fas fa-calculator"></i></span>
           <span class="nav-label">Finanças</span>
           <span class="nav-tooltip">Calculadora Financeira</span>
         </a>
         <a class="nav-item" data-page="events" onclick="navigate('events')">
-          <span class="nav-icon">📅</span>
+          <span class="nav-icon"><i class="fas fa-calendar-alt"></i></span>
           <span class="nav-label">Eventos</span>
           <span class="nav-tooltip">Calendário & Dividendos</span>
         </a>
         <a class="nav-item" data-page="security" onclick="navigate('security')">
-          <span class="nav-icon">🔒</span>
+          <span class="nav-icon"><i class="fas fa-lock"></i></span>
           <span class="nav-label">Segurança</span>
           <span class="nav-tooltip">Segurança & Audit</span>
         </a>
@@ -118,7 +130,7 @@
       <div class="nav-section">
         <div class="nav-section-label">Sistema</div>
         <a class="nav-item" data-page="settings" onclick="navigate('settings')">
-          <span class="nav-icon">⚙️</span>
+          <span class="nav-icon"><i class="fas fa-cog"></i></span>
           <span class="nav-label">Configurações</span>
           <span class="nav-tooltip">Configurações</span>
         </a>
@@ -128,16 +140,16 @@
 
     <div class="sidebar-footer">
       <div class="nav-item" style="cursor:pointer; margin-bottom:6px;" onclick="handleLogout()" title="Sair / Trocar API Key">
-        <span class="nav-icon">🚪</span>
+        <span class="nav-icon"><i class="fas fa-sign-out-alt"></i></span>
         <span class="nav-label" style="font-size:12px;">Sair</span>
       </div>
       <div class="nav-item" style="pointer-events:none; margin-bottom:6px;">
-        <span class="nav-icon">🔌</span>
+        <span class="nav-icon"><i class="fas fa-plug"></i></span>
         <span class="nav-label" id="sidebar-api-label" style="font-size:12px;">Conectando...</span>
         <div class="status-dot offline" id="sidebar-status-dot"></div>
       </div>
       <button class="sidebar-collapse-btn" onclick="toggleSidebar()">
-        <span class="nav-icon">◀</span>
+        <span class="nav-icon"><i class="fas fa-chevron-left"></i></span>
         <span class="nav-label">Recolher</span>
       </button>
     </div>
@@ -167,11 +179,11 @@
           <span id="api-label">Conectando...</span>
         </div>
         <div class="topbar-pill" id="last-update-pill" style="display:none">
-          <span>🕐</span>
+          <span><i class="fas fa-clock"></i></span>
           <span id="last-update-time">--:--</span>
         </div>
         <button class="btn btn-primary" onclick="refreshCurrentPage()">
-          <span>↻</span> Atualizar
+          <span><i class="fas fa-sync-alt"></i></span> Atualizar
         </button>
       </div>
     </header>
@@ -191,7 +203,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">Capital Total</span>
-              <div class="card-icon blue">💰</div>
+              <div class="card-icon blue"><i class="fas fa-wallet"></i></div>
             </div>
             <div class="kpi-value" id="kpi-capital">R$ --</div>
             <div class="kpi-label">Capital atual do bot</div>
@@ -200,7 +212,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">IRQ Risco</span>
-              <div class="card-icon green">🛡️</div>
+              <div class="card-icon green"><i class="fas fa-shield-alt"></i></div>
             </div>
             <div class="kpi-value" id="kpi-irq">--%</div>
             <div class="kpi-label" id="kpi-irq-label">Nível de risco do mercado</div>
@@ -209,7 +221,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">Melhor Ativo</span>
-              <div class="card-icon yellow">⭐</div>
+              <div class="card-icon yellow"><i class="fas fa-star"></i></div>
             </div>
             <div class="kpi-value" id="kpi-best-asset">--</div>
             <div class="kpi-label">Maior momentum score</div>
@@ -218,7 +230,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">Status Bot</span>
-              <div class="card-icon green">🤖</div>
+              <div class="card-icon green"><i class="fas fa-robot"></i></div>
             </div>
             <div class="kpi-value" id="kpi-bot-status" style="font-size:18px">--</div>
             <div class="kpi-label">Estado do sistema</div>
@@ -358,7 +370,7 @@
 
         <div id="live-analysis-result">
           <div class="empty-state">
-            <div class="empty-icon">⚡</div>
+            <div class="empty-icon"><i class="fas fa-bolt"></i></div>
             <p>Clique em "Analisar Agora" para iniciar a análise com dados Binance em tempo real</p>
           </div>
         </div>
@@ -579,7 +591,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">Pode Operar?</span>
-              <div class="card-icon green">✅</div>
+              <div class="card-icon green"><i class="fas fa-check-circle"></i></div>
             </div>
             <div class="kpi-value" id="risk-can-trade">--</div>
             <div class="kpi-label" id="risk-can-trade-reason">--</div>
@@ -587,7 +599,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">P&L Diário</span>
-              <div class="card-icon blue">📊</div>
+              <div class="card-icon blue"><i class="fas fa-chart-bar"></i></div>
             </div>
             <div class="kpi-value" id="risk-daily-pnl">R$ 0,00</div>
             <div class="kpi-label" id="risk-daily-pnl-label">Perda máx: R$ --</div>
@@ -595,7 +607,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">Trades/Hora</span>
-              <div class="card-icon yellow">⏱️</div>
+              <div class="card-icon yellow"><i class="fas fa-stopwatch"></i></div>
             </div>
             <div class="kpi-value" id="risk-trades-hour">0 / 20</div>
             <div class="kpi-label">Limite por hora</div>
@@ -603,7 +615,7 @@
           <div class="card">
             <div class="card-header">
               <span class="card-title">Trades/Dia</span>
-              <div class="card-icon purple">📅</div>
+              <div class="card-icon purple"><i class="fas fa-calendar-alt"></i></div>
             </div>
             <div class="kpi-value" id="risk-trades-day">0 / 100</div>
             <div class="kpi-label">Limite diário total</div>
@@ -1380,22 +1392,22 @@
         <!-- Cards de resumo -->
         <div class="cards-grid cards-4 mb-16" id="indicators-summary-cards">
           <div class="card">
-            <div class="card-header"><span class="card-title">Sinal COMPRA</span><div class="card-icon green">📈</div></div>
+            <div class="card-header"><span class="card-title">Sinal COMPRA</span><div class="card-icon green"><i class="fas fa-arrow-up"></i></div></div>
             <div class="kpi-value green" id="ind-count-compra">--</div>
             <div class="kpi-label">Ativos com consenso COMPRA</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">Sinal VENDA</span><div class="card-icon red">📉</div></div>
+            <div class="card-header"><span class="card-title">Sinal VENDA</span><div class="card-icon red"><i class="fas fa-arrow-down"></i></div></div>
             <div class="kpi-value red" id="ind-count-venda">--</div>
             <div class="kpi-label">Ativos com consenso VENDA</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">Neutros</span><div class="card-icon blue">↔️</div></div>
+            <div class="card-header"><span class="card-title">Neutros</span><div class="card-icon blue"><i class="fas fa-arrows-alt-h"></i></div></div>
             <div class="kpi-value" id="ind-count-neutro">--</div>
             <div class="kpi-label">Ativos sem sinal claro</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">RSI Médio</span><div class="card-icon yellow">📊</div></div>
+            <div class="card-header"><span class="card-title">RSI Médio</span><div class="card-icon yellow"><i class="fas fa-chart-bar"></i></div></div>
             <div class="kpi-value" id="ind-avg-rsi">--</div>
             <div class="kpi-label" id="ind-avg-rsi-label">do mercado</div>
           </div>
@@ -1449,7 +1461,7 @@
             </div>
           </div>
           <div id="indicator-detail-content">
-            <div class="empty-state"><div class="empty-icon">📊</div><p>Clique num ativo da tabela acima ou digite o nome e clique Analisar</p></div>
+            <div class="empty-state"><div class="empty-icon"><i class="fas fa-chart-bar"></i></div><p>Clique num ativo da tabela acima ou digite o nome e clique Analisar</p></div>
           </div>
         </div>
       </div>
@@ -1469,22 +1481,22 @@
         <!-- Summary cards -->
         <div class="cards-grid cards-4 mb-16" id="finance-kpis">
           <div class="card">
-            <div class="card-header"><span class="card-title">Capital</span><div class="card-icon blue">💰</div></div>
+            <div class="card-header"><span class="card-title">Capital</span><div class="card-icon blue"><i class="fas fa-wallet"></i></div></div>
             <div class="kpi-value" id="fin-capital">R$ --</div>
             <div class="kpi-label">Capital do bot</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">P&L Bruto</span><div class="card-icon green">📈</div></div>
+            <div class="card-header"><span class="card-title">P&L Bruto</span><div class="card-icon green"><i class="fas fa-chart-line"></i></div></div>
             <div class="kpi-value" id="fin-pnl-bruto">R$ --</div>
             <div class="kpi-label">Sem descontar taxas</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">Taxas + IR</span><div class="card-icon red">🏛️</div></div>
+            <div class="card-header"><span class="card-title">Taxas + IR</span><div class="card-icon red"><i class="fas fa-landmark"></i></div></div>
             <div class="kpi-value" id="fin-fees-tax">R$ --</div>
             <div class="kpi-label">Total estimado</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">P&L Líquido</span><div class="card-icon green">💎</div></div>
+            <div class="card-header"><span class="card-title">P&L Líquido</span><div class="card-icon green"><i class="fas fa-gem"></i></div></div>
             <div class="kpi-value" id="fin-pnl-liq">R$ --</div>
             <div class="kpi-label" id="fin-rentab">Rentab.: --%</div>
           </div>
@@ -1613,17 +1625,17 @@
         <!-- KPIs de segurança -->
         <div class="cards-grid cards-4 mb-16" id="security-kpis">
           <div class="card">
-            <div class="card-header"><span class="card-title">APIs Configuradas</span><div class="card-icon green">🔑</div></div>
+            <div class="card-header"><span class="card-title">APIs Configuradas</span><div class="card-icon green"><i class="fas fa-key"></i></div></div>
             <div class="kpi-value" id="sec-apis">--</div>
             <div class="kpi-label">Serviços conectados</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">Proteções Ativas</span><div class="card-icon blue">🛡️</div></div>
+            <div class="card-header"><span class="card-title">Proteções Ativas</span><div class="card-icon blue"><i class="fas fa-shield-alt"></i></div></div>
             <div class="kpi-value" id="sec-protections">--</div>
             <div class="kpi-label">Stop Loss, Take Profit, IRQ</div>
           </div>
           <div class="card">
-            <div class="card-header"><span class="card-title">Eventos Audit</span><div class="card-icon yellow">📋</div></div>
+            <div class="card-header"><span class="card-title">Eventos Audit</span><div class="card-icon yellow"><i class="fas fa-clipboard-list"></i></div></div>
             <div class="kpi-value" id="sec-audit-total">--</div>
             <div class="kpi-label">Total de eventos registrados</div>
           </div>
@@ -1687,23 +1699,23 @@
   <!-- =================== BOTTOM NAV (mobile-only) =================== -->
   <nav class="bottom-nav" id="bottom-nav">
     <button class="bottom-nav-item active" data-nav="dashboard" onclick="navigateBottom('dashboard')">
-      <span class="bottom-nav-icon">🏠</span>
+      <span class="bottom-nav-icon"><i class="fas fa-home"></i></span>
       <span class="bottom-nav-label">Home</span>
     </button>
     <button class="bottom-nav-item" data-nav="market" onclick="navigateBottom('market')">
-      <span class="bottom-nav-icon">💹</span>
+      <span class="bottom-nav-icon"><i class="fas fa-chart-area"></i></span>
       <span class="bottom-nav-label">Mercado</span>
     </button>
     <button class="bottom-nav-item bottom-nav-center" data-nav="trade" onclick="navigateBottom('trade')">
-      <span class="bottom-nav-fab">💱</span>
+      <span class="bottom-nav-fab"><i class="fas fa-exchange-alt"></i></span>
       <span class="bottom-nav-label">Trade</span>
     </button>
     <button class="bottom-nav-item" data-nav="portfolio" onclick="navigateBottom('portfolio')">
-      <span class="bottom-nav-icon">💼</span>
+      <span class="bottom-nav-icon"><i class="fas fa-briefcase"></i></span>
       <span class="bottom-nav-label">Portfólio</span>
     </button>
     <button class="bottom-nav-item" data-nav="mais" onclick="toggleMaisPanel()">
-      <span class="bottom-nav-icon">☰</span>
+      <span class="bottom-nav-icon"><i class="fas fa-bars"></i></span>
       <span class="bottom-nav-label">Mais</span>
     </button>
   </nav>
@@ -1715,34 +1727,34 @@
     <div class="mais-title">Mais opções</div>
     <div class="mais-grid">
       <button class="mais-item" onclick="navigateFromMais('live')">
-        <span class="mais-icon">⚡</span><span>Análise ao Vivo</span>
+        <span class="mais-icon"><i class="fas fa-bolt"></i></span><span>Análise ao Vivo</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('leverage')">
-        <span class="mais-icon">⚖️</span><span>Alavanca</span>
+        <span class="mais-icon"><i class="fas fa-balance-scale"></i></span><span>Alavanca</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('risk')">
-        <span class="mais-icon">🛡️</span><span>Gestão de Risco</span>
+        <span class="mais-icon"><i class="fas fa-shield-alt"></i></span><span>Gestão de Risco</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('history')">
-        <span class="mais-icon">📚</span><span>Histórico</span>
+        <span class="mais-icon"><i class="fas fa-history"></i></span><span>Histórico</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('indicators')">
-        <span class="mais-icon">📊</span><span>Indicadores</span>
+        <span class="mais-icon"><i class="fas fa-chart-bar"></i></span><span>Indicadores</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('finance')">
-        <span class="mais-icon">🧮</span><span>Finanças</span>
+        <span class="mais-icon"><i class="fas fa-calculator"></i></span><span>Finanças</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('events')">
-        <span class="mais-icon">📅</span><span>Eventos</span>
+        <span class="mais-icon"><i class="fas fa-calendar-alt"></i></span><span>Eventos</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('security')">
-        <span class="mais-icon">🔒</span><span>Segurança</span>
+        <span class="mais-icon"><i class="fas fa-lock"></i></span><span>Segurança</span>
       </button>
       <button class="mais-item" onclick="navigateFromMais('settings')">
-        <span class="mais-icon">⚙️</span><span>Configurações</span>
+        <span class="mais-icon"><i class="fas fa-cog"></i></span><span>Configurações</span>
       </button>
       <button class="mais-item mais-item-logout" onclick="handleLogout()">
-        <span class="mais-icon">🚪</span><span>Sair</span>
+        <span class="mais-icon"><i class="fas fa-sign-out-alt"></i></span><span>Sair</span>
       </button>
     </div>
   </div>
@@ -1753,6 +1765,6 @@
 <div class="toast-container" id="toast-container"></div>
 
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script defer src="app.js?v=9"></script>
+<script defer src="app.js?v=10"></script>
 </body>
 </html>

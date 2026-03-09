@@ -143,14 +143,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        # CSP: permite inline scripts/styles para o dashboard + CDN do Chart.js
+        # CSP: permite inline scripts/styles para o dashboard + CDN do Chart.js + Google Fonts + Font Awesome
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
             "img-src 'self' data:; "
             "connect-src 'self' https://*.up.railway.app http://localhost:*; "
-            "font-src 'self'; "
+            "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
             "frame-ancestors 'none';"
         )
         # Evita cache de HTML (para que deploy novo apareça imediatamente)
