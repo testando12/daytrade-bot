@@ -155,6 +155,7 @@ class PyramidBreakoutAnalyzer:
             "breakout_score": 0.0, "atr_score": 0.0,
             "ema_score": 0.0, "vol_score": 0.0,
             "current_price": prices[-1] if prices else 0.0,
+            "atr": 0.0, "bb_breakout": False,
         }
 
         if len(prices) < MIN_PERIODS or len(volumes) < MIN_PERIODS:
@@ -334,6 +335,9 @@ class PyramidBreakoutAnalyzer:
             "stop_atr_mult": PyramidBreakoutAnalyzer.STOP_ATR_MULT,
             "tp_atr_mult": PyramidBreakoutAnalyzer.TP_ATR_MULT,
             "current_price": round(current_price, 6),
+            # Aliases para compatibilidade com main.py
+            "atr": round(atr_current, 6),
+            "bb_breakout": True,
         }
 
     @staticmethod

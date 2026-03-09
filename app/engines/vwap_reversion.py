@@ -155,6 +155,7 @@ class VWAPReversionAnalyzer:
             "atr_pct": 0.0, "vwap_std": 0.0,
             "deviation_score": 0.0, "rsi_score": 0.0, "vol_score": 0.0,
             "current_price": prices[-1] if prices else 0.0,
+            "vwap_deviation": 0.0, "atr": 0.0,
         }
 
         if len(prices) < MIN_PERIODS or len(volumes) < MIN_PERIODS:
@@ -287,6 +288,9 @@ class VWAPReversionAnalyzer:
             "stop_atr_mult": VWAPReversionAnalyzer.STOP_ATR_MULT,
             "tp_atr_mult": VWAPReversionAnalyzer.TP_ATR_MULT,
             "current_price": round(current_price, 6),
+            # Aliases para compatibilidade com main.py
+            "vwap_deviation": round(deviation_pct, 6),
+            "atr": round(atr_val, 6),
         }
 
     @staticmethod

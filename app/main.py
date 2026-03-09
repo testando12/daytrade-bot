@@ -3419,7 +3419,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     # Coletar scores de momentum para decisão de resume
     _all_mom_scores = {}
-    for m in (mom_5m, mom_1h, mom_1d):
+    for m in (mom_5m, mom_1h, mom_1d, mom_mr, mom_bo, mom_sq, mom_ls, mom_fvg, mom_vr, mom_pb):
         for a, d in m.items():
             s = d.get("momentum_score", 0)
             if a not in _all_mom_scores or s > _all_mom_scores[a]:
