@@ -28,15 +28,15 @@ class Settings:
     MIN_NOTIONAL_BINANCE_USD: float = 5.0    # Binance: mín $5 por ordem
     MIN_NOTIONAL_BTG_BRL: float = 50.0       # BTG B3: mín R$50 por ordem
     MIN_NOTIONAL_DEFAULT_BRL: float = 30.0   # fallback genérico
-    STOP_LOSS_PERCENTAGE: float = 0.015  # 1.5% — fallback fixo (ATR sobrescreve)
-    TAKE_PROFIT_PERCENTAGE: float = 0.03  # 3.0% — R:R 1:2 (ATR sobrescreve)
-    TRAILING_STOP_PERCENTAGE: float = 0.012  # 1.2% abaixo do pico — protege lucro sem cortar cedo
+    STOP_LOSS_PERCENTAGE: float = 0.012  # 1.2% — mais apertado, corta perda rápido
+    TAKE_PROFIT_PERCENTAGE: float = 0.035  # 3.5% — R:R 1:2.9 (ATR sobrescreve)
+    TRAILING_STOP_PERCENTAGE: float = 0.008  # 0.8% abaixo do pico — trava lucro cedo
     REBALANCE_INTERVAL: int = 300  # segundos (5 minutos)
 
     # ── ATR Adaptive SL/TP ─────────────────────────────────────────────
     ATR_PERIOD: int = 14  # candles para calcular ATR
-    ATR_SL_MULTIPLIER: float = 1.3  # SL = ATR × 1.3 (mais apertado → corta perda rápido)
-    ATR_TP_MULTIPLIER: float = 3.5  # TP = ATR × 3.5 (risk:reward ≥ 1:2.7)
+    ATR_SL_MULTIPLIER: float = 1.2  # SL = ATR × 1.2 (mais apertado → corta perda rápido)
+    ATR_TP_MULTIPLIER: float = 4.0  # TP = ATR × 4.0 (risk:reward ≥ 1:3.3)
     ATR_MIN_SL: float = 0.005  # SL mínimo 0.5% (para não ficar micro)
     ATR_MAX_SL: float = 0.04  # SL máximo 4% (proteção para grana real)
 
@@ -60,8 +60,8 @@ class Settings:
 
     # ── Partial Take Profit ────────────────────────────────────────────
     PARTIAL_TP_ENABLED: bool = True
-    PARTIAL_TP_FIRST_PCT: float = 0.50  # tira 50% no primeiro alvo
-    PARTIAL_TP_FIRST_TARGET: float = 0.007  # primeiro alvo = 0.7%
+    PARTIAL_TP_FIRST_PCT: float = 0.40  # tira 40% no primeiro alvo (deixa 60% correr)
+    PARTIAL_TP_FIRST_TARGET: float = 0.010  # primeiro alvo = 1.0% (era 0.7%)
 
     # ── Momentum Acceleration ──────────────────────────────────────────
     MOMENTUM_ACCEL_ENABLED: bool = True
@@ -80,7 +80,8 @@ class Settings:
 
     # Filtro de score mínimo (só opera se momentum > threshold)
     # v2 (2026-03-04): elevado de 0.35→0.50 para reduzir entradas com score marginal
-    MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.50"))
+    # v3 (2026-03-09): elevado de 0.50→0.55 para melhorar win rate e PF
+    MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.55"))
 
     # Kelly Criterion — multiplier conservador
     KELLY_FRACTION: float = 0.25  # usa 25% do Kelly real (Kelly fracionário)

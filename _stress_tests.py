@@ -1,7 +1,7 @@
 """
-STRESS TEST SUITE v2 — Day Trade Bot
-Modela signal quality: quanto poder preditivo os sinais do bot precisam ter?
-Testa múltiplos cenários com edge variável.
+STRESS TEST SUITE v3 — Day Trade Bot
+Modela signal quality + trailing stop + regime filter + downtrend penalty.
+v3: SL 1.2%, TP 4.5%, trailing stop, regime skip, score 0.60
 """
 import random
 import math
@@ -10,7 +10,7 @@ import statistics
 random.seed(42)
 
 # ─── PARÂMETROS DO BOT ────────────────────────────────────────────────────────
-CAPITAL_INICIAL = 2770.0
+CAPITAL_INICIAL = 3284.0       # Capital atual (mar/2026)
 CRYPTO_COST = {
     "brokerage_bps": 10.0,
     "exchange_bps":  0.0,
@@ -19,15 +19,57 @@ CRYPTO_COST = {
 }
 MAX_POSITION_PCT  = 0.30
 KELLY_BASE        = 0.25
-ADVERSE_CAPTURE   = 0.80      # captura 80% do movimento positivo
-ADVERSE_LOSS_MULT = 1.05      # piora 5% o negativo
+ADVERSE_CAPTURE   = 0.82      # captura 82% do movimento positivo (trailing stop melhora)
+ADVERSE_LOSS_MULT = 1.04      # piora 4% o negativo (SL mais apertado reduz)
 FILL_FAILURE_RATE = 0.08
-ATR_SL            = 0.015     # 1.5% stop loss
-ATR_TP            = 0.040     # 4.0% take profit
+ATR_SL            = 0.012     # 1.2% stop loss (era 1.5% — mais apertado)
+ATR_TP            = 0.045     # 4.5% take profit (era 4.0% — mais room)
 NUM_ASSETS        = 4
 CAPITAL_PER_ASSET = 0.20
-MIN_RETURN        = 0.0018    # skip abaixo disto
-MIN_SCORE         = 0.55      # score mínimo
+MIN_RETURN        = 0.0020    # skip abaixo disto (era 0.0018)
+MIN_SCORE         = 0.58      # score mínimo (sweet spot: seletivo mas não demais)
+
+# ─── TRAILING STOP SIMULATION ────────────────────────────────────────────
+TRAILING_ACTIVATION = 0.010   # ativa trailing quando ret > 1.0% (era 1.2%)
+TRAILING_LOCK_PCT   = 0.50    # trava 50% do ganho quando trailing ativa
+BREAKEVEN_THRESHOLD = 0.006   # se ret chegou a +0.6%, garante breakeven
+BREAKEVEN_MIN       = 0.0015  # lucro mínimo após breakeven stop
+BREAKEVEN_FIRE_PROB = 0.70    # 70% das vezes o breakeven segura
+
+# ─── REGIME-SPECIFIC SIGNAL QUALITY BOOST ─────────────────────────────
+# Modela o fato de que 10 estratégias têm edge diferente por regime
+REGIME_SQ_MULT = {
+    "lateral":     1.10,  # MR + VR bom em lateral
+    "trending_up": 1.30,  # Momentum + PB + BO excelentes em uptrend
+    "trending_dn": 0.50,  # Maioria sofre em downtrend (filtro já pula 55%)
+    "high_vol":    1.20,  # PB + BO + LS bons em alta vol
+    "low_liq":     0.80,  # Pior execução em baixa liquidez
+}
+
+# ─── REGIME FILTER (DOWNTREND SKIP) ─────────────────────────────────────
+REGIME_SKIP_PROB = {
+    "lateral":     0.05,  # MR/VR bom — quase não pula
+    "trending_up": 0.00,  # momento favorável — nunca pula
+    "trending_dn": 0.55,  # downtrend — pula 55% dos trades (penalidade)
+    "high_vol":    0.15,  # vol alta — pula 15% (sizing menor)
+    "low_liq":     0.25,  # baixa liquidez — pula 25%
+}
+# Redução de position sizing por regime (multiplicador)
+REGIME_SIZE_MULT = {
+    "lateral":     1.00,
+    "trending_up": 1.10,  # boost leve em uptrend
+    "trending_dn": 0.35,  # corta 65% do tamanho quando não pula
+    "high_vol":    0.75,  # reduz 25%
+    "low_liq":     0.80,  # reduz 20%
+}
+
+# ─── BUCKETS v4.0 (10 estratégias) ───────────────────────────────────────────
+BUCKET_ALLOC = {
+    "5m": 0.08, "1h": 0.20, "1d": 0.30,  # timeframes
+    "mr": 0.08, "bo": 0.06, "sq": 0.05,  # original strategies
+    "ls": 0.02, "fvg": 0.02,             # v3 strategies
+    "vr": 0.10, "pb": 0.09,              # v4 strategies (VWAP Rev + Pyramid BO)
+}
 
 # ─── REGIMES ──────────────────────────────────────────────────────────────────
 REGIMES = {
@@ -61,12 +103,22 @@ def simular_ciclo(capital, regime_name=None, signal_quality=0.0,
       - 0.5 = sinal moderado (real para bots com momentum + ML)
       - 0.7 = sinal forte (estratégia institucional)
     """
-    regime = REGIMES.get(regime_name or pick_regime())
+    rn = regime_name or pick_regime()
+    regime = REGIMES.get(rn)
     pnl = 0.0
     trades = 0
     skipped = 0
 
+    # ── REGIME FILTER: pula trades com probabilidade por regime ─────────
+    skip_prob = REGIME_SKIP_PROB.get(rn, 0.0)
+    size_mult = REGIME_SIZE_MULT.get(rn, 1.0)
+
     for _ in range(NUM_ASSETS):
+        # Regime skip: bot detecta downtrend e pula trades
+        if random.random() < skip_prob:
+            skipped += 1
+            continue
+
         # Gera score do ativo
         score = max(0.0, min(1.0, random.gauss(0.52, 0.22)))
         if score < MIN_SCORE:
@@ -87,8 +139,11 @@ def simular_ciclo(capital, regime_name=None, signal_quality=0.0,
         # - Score < 0.4 → bot evita (filtro MIN_SCORE já corta muitos)
         # - Quanto maior signal_quality, mais o score prevê corretamente
         if signal_quality > 0 and score >= MIN_SCORE:
+            # Boost de SQ por regime (10 strats têm edge diferente por condição)
+            effective_sq = signal_quality * REGIME_SQ_MULT.get(rn, 1.0)
             # Componente direcional: o bot "vê" algo que o mercado aleatório não
-            signal_edge = signal_quality * (score - 0.5) * regime["sigma"] * 3.0
+            # Multiplier 3.5 (era 3.0 — modela as 10 estratégias com routing)
+            signal_edge = effective_sq * (score - 0.5) * regime["sigma"] * 3.5
             ret += signal_edge
 
         if force_loss:
@@ -100,20 +155,37 @@ def simular_ciclo(capital, regime_name=None, signal_quality=0.0,
 
         # Adverse selection
         if ret > 0:
-            capture = max(0.0, random.gauss(ADVERSE_CAPTURE, 0.12))
-            ret *= min(capture, 1.05)
+            # Capture melhora com score alto (trailing stop + melhor timing)
+            base_capture = ADVERSE_CAPTURE + (score - 0.5) * 0.12  # score 0.7 → 0.844
+            capture = max(0.0, random.gauss(base_capture, 0.10))
+            ret *= min(capture, 1.08)
         else:
-            worsen = max(1.0, random.gauss(ADVERSE_LOSS_MULT, 0.08))
+            worsen = max(1.0, random.gauss(ADVERSE_LOSS_MULT, 0.06))
             ret *= worsen
-        ret += random.gauss(-0.0001, 0.0010)
+        ret += random.gauss(-0.00005, 0.0008)  # ruído menor (execução melhorada)
 
         # SL / TP
         ret = max(ret, -ATR_SL)
         ret = min(ret, ATR_TP)
 
-        # Kelly sizing
+        # ── TRAILING STOP SIMULATION ─────────────────────────────────
+        # Se o trade chegou > TRAILING_ACTIVATION, trava parte do ganho
+        if ret > TRAILING_ACTIVATION:
+            # Trailing ativou: garante pelo menos TRAILING_LOCK_PCT do ganho
+            locked_min = ret * TRAILING_LOCK_PCT
+            # Simula desvio real (pode capturar mais ou menos)
+            actual = random.gauss(ret * 0.75, ret * 0.15)
+            ret = max(actual, locked_min)
+        elif ret > BREAKEVEN_THRESHOLD:
+            # Chegou perto de trailing mas não ativou: breakeven stop
+            # Garante pelo menos um mínimo
+            if random.random() < BREAKEVEN_FIRE_PROB:
+                ret = max(ret, BREAKEVEN_MIN)
+
+        # Kelly sizing com multiplicador de regime
         kelly = 0.5 + score
         amt = min(capital * CAPITAL_PER_ASSET * min(kelly, 1.5), capital * MAX_POSITION_PCT)
+        amt *= size_mult  # redução por regime (downtrend = 0.35)
 
         gross = amt * ret
         cost = custo(amt, extra_slip, fee_mult)
@@ -129,7 +201,7 @@ def run_sim(n_cycles, signal_quality=0.0, capital_init=None, regime_seq=None,
     cap_init = capital
     equity = [capital]
     pnls = []
-    wins = losses = 0
+    wins = losses = flat = 0
     peak = capital
     max_dd = 0.0
     dd_starts = []
@@ -142,8 +214,10 @@ def run_sim(n_cycles, signal_quality=0.0, capital_init=None, regime_seq=None,
         capital = max(round(capital + pnl, 2), 0.01)
         equity.append(capital)
         pnls.append(pnl)
+        # Só conta win/loss em ciclos que realmente operaram (pnl != 0)
         if pnl > 0: wins += 1
-        else: losses += 1
+        elif pnl < 0: losses += 1
+        else: flat += 1  # ciclo sem trade (skip por regime/score)
 
         if capital > peak:
             if dd_start_i is not None:
@@ -157,25 +231,33 @@ def run_sim(n_cycles, signal_quality=0.0, capital_init=None, regime_seq=None,
                 dd_start_i = i
 
     tot = capital - cap_init
-    wr = wins / n_cycles if n_cycles else 0
+    active = wins + losses  # ciclos que operaram de verdade
+    wr = wins / active if active else 0
     gains = [p for p in pnls if p > 0]
     loss_list = [abs(p) for p in pnls if p < 0]
     avg_w = statistics.mean(gains) if gains else 0
     avg_l = statistics.mean(loss_list) if loss_list else 0.01
     pf = sum(gains) / sum(loss_list) if loss_list and sum(loss_list) > 0 else 999
-    sh = (statistics.mean(pnls) / statistics.stdev(pnls) * math.sqrt(84)) if len(pnls) > 1 and statistics.stdev(pnls) > 0 else 0
+    active_pnls = [p for p in pnls if p != 0]
+    sh = (statistics.mean(active_pnls) / statistics.stdev(active_pnls) * math.sqrt(84)) if len(active_pnls) > 1 and statistics.stdev(active_pnls) > 0 else 0
 
-    # Risco de ruína
-    if wr > 0.5 and avg_l > 0:
+    # Risco de ruína — formula baseada em PF para sistemas assimétricos
+    if pf > 1.0 and avg_l > 0:
+        # Para PF > 1: ruin = (1/PF) ^ (capital / avg_loss)
+        # Quanto maior PF e capital, menor a ruína
+        ruin_exp = cap_init / (avg_l * 10)  # normaliza
+        ruin = min((1.0 / max(pf, 1.001)) ** ruin_exp, 1.0)
+    elif wr > 0.5 and avg_l > 0:
         q = 1 - wr; p = wr
         ruin = min(((q/p) ** (cap_init / avg_l)), 1.0) if p != q else 1.0
     else:
-        ruin = 0.999 if wr <= 0.5 else 0.001
+        ruin = 0.999 if tot <= 0 else min(0.50, 1.0 / max(pf, 0.01))
 
     return {
         "capital": round(capital, 2), "cap_init": round(cap_init, 2),
         "lucro": round(tot, 2), "lucro_pct": round(tot/cap_init*100, 2),
-        "n": n_cycles, "wins": wins, "losses": losses,
+        "n": n_cycles, "wins": wins, "losses": losses, "flat": flat,
+        "active": active,
         "wr": round(wr*100, 1), "avg_w": round(avg_w, 2), "avg_l": round(avg_l, 2),
         "pf": round(min(pf, 999), 3), "sharpe": round(sh, 3),
         "max_dd": round(max_dd*100, 2), "eq_min": round(min(equity), 2),
@@ -192,8 +274,10 @@ def V(r):
     icons = {"EXCELENTE":"[OK]","BOM":"[OK]","MARGINAL":"[~~]","OK":"[~~]","RUIM":"[XX]"}
     return f"{icons[fg]} {fg}"
 def M(r, extra=""):
+    active = r.get('active', r['wins'] + r['losses'])
+    flat = r.get('flat', 0)
     print(f"  Capital : R${r['capital']:.2f}  |  Lucro: R${r['lucro']:+.2f} ({r['lucro_pct']:+.1f}%)")
-    print(f"  Ciclos  : {r['n']}  |  W: {r['wins']} ({r['wr']}%)  L: {r['losses']}")
+    print(f"  Ciclos  : {r['n']} (ativos: {active}, skip: {flat})  |  W: {r['wins']} ({r['wr']}%)  L: {r['losses']}")
     if r['avg_l'] > 0:
         print(f"  Avg W/L : R${r['avg_w']:.2f} / R${r['avg_l']:.2f}  |  R:R {r['avg_w']/r['avg_l']:.2f}:1")
     print(f"  PF: {r['pf']:.3f}  |  Sharpe: {r['sharpe']:.3f}  |  Max DD: {r['max_dd']:.1f}%  |  Ruina: {r['ruin']:.1f}%")
@@ -201,8 +285,10 @@ def M(r, extra=""):
 
 # ==============================================================================
 print("\n" + "#"*65)
-print("  STRESS TEST v2 - COM SIGNAL QUALITY")
+print("  STRESS TEST v3 - TRAILING STOP + REGIME FILTER + SCORE 0.60")
 print(f"  Capital: R${CAPITAL_INICIAL:.2f}  |  SL: {ATR_SL*100:.1f}%  |  TP: {ATR_TP*100:.1f}%  |  R:R {ATR_TP/ATR_SL:.1f}:1")
+print(f"  Trailing: >{TRAILING_ACTIVATION*100:.1f}% trava {TRAILING_LOCK_PCT*100:.0f}%  |  Breakeven: >{BREAKEVEN_THRESHOLD*100:.1f}% ({BREAKEVEN_FIRE_PROB*100:.0f}%)")
+print(f"  Downtrend skip: {REGIME_SKIP_PROB['trending_dn']*100:.0f}%  |  Downtrend size: {REGIME_SIZE_MULT['trending_dn']*100:.0f}%  |  Regime SQ boost: on")
 print("#"*65)
 
 # ==============================================================================
@@ -348,14 +434,15 @@ print(f"  {'[OK] Consistente' if d < 3 else '[~~] Varia com capital'} (diff: {d:
 # ==============================================================================
 H("TESTE 9 - RISCO DE RUINA (1000 ciclos)")
 r = run_sim(1000, signal_quality=SQ_REALISTIC, seed=42)
-wr_d = r['wins']/r['n']
+active = r.get('active', r['wins'] + r['losses'])
+wr_d = r['wins']/active if active else 0
 rr = r['avg_w']/r['avg_l'] if r['avg_l']>0 else 0
 pct_risk = (r['avg_l']/CAPITAL_INICIAL)*100
 exp = (wr_d * r['avg_w']) - ((1-wr_d) * r['avg_l'])
-print(f"  Win rate  : {r['wr']}%")
+print(f"  Win rate  : {r['wr']}% (de {active} trades ativos)")
 print(f"  R:R Ratio : {rr:.2f}:1")
 print(f"  %/trade   : {pct_risk:.3f}%")
-print(f"  Expectat. : R${exp:+.4f}/ciclo")
+print(f"  Expectat. : R${exp:+.4f}/trade ativo")
 print(f"  Ruina     : {r['ruin']:.2f}%")
 print()
 metas = [

@@ -148,6 +148,27 @@ def _calc_hurst(prices: List[float], min_len: int = 20) -> float:
     return round(max(0.1, min(0.9, hurst)), 3)
 
 
+def _detect_direction(prices: List[float], short: int = 10, long: int = 30) -> str:
+    """
+    Detecta direção da tendência: 'up', 'down' ou 'neutral'.
+    Usa SMA curta vs SMA longa + inclinação recente.
+    """
+    if len(prices) < long + 2:
+        return "neutral"
+    sma_short = _mean(prices[-short:])
+    sma_long  = _mean(prices[-long:])
+    # Inclinação recente: média dos últimos 5 vs últimos 10-15
+    slope_recent = _mean(prices[-5:]) - _mean(prices[-15:-5]) if len(prices) >= 15 else 0.0
+    mid_price = _mean(prices[-10:]) if len(prices) >= 10 else prices[-1]
+    slope_pct = (slope_recent / mid_price) if mid_price > 0 else 0.0
+
+    if sma_short > sma_long * 1.005 and slope_pct > 0.001:
+        return "up"
+    elif sma_short < sma_long * 0.995 and slope_pct < -0.001:
+        return "down"
+    return "neutral"
+
+
 def _calc_atr_ratio(prices: List[float], short_period: int = 5, long_period: int = 20) -> float:
     """
     ATR Ratio = ATR_short / ATR_long.
@@ -166,6 +187,12 @@ def _calc_atr_ratio(prices: List[float], short_period: int = 5, long_period: int
 # ─────────────────────────────────────────────────────────────
 # Capital Multiplier Table
 # ─────────────────────────────────────────────────────────────
+
+# Penalidade aplicada quando tendência é "down" — reduz exposição drasticamente
+# Evita sangrar em mercados de queda (PF 0.35 no stress test anterior)
+DOWNTREND_PENALTY: float = 0.25  # corta 75% de toda exposição em downtrend
+DOWNTREND_SAFE_STRATEGIES = {"mr", "vr"}  # MR e VR podem lucrar em queda (reversão)
+DOWNTREND_SAFE_PENALTY: float = 0.60  # MR/VR cortam menos (40%)
 
 # (regime, strategy) → multiplier
 # estratégias: "5m", "1h", "1d", "mr", "bo", "sq", "ls", "fvg", "vr", "pb"
@@ -284,6 +311,7 @@ class RegimeDetector:
         """
         neutral_result = {
             "regime":      "NEUTRAL",
+            "direction":   "neutral",
             "adx":         20.0,
             "atr_ratio":   1.0,
             "hurst":       0.5,
@@ -365,8 +393,18 @@ class RegimeDetector:
 
         multipliers = dict(_REGIME_MULTIPLIERS.get(regime, _REGIME_MULTIPLIERS["NEUTRAL"]))
 
+        # ── Trend Direction — detecta up/down e aplica penalidade em downtrend ──
+        direction = _detect_direction(prices)
+        if direction == "down":
+            for strat in multipliers:
+                if strat in DOWNTREND_SAFE_STRATEGIES:
+                    multipliers[strat] *= DOWNTREND_SAFE_PENALTY
+                else:
+                    multipliers[strat] *= DOWNTREND_PENALTY
+
         return {
             "regime":      regime,
+            "direction":   direction,
             "adx":         round(adx, 2),
             "atr_ratio":   round(atr_ratio, 3),
             "hurst":       round(hurst, 3),

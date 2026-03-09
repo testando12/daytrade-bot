@@ -3039,6 +3039,13 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     _atr_ratio  = _regime_result["atr_ratio"]
     _hurst      = _regime_result["hurst"]
     _regime_conf = _regime_result["confidence"]
+    _trend_dir  = _regime_result.get("direction", "neutral")  # up/down/neutral
+
+    # Log regime + direction para visibilidade
+    if _trend_dir == "down":
+        _trade_log("REGIME_DOWNTREND", "—", 0,
+            f"⬇️ DOWNTREND detectado: regime={_adx_regime} dir={_trend_dir} ADX={_adx_val:.1f} "
+            f"Hurst={_hurst:.3f} conf={_regime_conf:.2f} — exposição reduzida 75%")
 
     # ── 3b. Kelly Criterion + sinais avançados ─────────────────────────
     def _kelly_weight(score: float, base_amount: float, asset: str = "") -> float:
@@ -3253,8 +3260,9 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             score = 0.5
             if mom_data and asset in mom_data:
                 score = mom_data[asset].get("momentum_score", 0.5)
-            # ── Filtro de qualidade: só entrar quando score >= 0.55 ──
-            if score < 0.55:
+            # ── Filtro de qualidade: só entrar quando score >= 0.58 ──
+            # v3 (2026-03-09): elevado de 0.55→0.58 para melhorar WR e PF
+            if score < 0.58:
                 continue
             amt = _kelly_weight(score, per_asset, asset)
             # DCA: aumentar se já estava em posição perdedora
@@ -3285,10 +3293,13 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 if prev_high > 0:
                     drop_from_peak = (prev_high - current_price) / prev_high
                     if drop_from_peak >= settings.TRAILING_STOP_PERCENTAGE and ret > 0:
-                        # Tinha lucro mas devolveu — trava no trailing
-                        ret = max(ret * 0.3, 0.001)  # retém 30% do lucro + mínimo
+                        # Tinha lucro mas devolveu — trava no trailing (retém 50% do lucro)
+                        ret = max(ret * 0.50, 0.0015)  # retém 50% do lucro + mínimo
                         _trade_log("TRAILING_STOP", asset, amt,
                             f"📊 Trailing Stop {asset}: pico R$ {prev_high:.4f} → atual {current_price:.4f} (-{drop_from_peak*100:.2f}%)")
+                    # Breakeven stop: se já teve +1.5% e devolveu, garante pelo menos +0.2%
+                    elif ret > 0.015 and drop_from_peak > 0.003:
+                        ret = max(ret, 0.002)  # garante breakeven + 0.2%
             else:
                 # Sem dados suficientes, limpa trailing
                 _protection_state["trailing_highs"].pop(asset, None)
