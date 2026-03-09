@@ -566,13 +566,36 @@ async function healthMonitorCheck() {
 
     _healthLastSeverity = severity;
 
-    // Se saudável, esconde banner
+    // Se saudável, mostra banner verde por 3s e depois esconde
     if (severity === 'healthy') {
-      banner.style.display = 'none';
-      banner.className = 'health-banner hidden';
       _healthDismissed = false;
       _healthNotifSent = {};
       _updateHealthPill('healthy');
+
+      // Flash verde rápido para confirmar que o monitor está ativo
+      const icon = document.getElementById('health-icon');
+      const title = document.getElementById('health-title');
+      const detail = document.getElementById('health-detail');
+      const fixBtn = document.getElementById('health-fix-btn');
+      const issuesList = document.getElementById('health-issues-list');
+
+      if (icon) icon.innerHTML = '<i class="fas fa-check-circle"></i>';
+      if (title) title.textContent = '✅ Bot saudável';
+      const cycleInfo = meta.total_cycles ? `${meta.total_cycles} ciclos` : '';
+      const staleMin = meta.cycle_stale_minutes != null ? `último ciclo ${meta.cycle_stale_minutes.toFixed(0)}min atrás` : '';
+      if (detail) detail.textContent = [cycleInfo, staleMin].filter(Boolean).join(' · ');
+      if (fixBtn) fixBtn.style.display = 'none';
+      if (issuesList) { issuesList.className = 'health-issues-list'; issuesList.innerHTML = ''; }
+
+      banner.className = 'health-banner healthy';
+      banner.style.display = '';
+
+      // Esconde suavemente após 3s
+      clearTimeout(window._healthFlashTimer);
+      window._healthFlashTimer = setTimeout(() => {
+        banner.className = 'health-banner hidden';
+        banner.style.display = 'none';
+      }, 3000);
       return;
     }
 
