@@ -88,7 +88,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 # Endpoints que NÃO precisam de autenticação (públicos)
 _PUBLIC_ENDPOINTS = {
-    "/", "/health", "/docs", "/openapi.json", "/redoc",
+    "/", "/health", "/diagnostics", "/docs", "/openapi.json", "/redoc",
     "/ui", "/dashboard", "/simulador",
 }
 # Prefixos públicos (static files, etc)
