@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# BUILD_VERSION=2026-03-09-fix-perms
+# BUILD_VERSION=2026-03-09-health-monitor
 WORKDIR /app
 
 # Dependências do sistema (necessárias para algumas libs)

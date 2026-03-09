@@ -167,6 +167,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 _last_scheduler_errors: list = []  # últimos 10 erros do scheduler
 _scheduler_debug = {"step": "init", "ts": "", "loop_count": 0}  # debug tracker
+_consecutive_errors: int = 0  # erros consecutivos do scheduler (global para /diagnostics)
 
 _scheduler_state = {
     "running": False,
@@ -518,7 +519,7 @@ def _current_session() -> tuple:
 
 async def _auto_cycle_loop():
     """Loop interno do scheduler: executa ciclos de trading automaticamente."""
-    global _last_reinvestment_date, _last_daily_summary_date
+    global _last_reinvestment_date, _last_daily_summary_date, _consecutive_errors
     _scheduler_state["running"] = True
     _scheduler_debug["step"] = "warmup"
     _scheduler_debug["ts"] = datetime.now().isoformat()
@@ -1078,7 +1079,7 @@ async def health_check():
     _brt = _tz(_td(hours=-3))
     return {
         "status": "ok",
-        "deploy_version": "v2026.03.09-fix-perms",
+        "deploy_version": "v2026.03.09-health-monitor",
         "timestamp": datetime.now(_brt).isoformat(),
         "auto_trading": _trade_state.get("auto_trading", False),
         "scheduler_running": _scheduler_state.get("running", False),
@@ -1086,6 +1087,180 @@ async def health_check():
         "last_cycle": _trade_state.get("last_cycle"),
         "uptime_session": _scheduler_state.get("session", ""),
         "persistence": db_state.storage_info(),
+    }
+
+
+# ═══════════════════════════════════════════
+# DIAGNÓSTICO / HEALTH MONITOR
+# ═══════════════════════════════════════════
+
+@app.get("/diagnostics", tags=["Monitoramento"])
+async def diagnostics():
+    """Auto-diagnóstico completo do bot — usado pelo banner de saúde no dashboard."""
+    from datetime import timezone as _tz, timedelta as _td
+    _brt = _tz(_td(hours=-3))
+    now = datetime.now(_brt)
+
+    issues: list[dict] = []
+    severity = "healthy"  # healthy | warning | critical
+
+    # ── 1. Scheduler rodando? ────────────────────────────────
+    sched_running = _scheduler_state.get("running", False)
+    sched_task = _scheduler_state.get("task")
+    task_alive = sched_task is not None and not sched_task.done() if sched_task else False
+
+    if not sched_running and not task_alive:
+        issues.append({
+            "id": "scheduler_stopped",
+            "level": "critical",
+            "title": "Scheduler Parado",
+            "detail": "O agendador automático não está rodando. Nenhum ciclo será executado.",
+            "action": "Reiniciar scheduler via /scheduler/start",
+        })
+        severity = "critical"
+    elif sched_running and not task_alive:
+        issues.append({
+            "id": "scheduler_zombie",
+            "level": "critical",
+            "title": "Scheduler Zumbi",
+            "detail": "O scheduler diz que está rodando mas a task interna morreu.",
+            "action": "Reiniciar scheduler",
+        })
+        severity = "critical"
+
+    # ── 2. Último ciclo está travado? ────────────────────────
+    last_cycle_str = _trade_state.get("last_cycle")
+    cycle_stale_minutes = None
+    if last_cycle_str:
+        try:
+            last_dt = datetime.fromisoformat(str(last_cycle_str))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=_brt)
+            delta = now - last_dt
+            cycle_stale_minutes = delta.total_seconds() / 60
+            # Só alerta se mercado aberto (B3 ou crypto) E ciclo parado > 45 min
+            is_market = _is_market_open()
+            if cycle_stale_minutes > 45 and (is_market or True):  # crypto 24/7
+                level = "critical" if cycle_stale_minutes > 90 else "warning"
+                issues.append({
+                    "id": "cycle_stale",
+                    "level": level,
+                    "title": f"Ciclo Parado há {int(cycle_stale_minutes)} min",
+                    "detail": f"Último ciclo executado em {last_dt.strftime('%H:%M BRT')}. "
+                              f"Já se passaram {int(cycle_stale_minutes)} minutos sem novo ciclo.",
+                    "action": "Verificar logs do scheduler ou forçar /trade/cycle",
+                })
+                if level == "critical":
+                    severity = "critical"
+                elif severity != "critical":
+                    severity = "warning"
+        except Exception:
+            pass
+
+    # ── 3. Erros recentes no scheduler ───────────────────────
+    recent_errors = _last_scheduler_errors[-5:]
+    if recent_errors:
+        last_err = recent_errors[-1]
+        err_time = last_err.get("time", "?")
+        err_msg = last_err.get("error", "desconhecido")
+        level = "critical" if len(recent_errors) >= 3 else "warning"
+        issues.append({
+            "id": "scheduler_errors",
+            "level": level,
+            "title": f"{len(recent_errors)} Erro(s) Recentes",
+            "detail": f"Último erro: {err_msg} ({err_time})",
+            "action": "Ver /scheduler/status para detalhes completos",
+        })
+        if level == "critical" and severity != "critical":
+            severity = "critical"
+        elif severity == "healthy":
+            severity = "warning"
+
+    # ── 4. Hard stop / proteção ativa ────────────────────────
+    if _protection_state.get("hard_stopped", False):
+        issues.append({
+            "id": "hard_stopped",
+            "level": "critical",
+            "title": "HARD STOP Ativo",
+            "detail": "Drawdown máximo atingido. Bot não está operando.",
+            "action": "Usar /trade/unfreeze para desbloquear",
+        })
+        severity = "critical"
+    elif _protection_state.get("paused", False):
+        issues.append({
+            "id": "protection_paused",
+            "level": "warning",
+            "title": "Proteção: Bot Pausado",
+            "detail": f"Perdas consecutivas: {_protection_state.get('consecutive_losses', 0)}",
+            "action": "Aguardar auto-despause ou /trade/unfreeze",
+        })
+        if severity == "healthy":
+            severity = "warning"
+
+    # ── 5. Consecutive errors alto ───────────────────────────
+    if _consecutive_errors >= 5:
+        issues.append({
+            "id": "consecutive_errors",
+            "level": "critical",
+            "title": f"{_consecutive_errors} Erros Consecutivos",
+            "detail": "O scheduler pode parar automaticamente em 20 erros consecutivos.",
+            "action": "Verificar logs e reiniciar scheduler",
+        })
+        severity = "critical"
+    elif _consecutive_errors >= 2:
+        issues.append({
+            "id": "consecutive_errors",
+            "level": "warning",
+            "title": f"{_consecutive_errors} Erros Consecutivos",
+            "detail": "O scheduler está em backoff mas continua tentando.",
+            "action": "Monitorar ou reiniciar scheduler",
+        })
+        if severity == "healthy":
+            severity = "warning"
+
+    # ── 6. Debug step anormal ────────────────────────────────
+    debug_step = _scheduler_debug.get("step", "init")
+    debug_ts = _scheduler_debug.get("ts", "")
+    if debug_step in ("timeout", "hard_stopped"):
+        if debug_step == "timeout":
+            issues.append({
+                "id": "last_timeout",
+                "level": "warning",
+                "title": "Último Ciclo Deu Timeout",
+                "detail": f"O ciclo excedeu 180s em {debug_ts}",
+                "action": "Verificar se API externa está lenta",
+            })
+            if severity == "healthy":
+                severity = "warning"
+
+    # ── 7. Auto-trading desligado ────────────────────────────
+    if not _trade_state.get("auto_trading", True):
+        issues.append({
+            "id": "auto_trading_off",
+            "level": "warning",
+            "title": "Auto-Trading Desligado",
+            "detail": "O bot está analisando mas não executa operações.",
+            "action": "Ligar auto-trading no painel Trade",
+        })
+        if severity == "healthy":
+            severity = "warning"
+
+    return {
+        "success": True,
+        "severity": severity,       # "healthy" | "warning" | "critical"
+        "issues_count": len(issues),
+        "issues": issues,
+        "meta": {
+            "checked_at": now.isoformat(),
+            "scheduler_running": sched_running,
+            "task_alive": task_alive,
+            "last_cycle": last_cycle_str,
+            "cycle_stale_minutes": round(cycle_stale_minutes, 1) if cycle_stale_minutes else None,
+            "consecutive_errors": _consecutive_errors,
+            "debug_step": debug_step,
+            "loop_count": _scheduler_debug.get("loop_count", 0),
+            "total_cycles": _effective_total_cycles(),
+        },
     }
 
 

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=14" />
 </head>
 <body>
 
@@ -187,6 +187,28 @@
         </button>
       </div>
     </header>
+
+    <!-- HEALTH MONITOR BANNER -->
+    <div id="health-banner" class="health-banner hidden">
+      <div class="health-banner-inner">
+        <div class="health-banner-icon" id="health-icon">
+          <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <div class="health-banner-body">
+          <strong id="health-title">Verificando saúde do bot...</strong>
+          <span id="health-detail"></span>
+        </div>
+        <div class="health-banner-actions">
+          <button class="btn btn-sm" id="health-fix-btn" onclick="healthAutoFix()" style="display:none">
+            <i class="fas fa-wrench"></i> Corrigir
+          </button>
+          <button class="btn btn-sm" onclick="dismissHealthBanner()" title="Fechar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+      <div id="health-issues-list" class="health-issues-list"></div>
+    </div>
 
     <!-- PAGE CONTENT -->
     <main class="page-content" id="page-content">
@@ -1785,6 +1807,6 @@
 <div class="toast-container" id="toast-container"></div>
 
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script defer src="app.js?v=13"></script>
+<script defer src="app.js?v=14"></script>
 </body>
 </html>

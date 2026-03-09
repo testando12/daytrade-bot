@@ -88,6 +88,7 @@ async function handleLogin(e) {
       checkApiConnection();
       loadPage('dashboard');
       _startPageRefresh('dashboard');
+      startHealthMonitor();
     }
   } catch (ex) {
     err.textContent = 'Erro de conexão. Verifique se a API está online.';
@@ -281,12 +282,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       checkApiConnection();
       loadPage('dashboard');
       _startPageRefresh('dashboard');
+      startHealthMonitor();
     } catch (e) {
       // API offline — mostra dashboard mesmo assim (vai mostrar "API Offline")
       showDashboard();
       checkApiConnection();
       loadPage('dashboard');
       _startPageRefresh('dashboard');
+      startHealthMonitor();
     }
   } else {
     showLogin();
@@ -538,6 +541,180 @@ function setLastUpdate() {
   if (pill) pill.style.display = 'flex';
   const now = new Date();
   if (time) time.textContent = now.toLocaleTimeString('pt-BR');
+}
+
+// =============================================
+// HEALTH MONITOR — Auto-diagnóstico contínuo
+// =============================================
+
+let _healthDismissed = false;
+let _healthLastSeverity = 'healthy';
+let _healthInterval = null;
+let _healthNotifSent = {};  // {issueId: timestamp} — evita spam de notificações
+
+async function healthMonitorCheck() {
+  const banner = document.getElementById('health-banner');
+  if (!banner) return;
+
+  try {
+    const data = await api('/diagnostics');
+    if (!data || !data.success) return;
+
+    const severity = data.severity || 'healthy';
+    const issues = data.issues || [];
+    const meta = data.meta || {};
+
+    _healthLastSeverity = severity;
+
+    // Se saudável, esconde banner
+    if (severity === 'healthy') {
+      banner.className = 'health-banner hidden';
+      _healthDismissed = false;
+      _healthNotifSent = {};
+      // Atualiza pill do topbar para refletir saúde
+      _updateHealthPill('healthy');
+      return;
+    }
+
+    // Se user fechou manualmente, não mostra de novo (a menos que piore para critical)
+    if (_healthDismissed && severity !== 'critical') {
+      _updateHealthPill(severity);
+      return;
+    }
+    if (severity === 'critical') _healthDismissed = false;
+
+    // Atualiza banner
+    banner.className = `health-banner ${severity}`;
+
+    const icon = document.getElementById('health-icon');
+    const title = document.getElementById('health-title');
+    const detail = document.getElementById('health-detail');
+    const fixBtn = document.getElementById('health-fix-btn');
+    const issuesList = document.getElementById('health-issues-list');
+
+    if (severity === 'critical') {
+      icon.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+      title.textContent = `⚠️ ${issues.length} Problema(s) Crítico(s)`;
+    } else {
+      icon.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+      title.textContent = `${issues.length} Alerta(s)`;
+    }
+
+    // Detalhe principal = primeiro issue
+    if (issues.length > 0) {
+      detail.textContent = issues[0].detail || issues[0].title;
+    }
+
+    // Mostra botão de fix se scheduler parado/zumbi
+    const canAutoFix = issues.some(i => ['scheduler_stopped', 'scheduler_zombie'].includes(i.id));
+    fixBtn.style.display = canAutoFix ? 'inline-flex' : 'none';
+
+    // Lista de issues detalhada
+    if (issues.length > 1) {
+      issuesList.className = 'health-issues-list show';
+      issuesList.innerHTML = issues.map(i =>
+        `<div class="issue-item">
+          <div class="issue-dot ${i.level}"></div>
+          <span><strong>${i.title}</strong> — ${i.detail}</span>
+        </div>`
+      ).join('');
+    } else {
+      issuesList.className = 'health-issues-list';
+      issuesList.innerHTML = '';
+    }
+
+    _updateHealthPill(severity);
+
+    // Browser notification para crítico (uma vez por issue)
+    if (severity === 'critical') {
+      _sendHealthNotification(issues);
+    }
+
+  } catch (e) {
+    // Se /diagnostics falha, provavelmente API offline — banner de API offline já cuida
+    console.warn('[healthMonitor] Erro:', e.message);
+  }
+}
+
+function _updateHealthPill(severity) {
+  const dot = document.getElementById('api-dot');
+  const label = document.getElementById('api-label');
+  if (!dot || !label) return;
+
+  if (severity === 'critical') {
+    dot.className = 'dot red';
+    label.textContent = 'Problema Detectado';
+  } else if (severity === 'warning') {
+    dot.className = 'dot';
+    dot.style.background = '#ffaa00';
+    dot.style.animation = 'none';
+    label.textContent = 'Alerta';
+  } else {
+    dot.className = 'dot';
+    dot.style.background = '';
+    dot.style.animation = '';
+    label.textContent = 'API Online';
+  }
+}
+
+function _sendHealthNotification(issues) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+    return;
+  }
+  if (Notification.permission !== 'granted') return;
+
+  for (const issue of issues) {
+    if (issue.level !== 'critical') continue;
+    const key = issue.id;
+    const now = Date.now();
+    // Só notifica 1x por issue a cada 10 min
+    if (_healthNotifSent[key] && (now - _healthNotifSent[key]) < 600000) continue;
+    _healthNotifSent[key] = now;
+
+    new Notification('🚨 DayTrade Bot — Problema Crítico', {
+      body: `${issue.title}: ${issue.detail}`,
+      icon: 'https://cdn-icons-png.flaticon.com/512/2331/2331966.png',
+      tag: `health-${key}`,
+      requireInteraction: true,
+    });
+  }
+}
+
+function dismissHealthBanner() {
+  const banner = document.getElementById('health-banner');
+  if (banner) banner.className = 'health-banner hidden';
+  _healthDismissed = true;
+}
+
+async function healthAutoFix() {
+  toast('Tentando corrigir automaticamente...', 'info');
+  try {
+    // Tenta reiniciar o scheduler
+    const res = await api('/scheduler/start', { method: 'POST', body: JSON.stringify({}) });
+    if (res && res.success) {
+      toast('✅ Scheduler reiniciado com sucesso!', 'success');
+      _healthDismissed = false;
+      // Re-check imediato
+      setTimeout(healthMonitorCheck, 3000);
+    } else {
+      toast('Não foi possível reiniciar o scheduler', 'error');
+    }
+  } catch (e) {
+    toast('Erro ao tentar correção: ' + (e.message || e), 'error');
+  }
+}
+
+function startHealthMonitor() {
+  // Pede permissão de notificação ao iniciar
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  // Check inicial após 5s (dá tempo da API responder)
+  setTimeout(healthMonitorCheck, 5000);
+  // Check a cada 30s
+  _healthInterval = setInterval(healthMonitorCheck, 30000);
 }
 
 function _loadPreRealConfig() {
