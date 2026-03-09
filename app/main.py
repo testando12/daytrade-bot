@@ -5416,31 +5416,14 @@ from fastapi import HTTPException
 
 @app.post("/admin/set-capital")
 async def set_capital(current_capital: float):
+    """Endpoint para alterar o capital diretamente."""
     if current_capital <= 0:
         raise HTTPException(status_code=400, detail="Capital deve ser maior que zero.")
 
-    # Atualizar o capital no estado do trade e salvar no banco de dados
     _trade_state["capital"] = current_capital
     db_state.save_state("trade_state", _trade_state)
 
     return {"success": True, "new_capital": _trade_state["capital"]}
-    if current_capital <= 0:
-        raise HTTPException(status_code=400, detail="Capital deve ser maior que zero.")
-
-    # Atualizar o capital no sistema
-    # Substitua pela lógica real de atualização do capital
-    global current_capital_value
-    current_capital_value = current_capital
-
-    return {"success": True, "new_capital": current_capital}
-    """Endpoint temporário para alterar a capital diretamente."""
-    data = await request.json()
-    new_capital = data.get("current_capital")
-    if new_capital:
-        _trade_state["capital"] = float(new_capital)
-        db_state.save_state("trade_state", _trade_state)
-        return {"success": True, "new_capital": _trade_state["capital"]}
-    return {"success": False, "error": "Invalid capital value"}
 
 if __name__ == "__main__":
     import uvicorn
