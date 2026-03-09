@@ -525,6 +525,7 @@ async def _auto_cycle_loop():
     _consecutive_errors = 0
     while _scheduler_state["running"]:
       try:
+        print(f"[scheduler] Loop tick - {datetime.now().isoformat()}", flush=True)
         from datetime import timezone, timedelta
         brt = timezone(timedelta(hours=-3))
         now_brt = datetime.now(brt)
@@ -1061,6 +1062,7 @@ async def health_check():
     _brt = _tz(_td(hours=-3))
     return {
         "status": "ok",
+        "deploy_version": "v2026.03.09-timeout180",
         "timestamp": datetime.now(_brt).isoformat(),
         "auto_trading": _trade_state.get("auto_trading", False),
         "scheduler_running": _scheduler_state.get("running", False),
