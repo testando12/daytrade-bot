@@ -405,6 +405,14 @@ body {
 
 .topbar-pill .dot.red { background: var(--red); animation: none; }
 
+/* env-pill: indicador LOCAL / RAILWAY / CUSTOM */
+.env-pill { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; gap: 4px; }
+.env-pill.env-local   { background: rgba(255,170,0,0.12); border-color: rgba(255,170,0,0.25); color: #ffaa00; }
+.env-pill.env-railway { background: rgba(100,180,255,0.12); border-color: rgba(100,180,255,0.25); color: #64b4ff; }
+.env-pill.env-custom  { background: rgba(180,120,255,0.12); border-color: rgba(180,120,255,0.25); color: #b478ff; }
+
+
+
 /* ═══════════════════════════════════════════
    HEALTH MONITOR BANNER
    ═══════════════════════════════════════════ */
