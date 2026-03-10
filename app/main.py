@@ -2525,6 +2525,9 @@ async def trade_status():
     today_str = datetime.now(_brt).strftime("%Y-%m-%d")
     today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str)]
     pnl_today_live = round(sum(c.get("pnl", 0) for c in today_cycles), 2)
+    # Subtrai baseline do dia (ganhos com capital anterior ao reset)
+    pnl_today_baseline = _trade_state.get("pnl_today_baseline", 0.0)
+    pnl_today_live = round(pnl_today_live - pnl_today_baseline, 2)
     capital_base = _trade_state.get("capital", settings.INITIAL_CAPITAL)
     capital_efetivo = round(capital_base + pnl_today_live, 2)
 
@@ -2598,10 +2601,17 @@ async def set_trade_capital(body: dict):
     settings.INITIAL_CAPITAL = amount
     delta = amount - prev
     event = "DEPÓSITO" if delta >= 0 else "RETIRADA"
-    _trade_log(event, "—", abs(delta), f"Capital {event.lower()} de R$ {prev:.2f} → R$ {amount:.2f}")
+    # Ao mudar capital, registra baseline do PnL de hoje (ganhos do capital anterior)
+    from datetime import timezone as _tz2, timedelta as _td2
+    _brt2 = _tz2(_td2(hours=-3))
+    today_str2 = datetime.now(_brt2).strftime("%Y-%m-%d")
+    today_cycles2 = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str2)]
+    current_pnl_today = round(sum(c.get("pnl", 0) for c in today_cycles2), 2)
+    _trade_state["pnl_today_baseline"] = current_pnl_today
+    _trade_log(event, "—", abs(delta), f"Capital {event.lower()} de R$ {prev:.2f} → R$ {amount:.2f} | PnL baseline fixado em R$ {current_pnl_today:.2f}")
     # Persiste imediatamente no banco para sobreviver a deploys/restarts
     db_state.save_state("trade_state", _trade_state)
-    return {"success": True, "capital": amount, "previous": prev}
+    return {"success": True, "capital": amount, "previous": prev, "pnl_baseline": current_pnl_today}
 
 
 @app.post("/trade/start")
@@ -2610,6 +2620,21 @@ async def start_auto_trading():
     _trade_state["auto_trading"] = True
     _trade_log("SISTEMA", "—", 0, "✅ Trading automático INICIADO")
     return {"success": True, "auto_trading": True}
+
+
+@app.post("/trade/reset-pnl-baseline")
+async def reset_pnl_baseline():
+    """Fixa o PnL atual do dia como baseline — próximos ganhos partem de zero.
+    Útil quando o capital é resetado no meio do dia para nova simulação."""
+    from datetime import timezone as _tz3, timedelta as _td3
+    _brt3 = _tz3(_td3(hours=-3))
+    today_str3 = datetime.now(_brt3).strftime("%Y-%m-%d")
+    today_cycles3 = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str3)]
+    current_pnl = round(sum(c.get("pnl", 0) for c in today_cycles3), 2)
+    _trade_state["pnl_today_baseline"] = current_pnl
+    db_state.save_state("trade_state", _trade_state)
+    _trade_log("SISTEMA", "—", 0, f"🔄 PnL baseline fixado em R$ {current_pnl:.2f} — nova simulação R$ {_trade_state.get('capital', 0):.2f}")
+    return {"success": True, "pnl_baseline_set": current_pnl, "capital": _trade_state.get("capital", 0)}
 
 
 @app.post("/trade/stop")
