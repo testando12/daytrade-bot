@@ -165,3 +165,7 @@
 [2026-03-09T21:03:38] Dados obtidos: 105 ativos via yahoo.finance
 [2026-03-09T21:03:38] Ciclo concluído | IRQ: 0.078 (NORMAL) | BUY:4 SELL:0 | P&L estimado: R$ 36.4330 | Total P&L: R$ 36.4330
 [2026-03-09T21:03:38] Top posições: MGLU3=R$10.74 | UNH=R$8.98 | META=R$8.43 | SILVER=R$8.28
+[2026-03-10T16:17:44] Iniciando ciclo — capital: R$ 150.00
+[2026-03-10T16:17:45] Dados obtidos: 104 ativos via yahoo.finance
+[2026-03-10T16:17:45] Ciclo concluído | IRQ: 0.080 (NORMAL) | BUY:3 SELL:0 | P&L estimado: R$ 54.1362 | Total P&L: R$ 54.1362
+[2026-03-10T16:17:45] Top posições: RENDER=R$26.08 | CRM=R$19.60 | OIL=R$8.46
