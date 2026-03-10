@@ -183,8 +183,10 @@ _SCHEDULER_PERSIST_KEYS = ("interval_minutes", "only_market_hours", "next_run", 
 
 
 def _persist_scheduler_state():
+    global _consecutive_errors
     try:
         payload = {k: _scheduler_state.get(k) for k in _SCHEDULER_PERSIST_KEYS}
+        payload["consecutive_errors"] = _consecutive_errors  # persiste entre restarts
         db_state.save_state("scheduler_state", payload)
     except Exception:
         pass
@@ -668,6 +670,7 @@ async def _auto_cycle_loop():
         if len(_last_scheduler_errors) > 10:
             _last_scheduler_errors.pop(0)
         print(f"[scheduler] ❌ Erro GERAL no loop (#{_consecutive_errors}): {_loop_err}\n{_tb}", flush=True)
+        _persist_scheduler_state()  # persiste erros consecutivos no DB
         # Back-off: espera 30s * n erros consecutivos (max 5min)
         backoff = min(30 * _consecutive_errors, 300)
         print(f"[scheduler] Aguardando {backoff}s antes de tentar novamente...", flush=True)
@@ -764,7 +767,7 @@ async def lifespan(app: FastAPI):
         print("[lifespan] ⚠️ PostgreSQL não respondeu! Usando dados em memória/JSON local.", flush=True)
     
     # ── Recarregar estado do DB com retry (garante persistência entre deploys) ──
-    global _perf_state, _trade_state, _scheduler_state
+    global _perf_state, _trade_state, _scheduler_state, _consecutive_errors
 
     async def _load_with_retry(key: str, default: dict, label: str, retries: int = 10, delay: float = 5.0) -> dict:
         """Tenta carregar estado do DB até `retries` vezes com `delay` segundos entre tentativas."""
@@ -822,9 +825,12 @@ async def lifespan(app: FastAPI):
             for key in _SCHEDULER_PERSIST_KEYS:
                 if key in saved_scheduler:
                     _scheduler_state[key] = saved_scheduler.get(key)
+            if "consecutive_errors" in saved_scheduler:
+                _consecutive_errors = int(saved_scheduler.get("consecutive_errors", 0))
             print(
                 f"[lifespan] Scheduler recarregado: ciclos={_scheduler_state.get('total_auto_cycles', 0)} "
-                f"intervalo={_scheduler_state.get('interval_minutes', 30)}min",
+                f"intervalo={_scheduler_state.get('interval_minutes', 30)}min"
+                + (f" | erros_consecutivos={_consecutive_errors}" if _consecutive_errors > 0 else ""),
                 flush=True,
             )
 

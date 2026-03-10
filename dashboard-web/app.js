@@ -268,6 +268,7 @@ function _updateCountdownEl(val) {
 // =============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+  _updateEnvPill();  // mostra LOCAL/RAILWAY desde o primeiro render
   const savedKey = getApiKey();
   if (savedKey) {
     // Valida a chave salva
@@ -530,8 +531,30 @@ function applyApiUrl() {
   if (val) {
     API_BASE = val;
     document.getElementById('swagger-link').href = `${API_BASE}/docs`;
+    _updateEnvPill();
     checkApiConnection();
     toast(`API configurada para ${API_BASE}`, 'info');
+  }
+}
+
+function _updateEnvPill() {
+  const pill = document.getElementById('env-pill');
+  const label = document.getElementById('env-label');
+  if (!pill || !label) return;
+  const isLocal = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1');
+  const isRailway = API_BASE.includes('railway.app');
+  if (isLocal) {
+    label.textContent = 'LOCAL';
+    pill.className = 'topbar-pill env-pill env-local';
+    pill.title = `Bot LOCAL: ${API_BASE}`;
+  } else if (isRailway) {
+    label.textContent = 'RAILWAY';
+    pill.className = 'topbar-pill env-pill env-railway';
+    pill.title = `Bot RAILWAY: ${API_BASE}`;
+  } else {
+    label.textContent = 'CUSTOM';
+    pill.className = 'topbar-pill env-pill env-custom';
+    pill.title = `Bot CUSTOM: ${API_BASE}`;
   }
 }
 
