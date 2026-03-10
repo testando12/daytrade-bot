@@ -208,10 +208,10 @@ def _effective_total_cycles() -> int:
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
-# Alocação por timeframe: SHORT 8% + MEDIUM 20% + LONG 30% + MR 8% + BO 6% + SQ 5% + LS 2% + FVG 2% + VR 10% + PB 9% = 100%
-# v4.0 (2026-03-09): Adicionados VR (VWAP Reversion) e PB (Pyramid Breakout)
+# Alocação por timeframe: SHORT 2% + MEDIUM 28% + LONG 28% + MR 8% + BO 6% + SQ 5% + LS 2% + FVG 2% + VR 10% + PB 9% = 100%
+# v5.0 (otimização capital baixo): 1h gera 85% do lucro → boost 20%→28%, 5m drenou → 8%→2%, 1d 30%→28%
 # VR excela em lateral (ADX<20), PB excela em tendência (ADX>25) — sistema complementar
-_TIMEFRAME_ALLOC   = {"5m": 0.08, "1h": 0.20, "1d": 0.30}
+_TIMEFRAME_ALLOC   = {"5m": 0.02, "1h": 0.28, "1d": 0.28}
 _MR_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Mean Reversion
 _BO_ALLOC_PCT      = 0.06   # capital dedicado ao bucket de Breakout
 _SQ_ALLOC_PCT      = 0.05   # capital dedicado ao bucket de Squeeze (Volatility Compression)
@@ -441,11 +441,11 @@ def _effective_timeframe_alloc(irq_score: float) -> tuple:
         total_abs = abs(tf_recent["5m"]) + abs(tf_recent["1h"]) + abs(tf_recent["1d"])
         dom_1d = (abs(tf_recent["1d"]) / total_abs) if total_abs > 0 else 0.0
         if tf_recent["1d"] > 0 and dom_1d >= float(_strategy_state.get("alloc_dominance_threshold", 0.75)):
-            alloc = {"5m": 0.05, "1h": 0.20, "1d": 0.75}
+            alloc = {"5m": 0.02, "1h": 0.20, "1d": 0.78}
             reasons.append(f"1d dominante ({dom_1d*100:.1f}%)")
         elif (tf_recent["5m"] + tf_recent["1h"]) > max(tf_recent["1d"], 0):
-            alloc = {"5m": 0.15, "1h": 0.35, "1d": 0.50}
-            reasons.append("curto prazo dominante")
+            alloc = {"5m": 0.05, "1h": 0.45, "1d": 0.50}
+            reasons.append("curto prazo dominante — 1h boost")
 
     if _strategy_state.get("regime_filter_enabled", True):
         high_irq = float(_strategy_state.get("high_irq_threshold", 0.12))
@@ -3455,22 +3455,72 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     _regime_conf = _regime_result["confidence"]
     _trend_dir  = _regime_result.get("direction", "neutral")  # up/down/neutral
 
+    # ── v5.0 Nível 1 #1: Desativar 5m em regime sem tendência (ADX < 25) ──
+    # 5m gerava prejuízo (-R$0.47) → só opera quando há tendência confirmada
+    if _adx_val < 25.0 and _adx_regime in ("NEUTRAL", "LATERAL", "LOW_VOL_SQUEEZE"):
+        capital_5m = 0.0
+        top_5m = []
+        _trade_log("5M_DISABLED", "—", 0,
+            f"⚠️ 5m desativado: regime={_adx_regime} ADX={_adx_val:.1f} < 25 — sem tendência para scalping")
+
+    # ── v5.0 Nível 2 #6: Auto regime switch (ADX < 20 → lateral mode) ──
+    # Quando mercado lateral: desativa momentum (5m/1h), boost VR (+80%) e MR (+50%)
+    _regime_switch_active = False
+    if _adx_val < 20.0 and _adx_regime in ("LATERAL", "NEUTRAL", "LOW_VOL_SQUEEZE"):
+        _regime_switch_active = True
+        capital_5m = 0.0
+        top_5m = []
+        capital_1h = round(capital_1h * 0.50, 2)  # reduz 1h em 50%
+        # O capital liberado será redirecionado via boost nos buckets MR e VR
+        _trade_log("REGIME_SWITCH", "—", 0,
+            f"🔄 Auto Regime Switch LATERAL: ADX={_adx_val:.1f} < 20 — "
+            f"5m=OFF, 1h×0.5, VR boost ×1.8, MR boost ×1.5")
+
     # Log regime + direction para visibilidade
     if _trend_dir == "down":
         _trade_log("REGIME_DOWNTREND", "—", 0,
             f"⬇️ DOWNTREND detectado: regime={_adx_regime} dir={_trend_dir} ADX={_adx_val:.1f} "
             f"Hurst={_hurst:.3f} conf={_regime_conf:.2f} — exposição reduzida 75%")
 
-    # ── 3b. Kelly Criterion + sinais avançados ─────────────────────────
+    # ── 3b. Dynamic Kelly Criterion v5.0 + sinais avançados ──────────
+    # Usa win_rate REAL do histórico em vez de estimar pelo score
+    _hist_wins   = int(_perf_state.get("win_count", 0) or 0)
+    _hist_losses = int(_perf_state.get("loss_count", 0) or 0)
+    _hist_total  = _hist_wins + _hist_losses
+    _hist_gain   = float(_perf_state.get("total_gain", 0.0) or 0.0)
+    _hist_loss_a = float(_perf_state.get("total_loss", 0.0) or 0.0)  # already positive
+
+    if _hist_total >= 15:
+        # Dados suficientes → usar win rate real
+        _real_wr = _hist_wins / _hist_total
+        # Reward/Risk real = avg_gain / avg_loss
+        _avg_gain = (_hist_gain / _hist_wins) if _hist_wins > 0 else 0.01
+        _avg_loss = (_hist_loss_a / _hist_losses) if _hist_losses > 0 else 0.01
+        _real_rr  = _avg_gain / _avg_loss if _avg_loss > 0 else 1.5
+    else:
+        # Poucos trades → usar defaults conservadores
+        _real_wr = 0.55
+        _real_rr = 1.3
+
+    # Clamp para segurança
+    _real_wr = max(0.35, min(0.80, _real_wr))
+    _real_rr = max(0.5, min(3.0, _real_rr))
+
+    _trade_log("KELLY_DYNAMIC", "—", 0,
+        f"📊 Kelly Dinâmico: WR={_real_wr:.1%} RR={_real_rr:.2f} (trades={_hist_total}, wins={_hist_wins})")
+
     def _kelly_weight(score: float, base_amount: float, asset: str = "") -> float:
-        """Retorna alocação ajustada via Kelly fracionário + sinais avançados.
-        Score alto → mais capital; score baixo → menos capital."""
+        """Retorna alocação ajustada via Kelly fracionário dinâmico + sinais avançados.
+        v5.0: usa win_rate e R:R reais do histórico."""
         if score <= 0:
             return base_amount
-        # Estima win_rate ≈ score (simplificado), b ≈ 1
-        p = min(score, 0.85)
+        # Kelly dinâmico: f* = (p*b - q) / b com win_rate e RR reais
+        # Score modula o Kelly: score alto → confiança maior → Kelly mais agressivo
+        score_adj = min(score, 0.85)
+        p = _real_wr * (0.7 + 0.3 * score_adj)  # score modula ±30% do WR
+        p = max(0.10, min(0.85, p))
         q = 1.0 - p
-        b = 1.0  # reward/risk ≈ 1
+        b = _real_rr
         kelly_f = (p * b - q) / b if b > 0 else 0
         kelly_f = max(0.05, min(kelly_f, 0.60))  # clamp 5%-60%
         adjusted = base_amount * (1.0 + kelly_f * settings.KELLY_FRACTION)
@@ -3538,6 +3588,12 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         for a, d in ls_results.items()
     }
     capital_ls  = round(capital * _LS_ALLOC_PCT, 2) if top_ls else 0.0
+
+    # ── v5.0 Nível 1 #3: Threshold mínimo LS R$25 ──────────────────
+    # Com capital baixo, LS com R$9 gera custos > lucro → desativar se < R$25
+    if capital_ls < 25.0:
+        capital_ls = 0.0
+        top_ls = []
 
     # ── Fair Value Gap: bucket de 2% (Imbalance Fill) ───────────────────
     # v3.0: detecta gaps institucionais e opera o preenchimento
@@ -3610,6 +3666,16 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     capital_vr  = min(capital_vr,  round(capital * _VR_ALLOC_PCT  * 2.0, 2))
     capital_pb  = min(capital_pb,  round(capital * _PB_ALLOC_PCT  * 2.0, 2))
 
+    # ── v5.0 Nível 2 #6: Aplicar boost VR/MR quando regime switch lateral ──
+    if _regime_switch_active:
+        capital_vr  = round(capital_vr * 1.80, 2)   # VR excela em lateral → +80%
+        capital_mr  = round(capital_mr * 1.50, 2)    # MR também lucra em lateral → +50%
+        capital_bo  = round(capital_bo * 0.30, 2)    # Breakout falha em lateral → -70%
+        capital_pb  = round(capital_pb * 0.20, 2)    # Pyramid Breakout péssimo → -80%
+        # Re-cap para não estourar (3× base em regime switch é aceitável)
+        capital_vr  = min(capital_vr, round(capital * _VR_ALLOC_PCT * 3.0, 2))
+        capital_mr  = min(capital_mr, round(capital * _MR_ALLOC_PCT * 3.0, 2))
+
     cycle_costs = {
         "total": 0.0,
         "brokerage": 0.0,
@@ -3678,6 +3744,15 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             # v3 (2026-03-09): elevado de 0.55→0.58 para melhorar WR e PF
             if score < 0.58:
                 continue
+
+            # ── v5.0 Nível 2 #5: Filtro RSI no 1h — evita comprar overbought ──
+            # 1h gera 85% do lucro, mas perde quando entra com RSI alto (>55 = sobrecomprado)
+            if tf_name == "1h" and mom_data and asset in mom_data:
+                _asset_rsi = mom_data[asset].get("rsi", 50.0)
+                if _asset_rsi > 55.0 and ret > 0:
+                    # RSI overbought + sinal de compra → skip (provavelmente topo)
+                    continue
+
             amt = _kelly_weight(score, per_asset, asset)
             # DCA: aumentar se já estava em posição perdedora
             amt = _dca_adjust(asset, amt, klines)

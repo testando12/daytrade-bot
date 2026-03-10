@@ -1,0 +1,40 @@
+﻿=======================================================
+  ANALISE DE DESEMPENHO ÔÇö capital R$462.84
+=======================================================
+
+[ Contribuicao por estrategia (log atual) ]
+     5m: Ôû╝ -0.4700  (7 ciclos ativos)
+     1h: Ôû▓ +60.9700  (48 ciclos ativos)
+     1d: ÔöÇ +0.0000  (0 ciclos ativos)
+     BO: Ôû▓ +3.5000  (7 ciclos ativos)
+     VR: Ôû▓ +6.0800  (14 ciclos ativos)
+     LS: Ôû╝ -0.4000  (4 ciclos ativos)
+   Grid: Ôû▓ +1.6600  (8 ciclos ativos)
+  TOTAL:   +71.3400
+
+[ Top 5 ativos mais operados ]
+    RENDER: 4 entradas  14 saidas
+      DOGE: 0 entradas  5 saidas
+       XRP: 1 entradas  3 saidas
+       TIA: 0 entradas  4 saidas
+      SHIB: 1 entradas  1 saidas
+
+[ Saidas ]
+  Stop loss ATR:    7
+  Partial Take Profit: 20
+  Saidas normais:   10
+
+[ Controle de risco ]
+  Reducoes por perdas seguidas: 11
+  Recuperacoes (volta 100%):    5
+
+[ Diagnostico ]
+  Tamanho tipico posicao 1h:  R$161.99  (35% de R$463)
+  Tamanho tipico posicao 5m:  R$69.43  (15% de R$463)
+  VR sinal tipico:            R$50.91  (11% do capital)
+  LS sinal tipico:            R$10.18  (2.2% do capital)
+
+[ Conclusao ]
+  Ô£à  TOTAL POSITIVO +71.34
+  ÔÜá  Capital R$463 ÔÇö some estrategias tem tamanho minimo ineficiente
+     Considere focar apenas nos sinais com melhor Edge neste capital
