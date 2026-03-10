@@ -2526,7 +2526,10 @@ async def trade_status():
     today_cycles = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str)]
     pnl_today_live = round(sum(c.get("pnl", 0) for c in today_cycles), 2)
     # Subtrai baseline do dia (ganhos com capital anterior ao reset)
-    pnl_today_baseline = _trade_state.get("pnl_today_baseline", 0.0)
+    # Só aplica baseline se foi definido no mesmo dia de hoje (não persiste entre dias)
+    pnl_today_baseline = 0.0
+    if _trade_state.get("pnl_today_baseline_date") == today_str:
+        pnl_today_baseline = _trade_state.get("pnl_today_baseline", 0.0)
     pnl_today_live = round(pnl_today_live - pnl_today_baseline, 2)
     capital_base = _trade_state.get("capital", settings.INITIAL_CAPITAL)
     capital_efetivo = round(capital_base + pnl_today_live, 2)
@@ -2608,6 +2611,7 @@ async def set_trade_capital(body: dict):
     today_cycles2 = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str2)]
     current_pnl_today = round(sum(c.get("pnl", 0) for c in today_cycles2), 2)
     _trade_state["pnl_today_baseline"] = current_pnl_today
+    _trade_state["pnl_today_baseline_date"] = today_str2
     _trade_log(event, "—", abs(delta), f"Capital {event.lower()} de R$ {prev:.2f} → R$ {amount:.2f} | PnL baseline fixado em R$ {current_pnl_today:.2f}")
     # Persiste imediatamente no banco para sobreviver a deploys/restarts
     db_state.save_state("trade_state", _trade_state)
@@ -2632,6 +2636,7 @@ async def reset_pnl_baseline():
     today_cycles3 = [c for c in _perf_state.get("cycles", []) if c.get("timestamp", "").startswith(today_str3)]
     current_pnl = round(sum(c.get("pnl", 0) for c in today_cycles3), 2)
     _trade_state["pnl_today_baseline"] = current_pnl
+    _trade_state["pnl_today_baseline_date"] = today_str3
     db_state.save_state("trade_state", _trade_state)
     _trade_log("SISTEMA", "—", 0, f"🔄 PnL baseline fixado em R$ {current_pnl:.2f} — nova simulação R$ {_trade_state.get('capital', 0):.2f}")
     return {"success": True, "pnl_baseline_set": current_pnl, "capital": _trade_state.get("capital", 0)}
