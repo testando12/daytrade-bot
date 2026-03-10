@@ -56,6 +56,9 @@ function showLogin(errorMsg) {
   document.getElementById('app-layout').style.display = 'none';
   const err = document.getElementById('login-error');
   if (err) err.textContent = errorMsg || '';
+  // Mostra qual servidor está sendo usado
+  const srvSpan = document.getElementById('login-server-url');
+  if (srvSpan) srvSpan.textContent = API_BASE;
 }
 
 function showDashboard() {
@@ -79,7 +82,7 @@ async function handleLogin(e) {
       headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
     });
     if (res2.status === 401 || res2.status === 403) {
-      err.textContent = 'API Key inválida. Verifique e tente novamente.';
+      err.textContent = `API Key inválida para ${API_BASE}. Verifique e tente novamente.`;
     } else if (!res2.ok) {
       err.textContent = `Erro do servidor (${res2.status}). Tente novamente.`;
     } else {
