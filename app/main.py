@@ -2556,7 +2556,7 @@ async def trade_status():
             "capital_efetivo":  capital_efetivo,
             "pnl_hoje":         pnl_today_live,
             "auto_trading":     _trade_state.get("auto_trading", True),
-            "total_pnl":        _trade_state.get("total_pnl", 0.0),
+            "total_pnl":        round(_trade_state.get("total_pnl", 0.0) - _trade_state.get("total_pnl_baseline", 0.0), 4),
             "positions":        _trade_state.get("positions", []),
             "last_no_position_reason": _trade_state.get("last_no_position_reason", ""),
             "log":              _trade_state.get("log", []),
@@ -2612,6 +2612,7 @@ async def set_trade_capital(body: dict):
     current_pnl_today = round(sum(c.get("pnl", 0) for c in today_cycles2), 2)
     _trade_state["pnl_today_baseline"] = current_pnl_today
     _trade_state["pnl_today_baseline_date"] = today_str2
+    _trade_state["total_pnl_baseline"] = _trade_state.get("total_pnl", 0.0)
     _trade_log(event, "—", abs(delta), f"Capital {event.lower()} de R$ {prev:.2f} → R$ {amount:.2f} | PnL baseline fixado em R$ {current_pnl_today:.2f}")
     # Persiste imediatamente no banco para sobreviver a deploys/restarts
     db_state.save_state("trade_state", _trade_state)
@@ -2637,9 +2638,10 @@ async def reset_pnl_baseline():
     current_pnl = round(sum(c.get("pnl", 0) for c in today_cycles3), 2)
     _trade_state["pnl_today_baseline"] = current_pnl
     _trade_state["pnl_today_baseline_date"] = today_str3
+    _trade_state["total_pnl_baseline"] = _trade_state.get("total_pnl", 0.0)
     db_state.save_state("trade_state", _trade_state)
     _trade_log("SISTEMA", "—", 0, f"🔄 PnL baseline fixado em R$ {current_pnl:.2f} — nova simulação R$ {_trade_state.get('capital', 0):.2f}")
-    return {"success": True, "pnl_baseline_set": current_pnl, "capital": _trade_state.get("capital", 0)}
+    return {"success": True, "pnl_baseline_set": current_pnl, "total_pnl_baseline": _trade_state["total_pnl_baseline"], "capital": _trade_state.get("capital", 0)}
 
 
 @app.post("/trade/stop")
