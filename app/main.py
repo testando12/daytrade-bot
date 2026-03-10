@@ -2628,9 +2628,10 @@ async def start_auto_trading():
 
 
 @app.post("/trade/reset-pnl-baseline")
-async def reset_pnl_baseline():
+async def reset_pnl_baseline(request: Request):
     """Fixa o PnL atual do dia como baseline — próximos ganhos partem de zero.
-    Útil quando o capital é resetado no meio do dia para nova simulação."""
+    Útil quando o capital é resetado no meio do dia para nova simulação.
+    Parâmetro opcional JSON: {"total_pnl_baseline_override": 1971.83}"""
     from datetime import timezone as _tz3, timedelta as _td3
     _brt3 = _tz3(_td3(hours=-3))
     today_str3 = datetime.now(_brt3).strftime("%Y-%m-%d")
@@ -2638,7 +2639,16 @@ async def reset_pnl_baseline():
     current_pnl = round(sum(c.get("pnl", 0) for c in today_cycles3), 2)
     _trade_state["pnl_today_baseline"] = current_pnl
     _trade_state["pnl_today_baseline_date"] = today_str3
-    _trade_state["total_pnl_baseline"] = _trade_state.get("total_pnl", 0.0)
+    # Permite sobrescrever o baseline de total_pnl via parâmetro JSON opcional
+    try:
+        body = await request.json()
+        override = body.get("total_pnl_baseline_override")
+    except Exception:
+        override = None
+    if override is not None:
+        _trade_state["total_pnl_baseline"] = float(override)
+    else:
+        _trade_state["total_pnl_baseline"] = _trade_state.get("total_pnl", 0.0)
     db_state.save_state("trade_state", _trade_state)
     _trade_log("SISTEMA", "—", 0, f"🔄 PnL baseline fixado em R$ {current_pnl:.2f} — nova simulação R$ {_trade_state.get('capital', 0):.2f}")
     return {"success": True, "pnl_baseline_set": current_pnl, "total_pnl_baseline": _trade_state["total_pnl_baseline"], "capital": _trade_state.get("capital", 0)}
