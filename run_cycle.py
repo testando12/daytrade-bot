@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from app.engines import MomentumAnalyzer, RiskAnalyzer, PortfolioManager
 from app.engines.market_scanner import MarketScanner
+from app.engines.regime import RegimeDetector
 from app.core.config import settings
 
 DATA_DIR        = Path(__file__).parent / "data"
@@ -173,9 +174,31 @@ async def run_cycle():
     irq_score  = risk_analysis["irq_score"]
     protection = RiskAnalyzer.get_protection_level(irq_score)
 
+    # ── 4b. Regime Detection — ADX + ATR Ratio + Hurst Exponent ─────────────
+    _regime_result = RegimeDetector.detect(market_data[ref].get("prices", []))
+    _log(
+        f"Regime: {_regime_result['regime']} "
+        f"(conf: {_regime_result.get('confidence', 0):.2f} | "
+        f"dir: {_regime_result.get('direction', '?')} | "
+        f"ADX: {_regime_result.get('adx', 0):.1f} | "
+        f"ATR_ratio: {_regime_result.get('atr_ratio', 0):.2f} | "
+        f"Hurst: {_regime_result.get('hurst', 0):.3f})"
+    )
+
+    # Ajusta scores de momentum pelo regime detetado
+    # apply_multipliers espera {strategy: cap} — adaptamos com os nomes dos ativos
+    _regime_caps = RegimeDetector.apply_multipliers(
+        {a: abs(s) for a, s in momentum_scores.items()}, _regime_result
+    )
+    # Preserva sinal original mas escala pela magnitude ajustada pelo regime
+    momentum_scores_regime = {
+        a: s * (_regime_caps.get(a, abs(s)) / abs(s) if s != 0 else 1.0)
+        for a, s in momentum_scores.items()
+    }
+
     # ── 5. Alocação ──────────────────────────────────────────────────────────
     allocation  = PortfolioManager.calculate_portfolio_allocation(
-        momentum_scores, irq_score, capital,
+        momentum_scores_regime, irq_score, capital,
         momentum_details=momentum_results,
     )
     rebalancing = PortfolioManager.apply_rebalancing_rules(
@@ -231,6 +254,7 @@ async def run_cycle():
         "amount": round(capital, 2),
         "note": (f"🔄 GitHub Actions — {len(rebalancing)} ativos | "
                  f"IRQ: {irq_score:.3f} | {protection['level']} | "
+                 f"Regime: {_regime_result['regime']} | "
                  f"BUY:{buys} SELL:{sells}"),
     }
     trade_state.setdefault("log", []).insert(0, event)
