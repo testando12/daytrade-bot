@@ -13,6 +13,49 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from app.core.config import settings
 
+# ── Mapeamento de setores ────────────────────────────────────────────────────
+# Limita exposição máxima do portfolio por setor.
+# Evita que uma crise sectorial (ex: crash crypto, selloff B3) destrua o capital.
+_SECTOR_MAP: Dict[str, List[str]] = {
+    "CRYPTO":      ["BTC","ETH","BNB","SOL","XRP","ADA","AVAX","DOT","LINK",
+                    "DOGE","SHIB","PEPE","WIF","FLOKI","BONK",
+                    "AAVE","MKR","COMP","CRV","SNX","UNI",
+                    "JTO","PYTH","JUP","POPCAT","RENDER","FET",
+                    "NEAR","APT","ARB","OP","INJ","SUI","SEI","TIA","STRK","MANTA","TAO"],
+    "B3":          ["PETR4","VALE3","ITUB4","BBDC4","BBAS3","ITSA4",
+                    "GGBR4","JBSS3","SUZB3","PRIO3","CSAN3","EGIE3",
+                    "MXRF11","XPML11","VISC11","HGLG11","KNRI11","XPLG11",
+                    "BCFF11","RBRF11","IRDM11","KNCR11"],
+    "US_STOCKS":   ["AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA",
+                    "AMD","INTC","QCOM","AVGO","MU","SOXL",
+                    "JPM","GS","BAC","WFC","MS",
+                    "JNJ","PFE","MRK","ABT",
+                    "XOM","CVX","COP","SLB"],
+    "INTL_ETFS":   ["EFA","EEM","VGK","EWG","EWQ","EWU","EWJ","EWY",
+                    "ASHR","INDA","EWA","EWZ"],
+    "COMMODITIES": ["GOLD","SILVER","GLD","SLV","OIL","NATGAS",
+                    "CAFE","SOJA","MILHO","ACUCAR","TRIGO","CACAU","COBRE"],
+    "FOREX":       ["USDBRL","EURUSD","GBPUSD","USDJPY","EURBRLL",
+                    "DXY","AUDUSD","USDMXN","USDCLP"],
+}
+
+# Máxima exposição (% do capital) por setor
+_SECTOR_MAX_PCT: Dict[str, float] = {
+    "CRYPTO":     0.40,   # 40% — volatilidade extrema
+    "B3":         0.35,   # 35% — risco Brasil / taxa Selic
+    "US_STOCKS":  0.35,   # 35%
+    "INTL_ETFS":  0.20,   # 20%
+    "COMMODITIES":0.20,   # 20%
+    "FOREX":      0.15,   # 15%
+}
+
+# Mapa reverso: ativo (maiúsculo) → setor
+_ASSET_TO_SECTOR: Dict[str, str] = {
+    asset.upper(): sector
+    for sector, assets in _SECTOR_MAP.items()
+    for asset in assets
+}
+
 
 class TradeRecord:
     """Registro de operação executada"""
@@ -239,13 +282,75 @@ class RiskManager:
         }
 
     # ─────────────────────────────────────────
-    # 4. VALIDAÇÃO PRÉ-TRADE (COMBINA TUDO)
+    # 4. SECTOR EXPOSURE CAP
     # ─────────────────────────────────────────
 
-    def can_trade(self) -> Tuple[bool, str]:
+    def _get_sector(self, asset: str) -> Optional[str]:
+        """Retorna o setor do ativo ou None se não mapeado."""
+        return _ASSET_TO_SECTOR.get(asset.upper())
+
+    def check_sector_cap(
+        self,
+        asset: str,
+        trade_amount: float,
+        capital: float,
+    ) -> Tuple[bool, str]:
+        """
+        Verifica se adicionar ``trade_amount`` ao setor do ``asset`` ultrapassa
+        o limite máximo de exposição setorial.
+
+        Args:
+            asset:        Símbolo do ativo (ex: "BTC", "PETR4")
+            trade_amount: Valor em R$/USD da operação pretendida
+            capital:      Capital total de referência
+
+        Returns:
+            (allowed: bool, mensagem)
+        """
+        if capital <= 0:
+            return True, "OK"
+
+        sector = self._get_sector(asset)
+        if sector is None:
+            return True, "OK"  # ativo não mapeado → sem restrição setorial
+
+        # Exposição atual no setor (soma dos amounts das posições abertas)
+        current_exposure = sum(
+            pos["amount"]
+            for a, pos in self.positions.items()
+            if self._get_sector(a) == sector
+        )
+
+        max_allowed = capital * _SECTOR_MAX_PCT.get(sector, 0.35)
+        if current_exposure + trade_amount > max_allowed:
+            pct_now = current_exposure / capital * 100
+            pct_max = _SECTOR_MAX_PCT.get(sector, 0.35) * 100
+            return (
+                False,
+                f"Setor {sector} com {pct_now:.0f}% do capital "
+                f"(limite {pct_max:.0f}%) — operação bloqueada",
+            )
+
+        return True, "OK"
+
+    # ─────────────────────────────────────────
+    # 5. VALIDAÇÃO PRÉ-TRADE (COMBINA TUDO)
+    # ─────────────────────────────────────────
+
+    def can_trade(
+        self,
+        asset: Optional[str] = None,
+        trade_amount: float = 0.0,
+        capital: float = 0.0,
+    ) -> Tuple[bool, str]:
         """
         Verifica TODAS as condições antes de permitir um trade.
-        
+
+        Args:
+            asset:        Símbolo do ativo (opcional — ativa sector cap)
+            trade_amount: Valor da operação (opcional)
+            capital:      Capital total (opcional)
+
         Returns:
             (allowed: bool, reason: str)
         """
@@ -263,6 +368,12 @@ class RiskManager:
         if not trade_check["allowed"]:
             return False, trade_check["reason"]
 
+        # 4. Sector exposure cap (apenas quando informado)
+        if asset and trade_amount > 0 and capital > 0:
+            ok, msg = self.check_sector_cap(asset, trade_amount, capital)
+            if not ok:
+                return False, msg
+
         return True, "OK"
 
     def record_trade(self, asset: str, action: str, price: float, amount: float):
@@ -274,7 +385,7 @@ class RiskManager:
             self.register_position(asset, price, amount)
 
     # ─────────────────────────────────────────
-    # 5. STATUS E RELATÓRIOS
+    # 6. STATUS E RELATÓRIOS
     # ─────────────────────────────────────────
 
     def get_status(self) -> Dict:

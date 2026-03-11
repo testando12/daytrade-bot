@@ -12,6 +12,51 @@ Indicadores:
 
 from typing import Dict, List
 
+# ── Clusters de correlação ───────────────────────────────────────────────────
+# Ativos dentro do mesmo cluster têm correlação histórica > 0.80.
+# Regra: no máximo 1 sinal de entrada por cluster por ciclo.
+# Isso evita drawdown concentrado quando o setor/grupo cai junto.
+CORRELATION_CLUSTERS: Dict[str, List[str]] = {
+    # Crypto de grande cap — caem e sobem juntos
+    "crypto_large": ["BTC", "ETH", "BNB", "SOL", "XRP", "ADA", "AVAX", "DOT"],
+    # Crypto altcoin / DeFi — beta alto vs BTC
+    "crypto_defi":  ["AAVE", "MKR", "COMP", "CRV", "SNX", "UNI", "LINK"],
+    # Crypto meme / especulativo
+    "crypto_meme":  ["DOGE", "SHIB", "PEPE", "WIF", "FLOKI", "BONK"],
+    # Solana ecosystem
+    "crypto_sol_eco": ["JTO", "PYTH", "JUP", "POPCAT", "RENDER", "FET"],
+    # Layer 1 emergentes
+    "crypto_l1":    ["NEAR", "APT", "ARB", "OP", "INJ", "SUI", "SEI", "TIA", "STRK", "MANTA", "TAO"],
+    # B3 Petróleo & Energia
+    "b3_energia":   ["PETR4", "PRIO3", "CSAN3", "EGIE3"],
+    # B3 Bancos — altamente correlacionados entre si
+    "b3_bancos":    ["ITUB4", "BBDC4", "BBAS3", "ITSA4"],
+    # B3 Commodities / Mineração
+    "b3_comodities": ["VALE3", "GGBR4", "JBSS3", "SUZB3"],
+    # FIIs — todos caem juntos quando taxa Selic sobe
+    "fiis":         ["MXRF11", "XPML11", "VISC11", "HGLG11", "KNRI11", "XPLG11",
+                     "BCFF11", "RBRF11", "IRDM11", "KNCR11"],
+    # US Big Tech — correção de tech derruba todos
+    "us_bigtech":   ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"],
+    # US Semicondutores
+    "us_semis":     ["AMD", "INTC", "QCOM", "AVGO", "MU", "SOXL"],
+    # ETFs globais (acompanham MSCI World)
+    "intl_etfs":    ["EFA", "EEM", "VGK", "EWG", "EWQ", "EWU", "EWJ", "EWY", "ASHR", "INDA", "EWA", "EWZ"],
+    # Metais preciosos — correlação USD/inflação
+    "metals":       ["GOLD", "SILVER", "GLD", "SLV"],
+    # Energia (petróleo e gás)
+    "energy_comd":  ["OIL", "NATGAS"],
+    # Agronegócio
+    "agro":         ["CAFE", "SOJA", "MILHO", "ACUCAR", "TRIGO", "CACAU"],
+}
+
+# Mapa reverso: ativo → cluster
+_ASSET_TO_CLUSTER: Dict[str, str] = {
+    asset.upper(): cluster
+    for cluster, assets in CORRELATION_CLUSTERS.items()
+    for asset in assets
+}
+
 
 def _ema(prices: List[float], period: int) -> float:
     if not prices:
@@ -143,7 +188,20 @@ class MomentumAnalyzer:
             sum(1 for s in sub_signals if s < -0.05),
         )
         signal_quality = dominated / len(sub_signals)
-        entry_valid    = abs(momentum_score) >= MomentumAnalyzer.ENTRY_THRESHOLD
+
+        # ── ATR Volatility Filter ──────────────────────────────────────
+        # Rejeita entradas quando o ativo está "morto" (sem movimento real).
+        # ATR < 0.3% do preço = mercado flat → trades ruins, spread come tudo.
+        # ATR > 6% = muito volátil para sizing seguro → também rejeita.
+        ATR_MIN_PCT = 0.003   # 0.3% mínimo
+        ATR_MAX_PCT = 0.06    # 6% máximo
+        atr_ok = ATR_MIN_PCT <= atr_pct <= ATR_MAX_PCT
+        atr_rejected = not atr_ok and atr_pct > 0  # só rejeita se tiver dados
+
+        entry_valid = (
+            abs(momentum_score) >= MomentumAnalyzer.ENTRY_THRESHOLD
+            and not atr_rejected
+        )
 
         trend_status = (
             "forte_alta" if momentum_score > 0.4 else
@@ -161,6 +219,8 @@ class MomentumAnalyzer:
             "macd_score":      float(candle_score),
             "signal_quality":  float(signal_quality),
             "entry_valid":     bool(entry_valid),
+            "atr_ok":          bool(atr_ok),
+            "atr_rejected":    bool(atr_rejected),
             "valid":           True,
             "current_price":   float(price),
             "ma_short":        float(ema5_now),
@@ -204,5 +264,33 @@ class MomentumAnalyzer:
             for rank, (asset, _) in enumerate(ranked, 1):
                 results[asset]["rank"] = rank
                 results[asset]["is_top3"] = rank <= 3
+                results[asset]["corr_blocked"] = False
+                results[asset]["corr_winner"] = None
+
+        # ── Filtro de correlação ────────────────────────────────────────────
+        # Para cada cluster, mantém apenas o ativo com maior |score| que tenha
+        # entry_valid=True. Os demais são bloqueados (corr_blocked=True).
+        # Isso evita drawdown conjunto quando um grupo correlacionado cai.
+        seen_clusters: Dict[str, str] = {}        # cluster → asset vencedor
+        # Ordena por |score| decrescente para que o primeiro encontrado seja o melhor
+        ranked_by_score = sorted(
+            results.keys(),
+            key=lambda a: abs(results[a]["momentum_score"]),
+            reverse=True,
+        )
+        for asset in ranked_by_score:
+            if not results[asset].get("entry_valid"):
+                continue
+            cluster = _ASSET_TO_CLUSTER.get(asset.upper())
+            if cluster is None:
+                continue                          # ativo fora dos clusters → não bloqueia
+            if cluster not in seen_clusters:
+                seen_clusters[cluster] = asset    # primeiro (melhor score) vence
+            else:
+                # Bloqueia os demais do mesmo cluster
+                winner = seen_clusters[cluster]
+                results[asset]["entry_valid"]  = False
+                results[asset]["corr_blocked"] = True
+                results[asset]["corr_winner"]  = winner
 
         return results
