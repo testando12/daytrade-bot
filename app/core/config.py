@@ -173,18 +173,31 @@ class Settings:
         "VIVT3",
         # Saúde
         "RDOR3",
+        # FIIs — Fundos Imobiliários (alta liquidez, B3) — v5.1
+        "MXRF11", "XPML11", "VISC11",   # shoppings
+        "HGLG11", "KNRI11", "XPLG11",   # logística
+        "BCFF11", "RBRF11",              # fundo de fundos
+        "IRDM11", "KNCR11",             # recebíveis (CRI)
     ]
 
-    # Criptomoedas (Binance: BTC, ETH, ...) — 30 assets 24h
+    # Criptomoedas (Binance: BTC, ETH, ...) — 45 assets 24h — v5.1 expandido
     CRYPTO_ASSETS: List[str] = [
         # Top 10 (originais)
         "BTC", "ETH", "BNB", "SOL", "ADA",
         "XRP", "DOGE", "AVAX", "DOT", "LINK",
-        # Altcoins voláteis (NOVAS)
+        # Altcoins voláteis
         "MATIC", "SHIB", "UNI", "LTC", "ATOM",
         "FIL", "NEAR", "APT", "ARB", "OP",
         "INJ", "SUI", "SEI", "TIA", "PEPE",
         "WIF", "FLOKI", "BONK", "RENDER", "FET",
+        # DeFi — alta volatilidade e volume (NOVAS v5.1)
+        "AAVE", "MKR", "COMP", "CRV", "SNX",
+        # Solana ecosystem (NOVAS v5.1)
+        "JTO", "PYTH", "JUP", "POPCAT",
+        # Telegram / TON ecosystem (NOVAS v5.1)
+        "TON", "NOT",
+        # Layer 1 emergentes (NOVAS v5.1)
+        "TAO", "STRK", "MANTA",
     ]
 
     # Forex (via Yahoo Finance: EURUSD=X, etc.)
@@ -220,6 +233,14 @@ class Settings:
         "T", "VZ",
         # Outros
         "KO", "PEP", "MCD",
+        # ETFs de índice e volatilidade — v5.1 (trendam limpo, muito volume)
+        "SPY", "QQQ", "IWM",           # S&P500, Nasdaq, Russell2000
+        "GLD", "SLV",                  # Ouro e Prata ETF (mais líquido que GOLD/SILVER)
+        "TLT",                         # Treasury Bonds (inverso do mercado — hedge)
+        "ARKK",                        # ARK Innovation (ultra-volátil)
+        "SOXL",                        # Semicondutores 3× alavancado
+        "TQQQ",                        # Nasdaq 3× alavancado (alta volatilidade)
+        "UVXY",                        # Volatilidade (VIX) — lucra em crises
     ]
 
     # Todos os ativos (B3 + US + Crypto + Forex + Commodities)
