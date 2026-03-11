@@ -54,6 +54,20 @@ except ImportError as e:
     print(f"[market] Aviso: brokers não disponíveis ({e})", flush=True)
     BROKERS_AVAILABLE = False
 
+# Alpaca (US stocks) — REST, funciona no Railway
+try:
+    from app.brokers.alpaca import AlpacaBroker
+    ALPACA_AVAILABLE = True
+except ImportError:
+    ALPACA_AVAILABLE = False
+
+# MetaTrader 5 (B3/Forex) — Windows apenas; Railway ignora silenciosamente
+try:
+    from app.brokers.mt5 import MT5Broker
+    MT5_IMPORTABLE = True
+except ImportError:
+    MT5_IMPORTABLE = False
+
 
 # ── BRAPI ────────────────────────────────────────────────────────────────────
 _BRAPI_BASE    = "https://brapi.dev/api"
@@ -158,6 +172,8 @@ class BrapiMarketData:
         self.btg_broker: Optional[Any] = None
         self.binance_broker: Optional[Any] = None
         self.alpha_vantage: Optional[Any] = None
+        self.alpaca_broker: Optional[Any] = None
+        self.mt5_broker: Optional[Any] = None
 
         if BROKERS_AVAILABLE:
             # BTG Pactual (B3)
@@ -167,16 +183,37 @@ class BrapiMarketData:
             # Alpha Vantage (US/Forex/Commodities)
             self.alpha_vantage = AlphaVantageBroker()
 
+        # Alpaca Markets (US stocks — paper/live, funciona no Railway)
+        if ALPACA_AVAILABLE:
+            try:
+                self.alpaca_broker = AlpacaBroker()
+            except Exception as e:
+                print(f"[market] Alpaca init error: {e}", flush=True)
+
+        # MetaTrader 5 (B3/Forex — Windows apenas; Railway desabilita)
+        if MT5_IMPORTABLE:
+            try:
+                self.mt5_broker = MT5Broker()
+                if self.mt5_broker.is_configured:
+                    self.mt5_broker.connect()
+            except Exception as e:
+                print(f"[market] MT5 init error: {e}", flush=True)
+
         # ── Log hierarquia de fontes ──────────────────────────────────────
-        btg_status = "BTG(RT)" if (self.btg_broker and self.btg_broker.is_configured) else None
-        brapi_src = "BRAPI+token" if self.token else "BRAPI(free:4)"
-        b3_chain = " → ".join(filter(None, [btg_status, brapi_src, "Yahoo"]))
+        mt5_ok     = self.mt5_broker and self.mt5_broker.is_available and self.mt5_broker.is_configured
+        btg_ok     = self.btg_broker and self.btg_broker.is_configured
+        mt5_status = "MT5(B3)" if mt5_ok else None
+        btg_status = "BTG(RT)" if btg_ok else None
+        brapi_src  = "BRAPI+token" if self.token else "BRAPI(free:4)"
+        b3_chain   = " → ".join(filter(None, [mt5_status, btg_status, brapi_src, "Yahoo"]))
 
         bn_auth = "Binance(auth)" if (self.binance_broker and self.binance_broker.is_configured) else None
         crypto_chain = " → ".join(filter(None, [bn_auth, "Binance(pub)", "Yahoo"]))
 
-        av_status = "AlphaVantage" if (self.alpha_vantage and self.alpha_vantage.is_configured) else None
-        us_chain = " → ".join(filter(None, [av_status, "Yahoo"]))
+        alpaca_ok  = self.alpaca_broker and self.alpaca_broker.is_configured
+        alpaca_src = "Alpaca" if alpaca_ok else None
+        av_status  = "AlphaVantage" if (self.alpha_vantage and self.alpha_vantage.is_configured) else None
+        us_chain   = " → ".join(filter(None, [alpaca_src, av_status, "Yahoo"]))
 
         trading_mode = getattr(settings, "TRADING_MODE", "paper").upper()
 
@@ -466,9 +503,9 @@ class BrapiMarketData:
     async def get_current_price(self, asset: str) -> Optional[Dict]:
         """
         Preço atual de um ativo com fallback inteligente:
-          B3:          BTG → BRAPI → Yahoo
+          B3:          MT5 → BTG → BRAPI → Yahoo
           Crypto:      Binance Public (batch rápido) → Yahoo
-          US Stocks:   Alpha Vantage → Yahoo
+          US Stocks:   Alpaca → Alpha Vantage → Yahoo
           Forex:       Alpha Vantage → Yahoo
           Commodities: Alpha Vantage → Yahoo
         """
@@ -485,8 +522,13 @@ class BrapiMarketData:
                     source = "binance"
 
             elif self._is_b3(ticker):
-                # B3: BTG → BRAPI → Yahoo
-                if self.btg_broker and self.btg_broker.is_configured:
+                # B3: MT5 → BTG → BRAPI → Yahoo
+                if self.mt5_broker and self.mt5_broker.is_connected:
+                    quote = self.mt5_broker.get_quote(ticker)
+                    if quote:
+                        price = quote["price"]
+                        source = "mt5"
+                if price is None and self.btg_broker and self.btg_broker.is_configured:
                     quote = await self.btg_broker.get_quote(ticker)
                     if quote:
                         price = quote["price"]
@@ -498,8 +540,13 @@ class BrapiMarketData:
                         source = "brapi"
 
             elif self._is_us_stock(ticker):
-                # US: Alpha Vantage → Yahoo
-                if self.alpha_vantage and self.alpha_vantage.is_configured:
+                # US: Alpaca → Alpha Vantage → Yahoo
+                if self.alpaca_broker and self.alpaca_broker.is_configured:
+                    quote = await self.alpaca_broker.get_quote(ticker)
+                    if quote:
+                        price = quote["price"]
+                        source = "alpaca"
+                if price is None and self.alpha_vantage and self.alpha_vantage.is_configured:
                     quote = await self.alpha_vantage.get_quote(ticker)
                     if quote:
                         price = quote["price"]
@@ -567,16 +614,23 @@ class BrapiMarketData:
                     if p:
                         prices[a.upper()] = p
 
-            # ── B3: BTG → BRAPI → Yahoo ───────────────────────────────────
+            # ── B3: MT5 → BTG → BRAPI → Yahoo ────────────────────────────
             if b3_assets:
-                # Tenta BTG primeiro (se configurado)
-                btg_remaining = list(b3_assets)
-                if self.btg_broker and self.btg_broker.is_configured:
-                    btg_prices = await self.btg_broker.get_quotes_batch(b3_assets)
-                    prices.update(btg_prices)
-                    btg_remaining = [a for a in b3_assets if a.upper() not in prices]
+                # MT5 (B3 local, Windows — mais rápido quando disponível)
+                b3_remaining = list(b3_assets)
+                if self.mt5_broker and self.mt5_broker.is_connected:
+                    mt5_prices = self.mt5_broker.get_quotes_batch(b3_assets)
+                    prices.update(mt5_prices)
+                    b3_remaining = [a for a in b3_assets if a.upper() not in prices]
 
-                # BRAPI para o que BTG não cobriu
+                # BTG (se configurado)
+                btg_remaining = b3_remaining
+                if self.btg_broker and self.btg_broker.is_configured:
+                    btg_prices = await self.btg_broker.get_quotes_batch(btg_remaining)
+                    prices.update(btg_prices)
+                    btg_remaining = [a for a in btg_remaining if a.upper() not in prices]
+
+                # BRAPI para o que MT5/BTG não cobriu
                 brapi_assets = [a for a in btg_remaining if self._brapi_supported(a)]
                 if brapi_assets:
                     if self.token:
@@ -597,23 +651,26 @@ class BrapiMarketData:
                     if p:
                         prices[a.upper()] = p
 
-            # ── US Stocks: Alpha Vantage → Yahoo ──────────────────────────
+            # ── US Stocks: Alpaca → Alpha Vantage → Yahoo ─────────────────
             if us_assets:
-                av_remaining = list(us_assets)
-                if self.alpha_vantage and self.alpha_vantage.is_configured:
-                    # Alpha Vantage tem rate limit, só usa para poucos ativos
-                    # ou quando Yahoo falha
-                    pass  # Yahoo é mais eficiente para batch de US stocks
-                # Yahoo para US stocks (batch via gather)
+                # Alpaca: batch em uma chamada (mais eficiente que Yahoo)
+                alpaca_remaining = list(us_assets)
+                if self.alpaca_broker and self.alpaca_broker.is_configured:
+                    alpaca_prices = await self.alpaca_broker.get_quotes_batch(us_assets)
+                    for sym, price_v in alpaca_prices.items():
+                        prices[sym.upper()] = price_v
+                    alpaca_remaining = [a for a in us_assets if a.upper() not in prices]
+
+                # Yahoo para o que Alpaca não cobriu (batch via gather)
                 results = await asyncio.gather(
-                    *[self._yf_get_price(client, a) for a in us_assets],
+                    *[self._yf_get_price(client, a) for a in alpaca_remaining],
                     return_exceptions=True,
                 )
-                for a, p in zip(us_assets, results):
+                for a, p in zip(alpaca_remaining, results):
                     if isinstance(p, float):
                         prices[a.upper()] = p
 
-                # Alpha Vantage fallback para os que falharam
+                # Alpha Vantage fallback para os que ainda falharam
                 missing_us = [a for a in us_assets if a.upper() not in prices]
                 if missing_us and self.alpha_vantage and self.alpha_vantage.is_configured:
                     for a in missing_us[:5]:  # limita por rate limit
@@ -854,6 +911,14 @@ class BrapiMarketData:
         else:
             results["alpha_vantage"] = False
 
+        if self.alpaca_broker and self.alpaca_broker.is_configured:
+            results["alpaca"] = await self.alpaca_broker.connect()
+        else:
+            results["alpaca"] = False
+
+        # MT5 é síncrono (já conectado no __init__ se disponível)
+        results["mt5"] = bool(self.mt5_broker and self.mt5_broker.is_connected)
+
         # BRAPI e Binance Public não precisam de connect (sem auth)
         results["brapi"] = bool(self.token)
         results["binance_public"] = True  # Sempre disponível
@@ -876,6 +941,10 @@ class BrapiMarketData:
             status["brokers"]["btg"] = self.btg_broker.status()
         if self.binance_broker:
             status["brokers"]["binance"] = self.binance_broker.status()
+        if self.alpaca_broker:
+            status["brokers"]["alpaca"] = self.alpaca_broker.status()
+        if self.mt5_broker:
+            status["brokers"]["mt5"] = self.mt5_broker.status()
 
         # Data sources
         if self.alpha_vantage:

@@ -126,6 +126,21 @@ class Settings:
     ALPHA_VANTAGE_KEY: str = os.getenv("ALPHA_VANTAGE_KEY", "")
     ALPHA_VANTAGE_BASE_URL: str = "https://www.alphavantage.co/query"
 
+    # Alpaca Markets — US Stocks + ETFs (paper e live)
+    # Conta gratuita em: https://alpaca.markets → API Keys
+    # Paper: US$100k virtual | Live: ordens reais NYSE/NASDAQ
+    ALPACA_API_KEY: str = os.getenv("ALPACA_API_KEY", "")
+    ALPACA_API_SECRET: str = os.getenv("ALPACA_API_SECRET", "")
+    ALPACA_PAPER: bool = os.getenv("ALPACA_PAPER", "True").lower() == "true"
+
+    # MetaTrader 5 — B3 + Forex via terminal MT5 (Windows apenas)
+    # Corretoras BR: Genial, Vítreo, Clear, Rico, Órama, CM Capital, Mirae
+    # Em Railway/Linux: desabilitado automaticamente
+    MT5_LOGIN: str = os.getenv("MT5_LOGIN", "")       # nº da conta na corretora
+    MT5_PASSWORD: str = os.getenv("MT5_PASSWORD", "")  # senha da conta
+    MT5_SERVER: str = os.getenv("MT5_SERVER", "")      # ex: "Genial-Demo" ou "Clear-Real"
+    MT5_SUFFIX: str = os.getenv("MT5_SUFFIX", "")      # sufixo de símbolo (ex: ".SA" na Genial)
+
     # ── Modo de Operação ───────────────────────────────────────────────
     # paper = dados reais, ordens simuladas | live = ordens reais
     # "paper" = dados reais, ordens simuladas  |  "testnet" = API real c/ dinheiro fictício  |  "live" = ordens reais
