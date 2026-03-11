@@ -1117,6 +1117,16 @@ async def api_status():
     }
 
 
+# TEMP endpoint (2026-03-11): corrigir capital sem restart — REMOVER APÓS USO
+@app.get("/tmp-fix-capital-664")
+async def tmp_fix_capital():
+    if not _trade_state.get("_capital_fixed_20260311c"):
+        _trade_state["capital"] = 664.0
+        _trade_state["_capital_fixed_20260311c"] = True
+        db_state.save_state("trade_state", _trade_state)
+        return {"ok": True, "capital": 664.0, "msg": "Capital corrigido"}
+    return {"ok": False, "capital": _trade_state.get("capital"), "msg": "Já foi corrigido"}
+
 @app.get("/health")
 async def health_check():
     """Health check — usado pelo keep-alive e monitoramento externo."""
