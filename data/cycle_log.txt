@@ -181,3 +181,7 @@
 [2026-03-10T21:02:36] Dados obtidos: 104 ativos via yahoo.finance
 [2026-03-10T21:02:36] Ciclo concluído | IRQ: 0.151 (NORMAL) | BUY:3 SELL:0 | P&L estimado: R$ 45.0000 | Total P&L: R$ 45.0000
 [2026-03-10T21:02:36] Top posições: NVDA=R$16.02 | PRIO3=R$15.44 | SBUX=R$13.54
+[2026-03-11T15:34:08] Iniciando ciclo — capital: R$ 150.00
+[2026-03-11T15:34:10] Dados obtidos: 129 ativos via yahoo.finance
+[2026-03-11T15:34:10] Ciclo concluído | IRQ: 0.157 (NORMAL) | BUY:3 SELL:0 | P&L estimado: R$ 50.2676 | Total P&L: R$ 50.2676
+[2026-03-11T15:34:10] Top posições: CACAU=R$26.34 | UVXY=R$14.01 | NATGAS=R$9.92
