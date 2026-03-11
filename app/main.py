@@ -89,7 +89,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 # Endpoints que NÃO precisam de autenticação (públicos)
 _PUBLIC_ENDPOINTS = {
     "/", "/health", "/diagnostics", "/docs", "/openapi.json", "/redoc",
-    "/ui", "/dashboard", "/simulador", "/tmp-fix-pnl-214",
+    "/ui", "/dashboard", "/simulador",
 }
 # Prefixos públicos (static files, etc)
 _PUBLIC_PREFIXES = ("/ui/",)
@@ -1118,21 +1118,6 @@ async def api_status():
 
 
 
-# TEMP endpoint (2026-03-11): corrigir P&L acumulado inflado — REMOVER APÓS USO
-@app.get("/tmp-fix-pnl-214")
-async def tmp_fix_pnl():
-    # Limpa os ciclos antigos (gerados com capital inflado) e seta offset correto
-    _perf_state["cycles"] = []
-    _perf_state["total_pnl_history"] = []
-    _perf_state["total_pnl_offset"] = 214.0
-    _perf_state["win_count"] = 0
-    _perf_state["loss_count"] = 0
-    _perf_state["total_gain"] = 214.0
-    _perf_state["total_loss"] = 0.0
-    db_state.save_state("performance", _perf_state)
-    _trade_state["total_pnl"] = 214.0
-    db_state.save_state("trade_state", _trade_state)
-    return {"ok": True, "total_pnl_offset": 214.0, "msg": "P&L total corrigido para R$214"}
 
 @app.get("/health")
 async def health_check():
