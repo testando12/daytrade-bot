@@ -14,11 +14,12 @@ from .fvg import FVGAnalyzer
 from .regime import RegimeDetector
 from .vwap_reversion import VWAPReversionAnalyzer
 from .pyramid_breakout import PyramidBreakoutAnalyzer
+from .market_scanner import MarketScanner
 
 __all__ = [
     "MomentumAnalyzer", "RiskAnalyzer", "PortfolioManager",
     "RiskManager", "risk_manager", "MeanReversionAnalyzer",
     "BreakoutAnalyzer", "SqueezeAnalyzer",
     "LiquiditySweepAnalyzer", "FVGAnalyzer", "RegimeDetector",
-    "VWAPReversionAnalyzer", "PyramidBreakoutAnalyzer",
+    "VWAPReversionAnalyzer", "PyramidBreakoutAnalyzer", "MarketScanner",
 ]

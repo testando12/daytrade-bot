@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from app.engines import MomentumAnalyzer, RiskAnalyzer, PortfolioManager
+from app.engines.market_scanner import MarketScanner
 from app.core.config import settings
 
 DATA_DIR        = Path(__file__).parent / "data"
@@ -57,6 +58,37 @@ def _is_market_hours() -> bool:
     brt = timezone(timedelta(hours=-3))
     now = datetime.now(brt)
     return now.weekday() < 5 and 10 <= now.hour < 17
+
+
+def _seconds_to_candle_close(interval_minutes: int = 5) -> float:
+    """
+    Retorna quantos segundos faltam para o fechamento do candle atual.
+
+    Exemplo com interval=5: se agora é 14:03:20, o próximo close é 14:05:00
+    → faltam 100 segundos.
+
+    Usado para alinhar o ciclo ao fechamento exato do candle (evita
+    entrar no meio do candle e gerar sinais prematuros).
+    """
+    now = datetime.now(timezone.utc)
+    elapsed = (now.minute % interval_minutes) * 60 + now.second
+    remaining = interval_minutes * 60 - elapsed
+    return float(remaining)
+
+
+async def wait_for_candle_close(interval_minutes: int = 5, tolerance_s: float = 2.0):
+    """
+    Aguarda o fechamento do próximo candle antes de rodar a análise.
+
+    tolerance_s: executa se faltam menos de N segundos (evita espera logo
+    após uma execução recém-concluída).
+    """
+    wait = _seconds_to_candle_close(interval_minutes)
+    if wait > tolerance_s:
+        _log(f"Alinhando ao candle {interval_minutes}m — aguardando {wait:.0f}s para o close")
+        await asyncio.sleep(wait)
+    else:
+        _log(f"Candle {interval_minutes}m acabou de fechar — executando imediatamente")
 
 
 # ── Ciclo principal ───────────────────────────────────────────────────────────
@@ -105,15 +137,34 @@ async def run_cycle():
 
     _log(f"Dados obtidos: {len(market_data)} ativos via {data_source}")
 
-    # ── 2. Momentum ──────────────────────────────────────────────────────────
-    momentum_results = MomentumAnalyzer.calculate_multiple_assets(market_data)
+    # ── 2. Market Scanner — filtra top candidatos ─────────────────────────────
+    # Fase 1: triagem rápida (volume spike + price move) em todos os ativos.
+    # Só os top 20 passam para análise de momentum completa.
+    # Ativos de referência (BTC para IRQ) entram forçados se disponíveis.
+    _FORCE_INCLUDE = [a for a in ("BTC", "PETR4", "SPY") if a in market_data]
+    scanner_top, scan_scores = MarketScanner.scan(
+        market_data, top_n=MarketScanner.TOP_N, force_include=_FORCE_INCLUDE
+    )
+    scan_summary = MarketScanner.summary(scan_scores, scanner_top)
+    _log(
+        f"Scanner: {scan_summary['total_assets']} ativos → "
+        f"{scan_summary['selected']} selecionados "
+        f"(↑{scan_summary['up']} ↓{scan_summary['down']}) | "
+        f"top5: {scan_summary['top5']}"
+    )
+    # Filtra market_data para apenas os candidatos selecionados
+    market_data_filtered = {a: market_data[a] for a in scanner_top if a in market_data}
+
+    # ── 3. Momentum (só nos candidatos do scanner) ────────────────────────────
+    momentum_results = MomentumAnalyzer.calculate_multiple_assets(market_data_filtered)
     if not momentum_results:
         _log("ERRO: nenhum resultado de momentum")
         return
 
     momentum_scores = {a: d["momentum_score"] for a, d in momentum_results.items()}
 
-    # ── 3. Risco ─────────────────────────────────────────────────────────────
+    # ── 4. Risco ─────────────────────────────────────────────────────────────
+    # Usa BTC ou primeiro ativo disponível como referência para o IRQ
     ref = "BTC" if "BTC" in market_data else list(market_data.keys())[0]
     risk_analysis = RiskAnalyzer.calculate_irq(
         market_data[ref].get("prices", []),
@@ -122,7 +173,7 @@ async def run_cycle():
     irq_score  = risk_analysis["irq_score"]
     protection = RiskAnalyzer.get_protection_level(irq_score)
 
-    # ── 4. Alocação ──────────────────────────────────────────────────────────
+    # ── 5. Alocação ──────────────────────────────────────────────────────────
     allocation  = PortfolioManager.calculate_portfolio_allocation(
         momentum_scores, irq_score, capital,
         momentum_details=momentum_results,
@@ -131,7 +182,7 @@ async def run_cycle():
         allocation, momentum_results, capital, irq_score,
     )
 
-    # ── 5. Registrar posições e P&L ──────────────────────────────────────────
+    # ── 6. Registrar posições e P&L ──────────────────────────────────────────
     new_positions = {}
     cycle_pnl     = 0.0
     buys, sells = 0, 0
