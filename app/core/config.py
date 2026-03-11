@@ -204,11 +204,41 @@ class Settings:
     FOREX_PAIRS: List[str] = [
         "EURUSD", "GBPUSD", "USDJPY", "AUDUSD",
         "USDCAD", "USDCHF", "NZDUSD", "EURGBP",
+        # Pares com BRL — v5.2 (cobre movimentos do Real vs mundo)
+        "USDBRL", "EURBRL",
     ]
 
-    # Commodities (via Yahoo Finance: GC=F gold, SI=F silver, CL=F oil)
+    # Commodities (via Yahoo Finance futures =F) — v5.2 expandido com agro BR
     COMMODITIES: List[str] = [
-        "GOLD", "SILVER", "OIL", "NATGAS",
+        # Metais preciosos e industriais
+        "GOLD", "SILVER", "COBRE",
+        # Energia
+        "OIL", "NATGAS",
+        # Agronegócio — Brasil é top exportador = alta correlação com notícias BR
+        "CAFE", "SOJA", "MILHO", "ACUCAR", "TRIGO",
+        # Soft commodities
+        "CACAU",
+    ]
+
+    # ETFs Internacionais — NYSE-listed, track mercados globais — v5.2
+    # Opera durante sessão NYSE (13h30-20h BRT) e sessão Europa (05h-10h BRT)
+    INTL_ETFS: List[str] = [
+        # Europa (abertura 05h BRT, pico volume 09h-14h BRT)
+        "EWG",   # Alemanha (SAP, Siemens, BASF) — $3.5B AUM
+        "EWQ",   # França (LVMH, TotalEnergies)
+        "EWU",   # Reino Unido (Shell, HSBC)
+        "VGK",   # Europa amplo (Vanguard) — mais estável
+        # Ásia (preços overnight, compra/venda na abertura NYSE)
+        "EWJ",   # Japão (Toyota, Sony, SoftBank) — $11B AUM
+        "EWY",   # Coreia do Sul (Samsung, Hyundai)
+        "ASHR",  # China A-shares — muito volátil
+        "INDA",  # Índia (mercado em ascensão, alto crescimento)
+        "EWA",   # Austrália (recursos naturais, mineradoras)
+        # Brasil no exterior (track IBovespa em USD)
+        "EWZ",   # Brazil ETF — espelho do Ibovespa em dólar
+        # Global / Emergentes
+        "EFA",   # MSCI World ex-US (desenvolvidos fora EUA)
+        "EEM",   # Mercados emergentes (Brasil, Índia, China, Coreia)
     ]
 
     # Ações dos EUA — NYSE / NASDAQ (Yahoo Finance sem sufixo)
@@ -243,10 +273,11 @@ class Settings:
         "UVXY",                        # Volatilidade (VIX) — lucra em crises
     ]
 
-    # Todos os ativos (B3 + US + Crypto + Forex + Commodities)
+    # Todos os ativos (B3 + US + ETFs Int'l + Crypto + Forex + Commodities)
     @property
     def ALL_ASSETS(self) -> List[str]:
-        return self.ALLOWED_ASSETS + self.US_STOCKS + self.CRYPTO_ASSETS + self.FOREX_PAIRS + self.COMMODITIES
+        return (self.ALLOWED_ASSETS + self.US_STOCKS + self.INTL_ETFS
+                + self.CRYPTO_ASSETS + self.FOREX_PAIRS + self.COMMODITIES)
 
     # ── Capital Split BRL / USD ────────────────────────────────────────────
     # Bolsão BRL  → ações B3 (ALLOWED_ASSETS)

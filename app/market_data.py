@@ -110,10 +110,20 @@ _FOREX_SYMBOLS = {
 
 # Commodities — Yahoo Finance futures symbols
 _COMMODITY_YF_MAP = {
+    # Metais preciosos e industriais
     "GOLD":   "GC=F",
     "SILVER": "SI=F",
+    "COBRE":  "HG=F",     # Copper futures
+    # Energia
     "OIL":    "CL=F",
     "NATGAS": "NG=F",
+    # Agronegócio — v5.2 (CME Globex opera ~23h/dia — cobre madrugada BR)
+    "CAFE":   "KC=F",     # Coffee C futures
+    "SOJA":   "ZS=F",     # Soybean futures
+    "MILHO":  "ZC=F",     # Corn futures
+    "ACUCAR": "SB=F",     # Sugar #11 futures
+    "TRIGO":  "ZW=F",     # Wheat futures
+    "CACAU":  "CC=F",     # Cocoa futures
 }
 
 # US stocks set — populated at import time from settings (lazy to avoid circular import)

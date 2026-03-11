@@ -494,9 +494,10 @@ def _is_market_open() -> bool:
 def _current_session() -> tuple:
     """
     Retorna (assets, session_label) de acordo com o horário BRT:
-    - B3 aberta (seg-sex 10-17h)       → B3 + US + Crypto (todos os ativos)
-    - NYSE aberta fora B3 (13h30-20h)  → US Stocks + Crypto
-    - Fora de horário                  → somente Crypto 24/7
+    - B3 aberta (seg-sex 10-17h)          → B3 + US + Global (todos os ativos)
+    - NYSE aberta fora B3 (13h30-20h)     → US + ETFs Int'l + Crypto + Commodities
+    - Europa aberta (05h-10h BRT)         → ETFs Int'l + Forex + Crypto + Commodities
+    - Fora de horário  (20h-05h BRT)      → Crypto + Commodities agro (CME 23h/dia)
     """
     from datetime import timezone, timedelta
     brt = timezone(timedelta(hours=-3))
@@ -505,18 +506,31 @@ def _current_session() -> tuple:
     hour    = now.hour
     minute  = now.minute
 
-    b3_open  = weekday < 5 and 10 <= hour < 17
-    # NYSE abre 9h30 EST = 13h30 BRT (-3h do fuso de NY em horário de verão dos EUA)
+    b3_open   = weekday < 5 and 10 <= hour < 17
+    # NYSE abre 9h30 EST = 13h30 BRT
     nyse_open = weekday < 5 and (hour > 13 or (hour == 13 and minute >= 30)) and hour < 20
+    # Bolsas europeias: Frankfurt/Londres abrem ~09h/10h CET = 05h/06h BRT
+    europe_open = weekday < 5 and 5 <= hour < 10
+
+    _intl_etfs  = getattr(settings, "INTL_ETFS", [])
+    _commodities = settings.COMMODITIES
+    _forex       = settings.FOREX_PAIRS
 
     if b3_open:
         total = len(settings.ALL_ASSETS)
-        return settings.ALL_ASSETS, f"[BR] B3 + [US] US + [CRYPTO] ({total} ativos)"
+        return settings.ALL_ASSETS, f"[BR] B3 + [US] US + [GLOBAL] ({total} ativos)"
     elif nyse_open:
-        us_crypto = settings.US_STOCKS + settings.CRYPTO_ASSETS
-        return us_crypto, f"[US] NYSE + [CRYPTO] ({len(us_crypto)} ativos)"
+        # NYSE: US stocks + ETFs internacionais + Crypto + Commodities
+        us_global = settings.US_STOCKS + _intl_etfs + settings.CRYPTO_ASSETS + _commodities
+        return us_global, f"[US] NYSE + [GLOBAL] ETFs Int'l + [CRYPTO] ({len(us_global)} ativos)"
+    elif europe_open:
+        # Europa: ETFs internacionais + Forex + Crypto + Commodities
+        eu_session = _intl_etfs + _forex + settings.CRYPTO_ASSETS + _commodities
+        return eu_session, f"[EU] Europa + Forex + [CRYPTO] ({len(eu_session)} ativos)"
     else:
-        return settings.CRYPTO_ASSETS, f"[CRYPTO] 24/7 ({len(settings.CRYPTO_ASSETS)} ativos)"
+        # Noite / Ásia: Crypto + Commodities agro (CME Globex cobre madrugada)
+        overnight = settings.CRYPTO_ASSETS + _commodities
+        return overnight, f"[CRYPTO+AGRO] Noite/Ásia ({len(overnight)} ativos)"
 
 
 async def _auto_cycle_loop():
