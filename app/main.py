@@ -2405,6 +2405,12 @@ if _trade_state.get("total_pnl", 0.0) < -5:
     db_state.save_state("trade_state", _trade_state)
 # NOTA: NÃO sobrescrever capital salvo — respeitar o estado real do bot.
 # O default já cobre o primeiro boot (load_state usa _DEFAULT_TRADE_STATE quando não há estado).
+# FIX (2026-03-11): capital estava inflado por bug de reset -> corrigir para valor real
+# R$450 inicial + R$259.83 P&L acumulado = R$709.83
+if _trade_state.get("capital", 0) > 700:
+    _trade_state["capital"] = 709.83
+    db_state.save_state("trade_state", _trade_state)
+    print("[STARTUP] ✅ Capital corrigido para R$709.83 (450 inicial + 259.83 P&L real)", flush=True)
 
 # ── performance history ────────────────────────────────
 _DEFAULT_PERF: dict = {
