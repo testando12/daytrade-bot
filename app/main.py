@@ -441,7 +441,7 @@ def _effective_timeframe_alloc(irq_score: float) -> tuple:
         total_abs = abs(tf_recent["5m"]) + abs(tf_recent["1h"]) + abs(tf_recent["1d"])
         dom_1d = (abs(tf_recent["1d"]) / total_abs) if total_abs > 0 else 0.0
         if tf_recent["1d"] > 0 and dom_1d >= float(_strategy_state.get("alloc_dominance_threshold", 0.75)):
-            alloc = {"5m": 0.02, "1h": 0.20, "1d": 0.78}
+            alloc = {"5m": 0.02, "1h": 0.13, "1d": 0.85}  # v5.1: 1h reduzido (negativo), 1d boosted
             reasons.append(f"1d dominante ({dom_1d*100:.1f}%)")
         elif (tf_recent["5m"] + tf_recent["1h"]) > max(tf_recent["1d"], 0):
             alloc = {"5m": 0.05, "1h": 0.45, "1d": 0.50}
@@ -3031,7 +3031,9 @@ _protection_state: dict = {
     "peak_capital": settings.INITIAL_CAPITAL,  # pico do capital (p/ drawdown)
     "hard_stopped": False,          # drawdown extremo — só reset manual
     "trailing_highs": {},           # {asset: highest_price} para trailing stop
+    "sl_cooldown": {},              # v5.1: {asset: cycles_remaining} — cooldown após stop loss
 }
+_SL_COOLDOWN_CYCLES = 6  # v5.1: 6 ciclos (~60min) cooldown após stop loss no mesmo ativo
 
 
 def _update_protection(cycle_pnl: float, capital: float, mom_scores: dict):
@@ -3470,11 +3472,11 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         _regime_switch_active = True
         capital_5m = 0.0
         top_5m = []
-        capital_1h = round(capital_1h * 0.50, 2)  # reduz 1h em 50%
+        capital_1h = round(capital_1h * 0.25, 2)  # v5.1: reduz 1h em 75% (era 50%) — 1h negativo em NEUTRAL
         # O capital liberado será redirecionado via boost nos buckets MR e VR
         _trade_log("REGIME_SWITCH", "—", 0,
             f"🔄 Auto Regime Switch LATERAL: ADX={_adx_val:.1f} < 20 — "
-            f"5m=OFF, 1h×0.5, VR boost ×1.8, MR boost ×1.5")
+            f"5m=OFF, 1h×0.25, VR boost ×1.8, MR boost ×1.5")
 
     # Log regime + direction para visibilidade
     if _trend_dir == "down":
@@ -3736,6 +3738,11 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 atr_sl = max(0.002, min(atr_sl * sl_mult, 0.08))
                 atr_tp = max(0.003, min(atr_tp * tp_mult, 0.12))
 
+            # ── v5.1: Stop-Loss Cooldown — evita re-entrada após stop recente ──
+            _sl_cd = _protection_state.get("sl_cooldown", {}).get(asset, 0)
+            if _sl_cd > 0:
+                continue  # ativo em cooldown após stop loss
+
             # Kelly + sinais avançados: ajustar tamanho pelo score + sentiment/orderbook
             score = 0.5
             if mom_data and asset in mom_data:
@@ -3745,11 +3752,11 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             if score < 0.58:
                 continue
 
-            # ── v5.0 Nível 2 #5: Filtro RSI no 1h — evita comprar overbought ──
-            # 1h gera 85% do lucro, mas perde quando entra com RSI alto (>55 = sobrecomprado)
+            # ── v5.1 Filtro RSI no 1h — evita comprar overbought ──
+            # 1h está negativo recente → RSI de 55→50 para ser mais seletivo
             if tf_name == "1h" and mom_data and asset in mom_data:
                 _asset_rsi = mom_data[asset].get("rsi", 50.0)
-                if _asset_rsi > 55.0 and ret > 0:
+                if _asset_rsi > 50.0 and ret > 0:
                     # RSI overbought + sinal de compra → skip (provavelmente topo)
                     continue
 
@@ -3799,6 +3806,8 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                 _trade_log("STOP_LOSS_ATR", asset, amt,
                     f"🛑 ATR Stop Loss {asset}: {ret*100:.2f}% (ATR SL={atr_sl*100:.2f}%)")
                 _protection_state["trailing_highs"].pop(asset, None)
+                # v5.1: Cooldown — não re-entrar neste ativo por N ciclos
+                _protection_state["sl_cooldown"][asset] = _SL_COOLDOWN_CYCLES
 
             # ── Partial Take Profit — realiza 50% no primeiro alvo ───────
             partial_pnl = 0.0
@@ -3927,6 +3936,14 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     # Atualizar estado de proteção (consecutivas, drawdown, etc.)
     _update_protection(cycle_pnl, capital, _all_mom_scores)
+
+    # v5.1: Decrementar cooldown de stop-loss por ativo
+    _sl_cd = _protection_state.get("sl_cooldown", {})
+    _expired = [a for a, c in _sl_cd.items() if c <= 1]
+    for a in _expired:
+        _sl_cd.pop(a)
+    for a in list(_sl_cd.keys()):
+        _sl_cd[a] -= 1
 
     # Verificar pausa inteligente (pode retornar 0.0 = pausado, ou fator parcial)
     _pause_mult = _check_smart_pause(_today_pnl, _week_pnl, capital, _all_mom_scores)
