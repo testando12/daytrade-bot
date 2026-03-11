@@ -2403,10 +2403,8 @@ _trade_state: dict = db_state.load_state("trade_state", dict(_DEFAULT_TRADE_STAT
 if _trade_state.get("total_pnl", 0.0) < -5:
     _trade_state["total_pnl"] = 0.0
     db_state.save_state("trade_state", _trade_state)
-# Se o capital salvo for menor que o capital configurado, atualiza para o maior
-if _trade_state.get("capital", 0) < settings.INITIAL_CAPITAL:
-    _trade_state["capital"] = settings.INITIAL_CAPITAL
-    db_state.save_state("trade_state", _trade_state)
+# NOTA: NÃO sobrescrever capital salvo — respeitar o estado real do bot.
+# O default já cobre o primeiro boot (load_state usa _DEFAULT_TRADE_STATE quando não há estado).
 
 # ── performance history ────────────────────────────────
 _DEFAULT_PERF: dict = {
