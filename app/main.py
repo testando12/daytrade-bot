@@ -211,7 +211,8 @@ _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 # Alocação por timeframe: SHORT 2% + MEDIUM 28% + LONG 28% + MR 8% + BO 6% + SQ 5% + LS 2% + FVG 2% + VR 10% + PB 9% = 100%
 # v5.0 (otimização capital baixo): 1h gera 85% do lucro → boost 20%→28%, 5m drenou → 8%→2%, 1d 30%→28%
 # VR excela em lateral (ADX<20), PB excela em tendência (ADX>25) — sistema complementar
-_TIMEFRAME_ALLOC   = {"5m": 0.02, "1h": 0.28, "1d": 0.28}
+# 1d é o motor de lucro (R$47 vs R$2 do 1h e R$0.6 do 5m) → boost 1d, reduz 5m
+_TIMEFRAME_ALLOC   = {"5m": 0.01, "1h": 0.25, "1d": 0.40}
 _MR_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Mean Reversion
 _BO_ALLOC_PCT      = 0.06   # capital dedicado ao bucket de Breakout
 _SQ_ALLOC_PCT      = 0.05   # capital dedicado ao bucket de Squeeze (Volatility Compression)
@@ -3432,10 +3433,12 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
 
     # ── 1. Buscar dados para os 3 timeframes ─────────────────────────────
     klines_by_tf: dict = {"5m": None, "1h": None, "1d": None}
+    # 100 candles: mínimo para ADX (42), Hurst (20) e ATR (20) funcionarem corretamente
+    _TF_CANDLES = {"5m": 100, "1h": 100, "1d": 100}
     if MARKET_DATA_AVAILABLE and market_data_service:
         for tf in ("5m", "1h", "1d"):
             try:
-                k = await market_data_service.get_all_klines(all_assets, tf, 25)
+                k = await market_data_service.get_all_klines(all_assets, tf, _TF_CANDLES[tf])
                 if k:
                     klines_by_tf[tf] = k
                     data_source = "brapi/yahoo"
@@ -3837,6 +3840,14 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             else:
                 # Sem dados suficientes, limpa trailing
                 _protection_state["trailing_highs"].pop(asset, None)
+
+            # ── SL fixo -2% para swing 1d — proteção mínima overnight ────
+            if tf_name == "1d" and ret <= -0.02:
+                ret = -0.02
+                _trade_log("STOP_LOSS_1D", asset, amt,
+                    f"🛑 SL Swing 1d {asset}: -2% atingido — saindo posição swing")
+                _protection_state["trailing_highs"].pop(asset, None)
+                _protection_state["sl_cooldown"][asset] = _SL_COOLDOWN_CYCLES
 
             # ── ATR Stop Loss (adaptativo) — substitui SL fixo ──────────
             if ret <= -atr_sl:
