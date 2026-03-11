@@ -91,7 +91,7 @@ class Settings:
 
     # Ciclos rápidos: intervalo em minutos para crypto fora do horário B3
     CRYPTO_CYCLE_MINUTES: int = int(os.getenv("CRYPTO_CYCLE_MINUTES", "10"))
-    B3_CYCLE_MINUTES: int = int(os.getenv("B3_CYCLE_MINUTES", "30"))
+    B3_CYCLE_MINUTES: int = int(os.getenv("B3_CYCLE_MINUTES", "10"))  # era 30, reduzido para capturar movimentos intraday
 
     # Banco de Dados
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./data/daytrade.db")

@@ -533,6 +533,22 @@ def _current_session() -> tuple:
         return overnight, f"[CRYPTO+AGRO] Noite/Ásia ({len(overnight)} ativos)"
 
 
+def _align_to_candle_close(min_wait_sec: int, candle_minutes: int = 5) -> int:
+    """Retorna segundos até o próximo fechamento de candle >= min_wait_sec.
+    Assim o bot sempre opera sobre candles completos (nunca candle incompleto).
+    Exemplo: ciclo de 10min, candle 5m → dorme até o próximo fechamento 5m que
+    esteja a pelo menos 10min de distância.
+    """
+    candle_sec = candle_minutes * 60
+    now = datetime.now()
+    elapsed_in_candle = (now.minute * 60 + now.second) % candle_sec
+    to_next_close = candle_sec - elapsed_in_candle
+    # Avança para o próximo fechamento que respeita o intervalo mínimo
+    while to_next_close < min_wait_sec:
+        to_next_close += candle_sec
+    return to_next_close
+
+
 async def _auto_cycle_loop():
     """Loop interno do scheduler: executa ciclos de trading automaticamente."""
     global _last_reinvestment_date, _last_daily_summary_date, _consecutive_errors
@@ -670,7 +686,15 @@ async def _auto_cycle_loop():
                     error_type="CICLO_FALHOU"
                 ))
 
-        await asyncio.sleep(interval_sec)
+        # Alinha o sleep ao fechamento do próximo candle 5m >= interval_sec
+        # Garante que o próximo ciclo sempre opera sobre candle completo
+        if interval_sec >= 60:  # só alinha se não for turbo (turbo=2min, menor que 1 candle)
+            aligned_sec = _align_to_candle_close(interval_sec, candle_minutes=5)
+            if aligned_sec != interval_sec:
+                print(f"[scheduler] ⏱ Alinhando candle: dormindo {aligned_sec}s (era {interval_sec}s)", flush=True)
+            await asyncio.sleep(aligned_sec)
+        else:
+            await asyncio.sleep(interval_sec)
 
       except asyncio.CancelledError:
         print("[scheduler] Task cancelada.", flush=True)
