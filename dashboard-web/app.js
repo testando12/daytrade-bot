@@ -2417,28 +2417,62 @@ async function loadTradePage() {
       if (!posEntries.length) {
         miniEl.innerHTML = `<div class="empty-state" style="padding:16px"><p style="font-size:12px">Sem posições</p><p style="font-size:11px;color:var(--text-muted);margin-top:6px">${noPosReason}</p></div>`;
       } else {
+        const fmtAge = (entryTime) => {
+          if (!entryTime) return '—';
+          const diff = Math.floor((Date.now() - new Date(entryTime)) / 1000);
+          if (diff < 60) return `${diff}s`;
+          if (diff < 3600) return `${Math.floor(diff/60)}min`;
+          if (diff < 86400) return `${Math.floor(diff/3600)}h${Math.floor((diff%3600)/60)}min`;
+          return `${Math.floor(diff/86400)}d ${Math.floor((diff%86400)/3600)}h`;
+        };
         miniEl.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
-          .map(([asset, p]) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)">
-              <span style="font-weight:700;font-size:13px">${asset}</span>
-              <span style="font-size:12px;color:var(--text-muted)">${p.pct}%</span>
-              <span style="font-size:13px;color:var(--text-primary)">${fmtMoney(p.amount)}</span>
-              ${actionBadge(p.action)}
-            </div>`).join('');
+          .map(([asset, p]) => {
+            const chg = p.change_pct != null ? p.change_pct : null;
+            const chgColor = chg == null ? 'var(--text-muted)' : chg >= 0 ? 'var(--green)' : 'var(--red)';
+            const chgStr  = chg == null ? '—' : (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+            const age = fmtAge(p.entry_time);
+            const tf  = p.tf ? `<span style="font-size:10px;color:var(--text-muted);background:var(--bg-tertiary);padding:1px 5px;border-radius:4px">${p.tf}</span>` : '';
+            return `
+            <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-weight:700;font-size:14px">${asset}</span>
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${fmtMoney(p.amount)}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+                <div style="display:flex;gap:6px;align-items:center">
+                  ${tf}
+                  <span style="font-size:11px;color:var(--text-muted)">⏱ ${age}</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <span style="font-size:12px;color:${chgColor};font-weight:600">${chgStr}</span>
+                  <span style="font-size:11px;color:var(--text-muted)">${p.pct}%</span>
+                  ${actionBadge(p.action)}
+                </div>
+              </div>
+            </div>`;
+          }).join('');
       }
     }
 
     // Positions table
     const tbody = document.getElementById('trade-positions-tbody');
     if (tbody) {
+      const fmtAgeTable = (entryTime) => {
+        if (!entryTime) return '—';
+        const diff = Math.floor((Date.now() - new Date(entryTime)) / 1000);
+        if (diff < 60) return `${diff}s`;
+        if (diff < 3600) return `${Math.floor(diff/60)}min`;
+        if (diff < 86400) return `${Math.floor(diff/3600)}h ${Math.floor((diff%3600)/60)}min`;
+        return `${Math.floor(diff/86400)}d ${Math.floor((diff%86400)/3600)}h`;
+      };
       if (!posEntries.length) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted)">Sem posições — ${noPosReason}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text-muted)">Sem posições — ${noPosReason}</td></tr>`;
       } else {
         tbody.innerHTML = posEntries
           .sort(([, a], [, b]) => b.amount - a.amount)
           .map(([asset, p]) => `<tr>
-            <td><strong>${asset}</strong></td>
+            <td><strong>${asset}</strong>${p.tf ? ` <span style="font-size:10px;color:var(--text-muted);background:var(--bg-tertiary);padding:1px 5px;border-radius:4px">${p.tf}</span>` : ''}</td>
             <td>${classifBadge(p.classification || p.action)}</td>
             <td style="font-weight:700">${fmtMoney(p.amount)}</td>
             <td>
@@ -2449,7 +2483,8 @@ async function loadTradePage() {
                 <span style="font-size:12px;color:var(--text-muted)">${p.pct}%</span>
               </div>
             </td>
-            <td class="${(p.change_pct || 0) >= 0 ? 'text-green' : 'text-red'}">${p.change_pct != null ? (p.change_pct >= 0 ? '+' : '') + p.change_pct.toFixed(1) + '%' : '—'}</td>
+            <td class="${(p.change_pct || 0) >= 0 ? 'text-green' : 'text-red'}" style="font-weight:600">${p.change_pct != null ? (p.change_pct >= 0 ? '+' : '') + p.change_pct.toFixed(2) + '%' : '—'}</td>
+            <td style="color:var(--text-muted);font-size:12px">⏱ ${fmtAgeTable(p.entry_time)}</td>
             <td>${actionBadge(p.action)}</td>
           </tr>`).join('');
       }

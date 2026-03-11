@@ -4050,6 +4050,16 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "pb",
                 "pct": round(info["amount"]/capital*100, 1), "classification": f"PYRAMID_BO_{pb_dir}_L{_pb_lvl}", "change_pct": info["ret_pct"]}
 
+    # Preserva entry_time e entry_price das posições anteriores (não sobrescreve)
+    for asset, pos in new_positions.items():
+        prev = prev_positions.get(asset, {})
+        if isinstance(prev, dict):
+            pos["entry_time"]  = prev.get("entry_time",  _brt_now().isoformat())
+            pos["entry_price"] = prev.get("entry_price", pos.get("entry_price", None))
+        else:
+            pos["entry_time"]  = _brt_now().isoformat()
+            pos["entry_price"] = pos.get("entry_price", None)
+
     _trade_state["positions"] = new_positions
     if len(new_positions) == 0:
         _trade_state["last_no_position_reason"] = no_position_reason or "Sem oportunidade com risco/retorno aceitável neste ciclo."
