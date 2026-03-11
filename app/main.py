@@ -89,7 +89,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 # Endpoints que NÃO precisam de autenticação (públicos)
 _PUBLIC_ENDPOINTS = {
     "/", "/health", "/diagnostics", "/docs", "/openapi.json", "/redoc",
-    "/ui", "/dashboard", "/simulador", "/tmp-fix-capital-664",
+    "/ui", "/dashboard", "/simulador",
 }
 # Prefixos públicos (static files, etc)
 _PUBLIC_PREFIXES = ("/ui/",)
@@ -1117,14 +1117,6 @@ async def api_status():
     }
 
 
-# TEMP endpoint (2026-03-11): corrigir capital sem restart — REMOVER APÓS USO
-@app.get("/tmp-fix-capital-664")
-async def tmp_fix_capital():
-    _trade_state["capital"] = 664.0
-    _trade_state["total_pnl"] = 214.0
-    _trade_state["_capital_fixed_20260311c"] = True
-    db_state.save_state("trade_state", _trade_state)
-    return {"ok": True, "capital": 664.0, "total_pnl": 214.0, "msg": "Capital e P&L corrigidos"}
 
 @app.get("/health")
 async def health_check():
