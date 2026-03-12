@@ -89,7 +89,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 # Endpoints que NÃO precisam de autenticação (públicos)
 _PUBLIC_ENDPOINTS = {
     "/", "/health", "/diagnostics", "/docs", "/openapi.json", "/redoc",
-    "/ui", "/dashboard", "/simulador",
+    "/ui", "/dashboard", "/simulador", "/backup-state",
 }
 # Prefixos públicos (static files, etc)
 _PUBLIC_PREFIXES = ("/ui/",)
@@ -1118,6 +1118,26 @@ async def api_status():
 
 
 
+
+@app.get("/backup-state")
+async def backup_state():
+    """Retorna snapshot completo do estado atual (trade + performance).
+    Chamar SEMPRE antes de qualquer modificação manual de dados.
+    """
+    import copy
+    return {
+        "timestamp": _brt_now().isoformat(),
+        "trade_state": copy.deepcopy(_trade_state),
+        "perf_state": {
+            "total_pnl_offset": _perf_state.get("total_pnl_offset", 0.0),
+            "total_gain": _perf_state.get("total_gain", 0.0),
+            "total_loss": _perf_state.get("total_loss", 0.0),
+            "win_count": _perf_state.get("win_count", 0),
+            "loss_count": _perf_state.get("loss_count", 0),
+            "cycles_count": len(_perf_state.get("cycles", [])),
+            "cycles": _perf_state.get("cycles", []),
+        },
+    }
 
 @app.get("/health")
 async def health_check():
