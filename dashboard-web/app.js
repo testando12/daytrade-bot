@@ -68,7 +68,6 @@ function showDashboard() {
 
 async function handleLogin(e) {
   e.preventDefault();
-  console.log('[LOGIN] handleLogin started');
   const input = document.getElementById('login-key');
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-error');
@@ -78,17 +77,14 @@ async function handleLogin(e) {
   btn.textContent = 'Verificando...';
   err.textContent = '';
   try {
-    console.log('[LOGIN] fetching', API_BASE + '/trade/status');
     const res2 = await fetch(`${API_BASE}/trade/status`, {
       headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
     });
-    console.log('[LOGIN] response status:', res2.status);
     if (res2.status === 401 || res2.status === 403) {
       err.textContent = `API Key inválida para ${API_BASE}. Verifique e tente novamente.`;
     } else if (!res2.ok) {
       err.textContent = `Erro do servidor (${res2.status}). Tente novamente.`;
     } else {
-      console.log('[LOGIN] success! showing dashboard');
       setApiKey(key);
       showDashboard();
       checkApiConnection();
@@ -274,7 +270,6 @@ function _updateCountdownEl(val) {
 // =============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log('[PWD] app.js loaded, API_BASE =', API_BASE);
   // Bind login form via JS as backup for inline handler
   const loginForm = document.getElementById('login-form');
   if (loginForm) loginForm.addEventListener('submit', handleLogin);
