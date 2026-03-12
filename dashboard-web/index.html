@@ -8,7 +8,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=19" />
+  <link rel="stylesheet" href="style.css?v=20" />
+<script>
+// Debug: prova que JS inline funciona
+console.log('[DEBUG] inline script OK');
+window._jsWorks = true;
+</script>
 </head>
 <body>
 
@@ -1813,6 +1818,52 @@
 <div class="toast-container" id="toast-container"></div>
 
 <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="app.js?v=19"></script>
+<script src="app.js?v=20"></script>
+<script>
+// Fallback: se app.js não definiu handleLogin, cria um básico
+(function() {
+  console.log('[DEBUG] fallback script running, handleLogin exists:', typeof handleLogin);
+  var form = document.getElementById('login-form');
+  if (!form) { console.error('[DEBUG] form not found!'); return; }
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[DEBUG] form submit captured');
+    if (typeof handleLogin === 'function') {
+      handleLogin(e);
+    } else {
+      // Fallback login inline
+      var key = document.getElementById('login-key').value.trim();
+      var btn = document.getElementById('login-btn');
+      var err = document.getElementById('login-error');
+      if (!key) { err.textContent = 'Digite a API Key.'; return; }
+      btn.disabled = true;
+      btn.textContent = 'Verificando...';
+      err.textContent = '';
+      var base = window.location.origin;
+      fetch(base + '/trade/status', {
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': key }
+      }).then(function(res) {
+        if (res.status === 401 || res.status === 403) {
+          err.textContent = 'API Key inválida.';
+        } else if (res.ok) {
+          localStorage.setItem('dt_api_key', key);
+          document.getElementById('login-screen').classList.add('hidden');
+          document.getElementById('app-layout').style.display = '';
+          window.location.reload();
+        } else {
+          err.textContent = 'Erro do servidor (' + res.status + ')';
+        }
+      }).catch(function(ex) {
+        err.textContent = 'Erro de conexão: ' + ex.message;
+        console.error('[DEBUG] login fetch error:', ex);
+      }).finally(function() {
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      });
+    }
+  });
+})();
+</script>
 </body>
 </html>
