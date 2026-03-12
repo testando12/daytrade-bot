@@ -3,23 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simulador — Day Trade Bot</title>
+  <title>Simulador — PWD Trading</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
     :root {
-      --bg: #0d1117;
-      --bg2: #161b22;
-      --bg3: #1c2128;
-      --bg4: #21262d;
-      --border: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --dimmed: #6e7681;
-      --green: #3fb950;
-      --red: #f85149;
-      --yellow: #d29922;
-      --blue: #388bfd;
-      --orange: #db6d28;
+      --bg: #f5f5f7;
+      --bg2: #ffffff;
+      --bg3: #ffffff;
+      --bg4: #f0f0f4;
+      --border: rgba(0,0,0,0.08);
+      --text: #1a1a2e;
+      --muted: #6b7280;
+      --dimmed: #9ca3af;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --blue: #3b82f6;
+      --orange: #f97316;
       --radius: 8px;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -120,7 +120,7 @@
     }
     .btn:hover { opacity: 0.85; }
     .btn:active { transform: scale(0.98); }
-    .btn-primary { background: #1f6feb; color: #fff; }
+    .btn-primary { background: #f97316; color: #fff; }
     .btn-danger  { background: var(--red); color: #fff; }
     .btn-ghost {
       background: transparent; color: var(--muted);
@@ -134,7 +134,7 @@
     }
     .btn-test:hover { border-color: var(--blue); color: var(--blue); }
     .btn-run {
-      width: 100%; background: #1f6feb; color: #fff;
+      width: 100%; background: #f97316; color: #fff;
       font-size: 14px; padding: 10px 16px; margin-top: 4px;
     }
 
@@ -215,8 +215,8 @@
     /* ── SPINNER ── */
     .spin {
       display: inline-block; width: 14px; height: 14px;
-      border: 2px solid rgba(255,255,255,.2);
-      border-top-color: #fff; border-radius: 50%;
+      border: 2px solid rgba(0,0,0,.15);
+      border-top-color: #3b82f6; border-radius: 50%;
       animation: spin .7s linear infinite;
       vertical-align: middle;
     }
@@ -238,7 +238,7 @@
     <span class="header-logo">🧪</span>
     <div>
       <div class="header-title">Simulador</div>
-      <div class="header-subtitle">Day Trade Bot — Testes &amp; Simulações</div>
+      <div class="header-subtitle">PWD Trading — Testes &amp; Simulações</div>
     </div>
   </div>
   <div class="header-right">

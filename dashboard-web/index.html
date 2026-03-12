@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Day Trade Bot</title>
+  <title>PWD Trading</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -24,8 +24,8 @@
 <div id="login-screen" class="login-overlay">
   <div class="login-card">
     <div class="login-logo">
-      <span class="login-logo-icon"><i class="fas fa-chart-line"></i></span>
-      <h1>Day<span class="login-accent">Trade</span> Bot</h1>
+      <img src="logo.png" alt="PWD Trading" class="login-logo-img" style="width:72px;height:72px;object-fit:contain;border-radius:12px;margin-bottom:8px" onerror="this.style.display='none'" />
+      <h1>PWD<span class="login-accent"> Trading</span></h1>
     </div>
     <p class="login-subtitle">Insira sua API Key para acessar o painel</p>
     <form id="login-form" onsubmit="handleLogin(event)">
@@ -50,8 +50,8 @@
   <aside class="sidebar" id="sidebar">
 
     <a class="sidebar-logo" href="#" onclick="navigate('dashboard')">
-      <div class="logo-icon"><i class="fas fa-chart-line"></i></div>
-      <div class="logo-text">Day<span>Trade</span> Bot</div>
+      <div class="logo-icon"><img src="logo.png" alt="PWD" style="width:28px;height:28px;object-fit:contain;border-radius:6px" onerror="this.style.display='none';this.parentElement.innerHTML='<i class=\'fas fa-cube\'></i>'" /></div>
+      <div class="logo-text">PWD<span> Trading</span></div>
     </a>
 
     <nav class="sidebar-nav">
@@ -169,7 +169,7 @@
         <span></span><span></span><span></span>
       </button>
       <div class="topbar-breadcrumb">
-        <span class="hide-mobile">DayTrade Bot</span>
+        <span class="hide-mobile">PWD Trading</span>
         <span class="hide-mobile" style="color:var(--border)">›</span>
         <span class="current" id="topbar-page-name">Dashboard</span>
         <span id="topbar-countdown" style="font-size:11px;margin-left:8px;font-variant-numeric:tabular-nums;"></span>
@@ -252,7 +252,7 @@
           <div class="widget-card">
             <div class="widget-header">
               <span class="widget-title">Capital Total</span>
-              <i class="fas fa-wallet" style="font-size:11px;color:rgba(255,255,255,0.3)"></i>
+              <i class="fas fa-wallet" style="font-size:11px;color:rgba(26,26,46,0.3)"></i>
             </div>
             <div class="widget-big-value" id="kpi-capital">R$ --</div>
             <div class="widget-footer">
@@ -304,7 +304,7 @@
             <div id="dash-todo-expanded" style="display:none;height:100%;flex-direction:column;gap:8px;overflow:hidden">
               <div class="widget-header">
                 <span class="widget-title">Para Você</span>
-                <i class="fas fa-times dash-todo-close" style="cursor:pointer;color:rgba(255,255,255,0.5);font-size:16px"></i>
+                <i class="fas fa-times dash-todo-close" style="cursor:pointer;color:rgba(26,26,46,0.5);font-size:16px"></i>
               </div>
               <div class="todo-tabs" id="dash-todo-tabs">
                 <button class="todo-tab active" data-filter="all">Todos</button>
@@ -349,7 +349,7 @@
               <i class="fas fa-sync-alt widget-link" onclick="loadMarketPrices()" style="cursor:pointer"></i>
             </div>
             <div class="crypto-list" id="dash-prices-list">
-              <div style="text-align:center;padding:20px;color:rgba(255,255,255,0.3)"><div class="spinner"></div></div>
+              <div style="text-align:center;padding:20px;color:rgba(26,26,46,0.3)"><div class="spinner"></div></div>
             </div>
             <div class="crypto-dots">
               <span class="dot active"></span><span class="dot"></span>
@@ -379,7 +379,7 @@
           <div class="widget-card dash-meta-widget">
             <div class="widget-header">
               <span class="widget-title">Meta Diária</span>
-              <i class="fas fa-info-circle" style="font-size:11px;color:rgba(255,255,255,0.3)"></i>
+              <i class="fas fa-info-circle" style="font-size:11px;color:rgba(26,26,46,0.3)"></i>
             </div>
             <span class="bills-sublabel"><i class="fas fa-bullseye"></i> R$ 100/dia · reseta 00:00 BRT</span>
             <div class="bills-list">
@@ -797,7 +797,7 @@
           </div>
 
           <div class="cards-grid cards-2" style="gap:12px">
-            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px">
+            <div style="background:rgba(0,0,0,0.03);border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:12px">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
                 <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px">Limites de Segurança (LIVE)</div>
                 <div style="display:flex;align-items:center;gap:8px">
@@ -810,32 +810,32 @@
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Alavanca Máx</span>
-                  <input id="pre-max-lev" type="number" min="1" max="10" step="1" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:7px 10px;border-radius:6px;font-size:13px" />
+                  <input id="pre-max-lev" type="number" min="1" max="10" step="1" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);color:#1a1a2e;padding:7px 10px;border-radius:6px;font-size:13px" />
                 </label>
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Stop Diário (R$)</span>
-                  <input id="pre-daily-stop" type="number" min="10" step="10" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:7px 10px;border-radius:6px;font-size:13px" />
+                  <input id="pre-daily-stop" type="number" min="10" step="10" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);color:#1a1a2e;padding:7px 10px;border-radius:6px;font-size:13px" />
                 </label>
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Risco Máx por Trade (%)</span>
-                  <input id="pre-max-risk-pct" type="number" min="0.5" max="20" step="0.5" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:7px 10px;border-radius:6px;font-size:13px" />
+                  <input id="pre-max-risk-pct" type="number" min="0.5" max="20" step="0.5" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);color:#1a1a2e;padding:7px 10px;border-radius:6px;font-size:13px" />
                 </label>
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Ciclos mínimos (paper)</span>
-                  <input id="pre-min-cycles" type="number" min="20" step="10" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:7px 10px;border-radius:6px;font-size:13px" />
+                  <input id="pre-min-cycles" type="number" min="20" step="10" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);color:#1a1a2e;padding:7px 10px;border-radius:6px;font-size:13px" />
                 </label>
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Profit Factor mínimo</span>
-                  <input id="pre-min-pf" type="number" min="1.0" max="5.0" step="0.1" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:7px 10px;border-radius:6px;font-size:13px" />
+                  <input id="pre-min-pf" type="number" min="1.0" max="5.0" step="0.1" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);color:#1a1a2e;padding:7px 10px;border-radius:6px;font-size:13px" />
                 </label>
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Drawdown máx (%)</span>
-                  <input id="pre-max-dd" type="number" min="2" max="40" step="0.5" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:7px 10px;border-radius:6px;font-size:13px" />
+                  <input id="pre-max-dd" type="number" min="2" max="40" step="0.5" style="background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);color:#1a1a2e;padding:7px 10px;border-radius:6px;font-size:13px" />
                 </label>
               </div>
             </div>
 
-            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px">
+            <div style="background:rgba(0,0,0,0.03);border:1px solid rgba(0,0,0,0.08);border-radius:10px;padding:12px">
               <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Checklist Obrigatório</div>
               <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;color:var(--text-primary)">
                 <label style="display:flex;align-items:center;gap:8px"><input id="pre-ack-liquidation" type="checkbox" /> Entendo risco de liquidação e vou respeitar stop diário</label>
@@ -1000,7 +1000,7 @@
             </div>
           </div>
           <!-- Reinvestimento info -->
-          <div id="trade-reinvest-info" style="display:none;text-align:center;padding:6px 12px;background:rgba(255,255,255,0.04);border-radius:6px;margin:8px;font-size:11px;color:var(--text-muted)">
+          <div id="trade-reinvest-info" style="display:none;text-align:center;padding:6px 12px;background:rgba(0,0,0,0.03);border-radius:6px;margin:8px;font-size:11px;color:var(--text-muted)">
             💰 Reinvestimento automático ativo — lucros reinvestidos ao final de cada dia às 17h BRT
           </div>
         </div>
@@ -1356,7 +1356,7 @@
             <button class="btn btn-primary" onclick="applyApiUrl()">Conectar</button>
           </div>
           <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">
-            URL base da API FastAPI do Day Trade Bot
+            URL base da API FastAPI do PWD Trading
           </div>
         </div>
 
