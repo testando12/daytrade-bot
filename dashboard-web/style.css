@@ -1827,6 +1827,9 @@ tbody tr:last-child {
   background: #0c0c10;
   z-index: 9999;
 }
+.login-overlay.hidden {
+  display: none;
+}
 .login-card {
   width: 100%;
   max-width: 400px;

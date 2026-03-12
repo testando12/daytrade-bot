@@ -68,6 +68,7 @@ function showDashboard() {
 
 async function handleLogin(e) {
   e.preventDefault();
+  console.log('[LOGIN] handleLogin started');
   const input = document.getElementById('login-key');
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-error');
@@ -77,15 +78,17 @@ async function handleLogin(e) {
   btn.textContent = 'Verificando...';
   err.textContent = '';
   try {
-    // Testa endpoint protegido com a chave
+    console.log('[LOGIN] fetching', API_BASE + '/trade/status');
     const res2 = await fetch(`${API_BASE}/trade/status`, {
       headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
     });
+    console.log('[LOGIN] response status:', res2.status);
     if (res2.status === 401 || res2.status === 403) {
       err.textContent = `API Key inválida para ${API_BASE}. Verifique e tente novamente.`;
     } else if (!res2.ok) {
       err.textContent = `Erro do servidor (${res2.status}). Tente novamente.`;
     } else {
+      console.log('[LOGIN] success! showing dashboard');
       setApiKey(key);
       showDashboard();
       checkApiConnection();
@@ -94,8 +97,8 @@ async function handleLogin(e) {
       startHealthMonitor();
     }
   } catch (ex) {
+    console.error('[LOGIN] error:', ex);
     err.textContent = 'Erro de conexão. Verifique se a API está online.';
-    console.error('Login error:', ex);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Entrar';
