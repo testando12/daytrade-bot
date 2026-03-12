@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=30" />
+  <link rel="stylesheet" href="style.css?v=31" />
 </head>
 <body>
 
@@ -748,8 +748,8 @@
         <div class="page-subtitle">Deposite capital, controle o bot e acompanhe todas as operações</div>
 
         <!-- Status Bar -->
-        <div class="card mb-16" style="padding:12px 18px">
-          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div class="card mb-16 trade-status-bar" style="padding:12px 18px">
+          <div class="trade-status-row" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font-size:12px;color:var(--text-muted)">STATUS BOT:</span>
               <span id="trade-bot-badge" class="badge badge-gray">—</span>
@@ -770,9 +770,9 @@
               <span style="font-size:12px;color:var(--text-muted)">ÚLTIMO CICLO:</span>
               <span id="trade-last-cycle" style="font-size:12px;color:var(--text-muted)">—</span>
             </div>
-            <div style="margin-left:auto;display:flex;gap:8px">
+            <div class="trade-actions" style="margin-left:auto;display:flex;gap:8px">
               <button class="btn btn-secondary" onclick="loadTradePage()">↻ Atualizar</button>
-              <button id="trade-toggle-btn" class="btn btn-primary" onclick="toggleTrading()">▶ Iniciar Bot</button>
+              <button id="trade-toggle-btn" class="btn btn-primary" onclick="toggleTrading()">▶ Pausar Bot</button>
               <button class="btn btn-secondary" onclick="runTradeCycle()">🔄 Executar Ciclo</button>
             </div>
           </div>
@@ -780,7 +780,7 @@
 
         <!-- Pré-Real Gate -->
         <div class="card mb-16" id="pre-real-card" style="padding:16px 18px">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <div class="pre-real-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
             <div style="display:flex;align-items:center;gap:10px">
               <i class="fas fa-flask" style="font-size:18px;color:var(--accent-green)"></i>
               <span style="font-size:15px;font-weight:700">Modo Pré-Real (Trava de Segurança)</span>
@@ -807,7 +807,7 @@
                   </label>
                 </div>
               </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="trade-input-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <label style="display:flex;flex-direction:column;gap:5px">
                   <span style="font-size:11px;color:var(--text-muted)">Alavanca Máx</span>
                   <input id="pre-max-lev" type="number" min="1" max="10" step="1" style="background:rgba(255,255,255,0.04);border:1px solid #23232e;color:#e2e2ea;padding:7px 10px;border-radius:6px;font-size:13px" />

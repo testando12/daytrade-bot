@@ -773,6 +773,8 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
 .mais-item-logout .mais-icon { color: var(--red); }
 
 /* ─── 31. RESPONSIVE ─── */
+
+/* --- Tablet (≤1200px) --- */
 @media (max-width: 1200px) {
   .dash-grid { grid-template-columns: repeat(2, 1fr); }
   .dash-chart-widget { grid-column: span 2; }
@@ -784,12 +786,15 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
   .cards-5 { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* --- Mobile (≤768px) --- */
 @media (max-width: 768px) {
-  :root { --sidebar-w: 0px; }
+  :root { --sidebar-w: 0px; --topbar-h: 48px; }
+
+  /* Sidebar: off-canvas drawer */
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0;
-    width: 220px; transform: translateX(-100%);
-    z-index: 100;
+    width: 260px; transform: translateX(-100%);
+    z-index: 100; transition: transform .25s ease;
   }
   .sidebar.mobile-open { transform: translateX(0); }
   .sidebar.mobile-open .nav-label { display: inline; }
@@ -801,10 +806,11 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
   .sidebar.mobile-open .sidebar-collapse-btn { display: none; }
   .sidebar.mobile-open #sidebar-api-label { display: inline; }
 
+  /* Hamburger button */
   .hamburger-btn {
     display: flex; flex-direction: column; justify-content: center; gap: 4px;
-    width: 28px; height: 28px; background: none; border: none; padding: 4px;
-    cursor: pointer;
+    width: 32px; height: 32px; background: none; border: none; padding: 4px;
+    cursor: pointer; flex-shrink: 0;
   }
   .hamburger-btn span {
     display: block; width: 18px; height: 2px; background: var(--text-muted);
@@ -815,27 +821,142 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
   .hamburger-btn.active span:nth-child(3) { transform: rotate(-45deg) translateY(-3px); }
 
   .hide-mobile { display: none !important; }
-  .topbar { padding: 0 10px; }
-  .topbar-right { gap: 4px; }
+
+  /* Topbar: mobile compact */
+  .topbar {
+    padding: 0 10px;
+    gap: 6px;
+  }
+  .topbar-breadcrumb { font-size: 13px; flex-shrink: 1; min-width: 0; }
+  .topbar-breadcrumb .current { font-size: 13px; }
+  .topbar-right { gap: 6px; flex-shrink: 0; }
+  .topbar-pill { padding: 2px 8px; font-size: 10px; }
+  .env-pill { display: none !important; }
+  #last-update-pill { display: none !important; }
+  .topbar-right .btn { padding: 5px 10px; font-size: 11px; }
   .topbar-right .btn span { display: none; }
 
+  /* Grids → single column */
   .dash-grid { grid-template-columns: 1fr; }
   .dash-chart-widget,
   .dash-todo-widget,
   .dash-crypto-widget,
   .dash-gauge-widget,
   .dash-meta-widget { grid-column: span 1; }
-  .cards-2, .cards-3, .cards-4, .cards-5 { grid-template-columns: 1fr; }
+  .cards-2, .cards-3, .cards-4, .cards-5 { grid-template-columns: 1fr !important; }
   .grid-3 { grid-template-columns: 1fr; }
 
-  .page-content { padding: 12px; padding-bottom: 72px; }
+  /* Page content: room for bottom nav */
+  .page-content {
+    padding: 12px;
+    padding-bottom: 74px;
+  }
 
+  /* Page titles smaller */
+  .page-title { font-size: 15px; }
+  .page-subtitle { font-size: 10px; margin-bottom: 12px; }
+
+  /* Bottom nav visible */
   .bottom-nav { display: flex; }
+
+  /* --- Trade page: status bar --- */
+  .trade-status-bar { padding: 10px 12px !important; }
+  .trade-status-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .trade-actions {
+    margin-left: 0 !important;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px !important;
+  }
+  .trade-actions .btn {
+    flex: 1; min-width: 0;
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 11px;
+  }
+
+  /* --- Trade page: pre-real header --- */
+  .pre-real-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .pre-real-header > div {
+    flex-wrap: wrap;
+  }
+
+  /* --- Trade page: input grids (override inline 2-col) --- */
+  .trade-input-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* All inline 2-col grids inside #pre-real-card → 1 col */
+  #pre-real-card [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Cards inside trade page */
+  #page-trade .card { padding: 12px !important; }
+
+  /* Tables scroll horizontally */
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+
+  /* Toast: center on mobile */
+  .toast-container { left: 12px; right: 12px; }
+  .toast { max-width: 100%; }
+
+  /* Health banner compact */
+  .health-banner { padding: 6px 10px; }
+  .health-banner-inner { flex-wrap: wrap; gap: 6px; }
 }
 
+/* --- Small phone (≤480px) --- */
 @media (max-width: 480px) {
   .mais-grid { grid-template-columns: repeat(3, 1fr); }
-  .topbar-pill:not(#api-status-pill) { display: none; }
+
+  /* Topbar: only API dot + refresh */
+  .topbar-pill:not(#api-status-pill) { display: none !important; }
+  .topbar-right .btn { padding: 4px 8px; font-size: 10px; }
+
+  /* Reduce card padding */
+  .card { padding: 10px; }
+  .widget-card { padding: 10px; }
+  .widget-big-value { font-size: 16px; }
+
+  /* Buttons full-width stack */
+  .trade-actions {
+    flex-direction: column !important;
+  }
+  .trade-actions .btn {
+    width: 100%;
+    flex: none;
+  }
+
+  /* Pre-real title smaller */
+  #pre-real-card span[style*="font-size:15px"] {
+    font-size: 13px !important;
+  }
+
+  /* Bottom nav shorter */
+  .bottom-nav { height: 52px; }
+  .bottom-nav-icon { font-size: 15px; }
+  .bottom-nav-label { font-size: 8px; }
+  .bottom-nav-fab { width: 38px; height: 38px; font-size: 14px; margin-top: -14px; }
+
+  /* Login card tighter */
+  .login-card { padding: 24px 20px; }
+}
+
+/* --- Landscape phone --- */
+@media (max-height: 500px) and (max-width: 900px) {
+  .bottom-nav { height: 44px; }
+  .bottom-nav-fab { width: 34px; height: 34px; margin-top: -10px; font-size: 13px; }
+  .page-content { padding-bottom: 56px; }
 }
 
 /* ─── 32. ANIMATION ─── */
