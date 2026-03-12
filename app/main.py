@@ -153,11 +153,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
             "frame-ancestors 'none';"
         )
-        # Evita cache de HTML (para que deploy novo apareça imediatamente)
+        # Evita cache de todos os arquivos do dashboard (para que deploy novo apareça imediatamente)
         path = request.url.path
-        if path.endswith('.html') or path == '/ui/' or path == '/ui':
+        if path.startswith('/ui') or path.endswith(('.html', '.js', '.css')):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
         return response
 
 
