@@ -89,7 +89,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 # Endpoints que NÃO precisam de autenticação (públicos)
 _PUBLIC_ENDPOINTS = {
     "/", "/health", "/diagnostics", "/docs", "/openapi.json", "/redoc",
-    "/ui", "/dashboard", "/simulador", "/tmp-fix-final-68332",
+    "/ui", "/dashboard", "/simulador",
 }
 # Prefixos públicos (static files, etc)
 _PUBLIC_PREFIXES = ("/ui/",)
@@ -1118,25 +1118,6 @@ async def api_status():
 
 
 
-
-# TEMP endpoint (2026-03-11): corrigir capital/PnL para valores reais — REMOVER APÓS USO
-@app.get("/tmp-fix-final-68332")
-async def tmp_fix_final():
-    # Capital real: R$450 inicial + R$155 ontem + R$78.32 hoje = R$683.32
-    # PnL total: R$155 + R$78.32 = R$233.32
-    _trade_state["capital"] = 683.32
-    _trade_state["total_pnl"] = 233.32
-    db_state.save_state("trade_state", _trade_state)
-    # Zera ciclos pós-reset (gerados com capital errado) e seta offset correto
-    _perf_state["cycles"] = []
-    _perf_state["total_pnl_history"] = []
-    _perf_state["total_pnl_offset"] = 233.32
-    _perf_state["total_gain"] = 233.32
-    _perf_state["total_loss"] = 0.0
-    _perf_state["win_count"] = 0
-    _perf_state["loss_count"] = 0
-    db_state.save_state("performance", _perf_state)
-    return {"ok": True, "capital": 683.32, "total_pnl": 233.32, "msg": "Capital R$683.32 e PnL R$233.32 corrigidos"}
 
 @app.get("/health")
 async def health_check():
