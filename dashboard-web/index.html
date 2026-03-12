@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="style.css?v=18" />
+  <link rel="stylesheet" href="style.css?v=19" />
 </head>
 <body>
 
@@ -28,7 +28,7 @@
       <h1>PWD<span class="login-accent"> Trading</span></h1>
     </div>
     <p class="login-subtitle">Insira sua API Key para acessar o painel</p>
-    <form id="login-form" onsubmit="handleLogin(event)">
+    <form id="login-form" onsubmit="handleLogin(event); return false;" action="javascript:void(0)">
       <div class="login-input-group">
         <label for="login-key">API Key</label>
         <div class="login-input-wrapper">
@@ -1812,7 +1812,7 @@
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toast-container"></div>
 
-<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script defer src="app.js?v=18"></script>
+<script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

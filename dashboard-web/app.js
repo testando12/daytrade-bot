@@ -271,6 +271,10 @@ function _updateCountdownEl(val) {
 // =============================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+  console.log('[PWD] app.js loaded, API_BASE =', API_BASE);
+  // Bind login form via JS as backup for inline handler
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) loginForm.addEventListener('submit', handleLogin);
   _updateEnvPill();  // mostra LOCAL/RAILWAY desde o primeiro render
   const savedKey = getApiKey();
   if (savedKey) {
