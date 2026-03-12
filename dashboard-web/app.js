@@ -1011,8 +1011,8 @@ function scoreColor(score) {
 // =============================================
 
 if (typeof Chart !== 'undefined') {
-  Chart.defaults.color = '#6b7280';
-  Chart.defaults.borderColor = '#e5e7eb';
+  Chart.defaults.color = '#6b6b80';
+  Chart.defaults.borderColor = '#1a1a22';
 }
 
 function destroyChart(id) {
@@ -1231,7 +1231,7 @@ async function loadMarketPrices() {
         'DOGEUSDT': { icon: 'fas fa-dog', bg: '#c2a633' },
         'DOTUSDT': { icon: 'fas fa-circle-nodes', bg: '#e6007a' },
       };
-      const defaultIcon = { icon: 'fas fa-chart-line', bg: 'rgba(249,115,22,0.1)' };
+      const defaultIcon = { icon: 'fas fa-chart-line', bg: 'rgba(61,214,140,0.15)' };
       let listHtml = '';
       keys.slice(0, 5).forEach((asset, i) => {
         const info = iconMap[asset] || defaultIcon;
@@ -1241,14 +1241,14 @@ async function loadMarketPrices() {
           <span class="crypto-rank">${i + 1}</span>
           <div class="crypto-icon" style="background:${info.bg}"><i class="${info.icon}"></i></div>
           <span class="crypto-name">${sym} <span class="crypto-symbol">${asset}</span></span>
-          <span style="font-size:11px;color:rgba(26,26,46,0.55)">$${typeof price === 'number' ? price.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price}</span>
+          <span style="font-size:11px;color:#6b6b80">$${typeof price === 'number' ? price.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : price}</span>
         </div>`;
       });
       listEl.innerHTML = listHtml;
     }
   } catch (e) {
     if (el) el.innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="fas fa-satellite-dish"></i></div><p>Binance offline</p></div>';
-    if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:12px;color:rgba(26,26,46,0.25);font-size:12px"><i class="fas fa-satellite-dish"></i> Offline</div>';
+    if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:12px;color:#4a4a5a;font-size:12px"><i class="fas fa-satellite-dish"></i> Offline</div>';
   }
 }
 
@@ -1283,12 +1283,12 @@ function renderMomentumChart(data) {
       plugins: { legend: { display: false } },
       scales: {
         y: {
-          grid: { color: '#e5e7eb' },
-          ticks: { color: '#6b7280' },
+          grid: { color: '#1a1a22' },
+          ticks: { color: '#6b6b80' },
         },
         x: {
           grid: { display: false },
-          ticks: { color: '#6b7280' },
+          ticks: { color: '#6b6b80' },
         }
       }
     }
@@ -1325,9 +1325,9 @@ function renderRiskRadar(data) {
       datasets: [{
         label: 'Sinais IRQ',
         data: vals,
-        backgroundColor: 'rgba(248, 81, 73, 0.15)',
-        borderColor: '#f85149',
-        pointBackgroundColor: '#f85149',
+        backgroundColor: 'rgba(224, 82, 82, 0.15)',
+        borderColor: '#e05252',
+        pointBackgroundColor: '#e05252',
         pointRadius: 4,
       }]
     },
@@ -1339,9 +1339,9 @@ function renderRiskRadar(data) {
         r: {
           min: 0,
           max: 1,
-          grid: { color: '#e5e7eb' },
+          grid: { color: '#1a1a22' },
           ticks: { display: false },
-          pointLabels: { color: '#6b7280', font: { size: 11 } },
+          pointLabels: { color: '#6b6b80', font: { size: 11 } },
         }
       }
     }
@@ -1453,22 +1453,22 @@ function drawPerformanceChart(allDays) {
       datasets: [{
         label: 'Capital',
         data: equityData,
-        borderColor: 'rgba(249,115,22,0.7)',
+        borderColor: 'rgba(61,214,140,0.7)',
         borderWidth: 1.5,
         backgroundColor: (context) => {
           const chart = context.chart;
           const { ctx: c, chartArea } = chart;
-          if (!chartArea) return 'rgba(249,115,22,0.05)';
+          if (!chartArea) return 'rgba(61,214,140,0.05)';
           const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          gradient.addColorStop(0, 'rgba(249,115,22,0.15)');
-          gradient.addColorStop(1, 'rgba(249,115,22,0)');
+          gradient.addColorStop(0, 'rgba(61,214,140,0.15)');
+          gradient.addColorStop(1, 'rgba(61,214,140,0)');
           return gradient;
         },
         fill: true,
         tension: 0.4,
         pointRadius: 0,
         pointHoverRadius: 4,
-        pointHoverBackgroundColor: '#f97316',
+        pointHoverBackgroundColor: '#3dd68c',
       }]
     },
     options: {
@@ -1490,7 +1490,7 @@ function drawPerformanceChart(allDays) {
         },
         x: {
           grid: { display: false },
-          ticks: { color: 'rgba(26,26,46,0.35)', font: { size: 10 } },
+          ticks: { color: '#4a4a5a', font: { size: 10 } },
         }
       },
       interaction: { mode: 'nearest', axis: 'x', intersect: false },
@@ -1808,7 +1808,7 @@ async function loadMarketPage() {
         const c1h = s.change_1h_pct, c1d = s.change_1d_pct;
         const isTop = top3.includes(asset);
         const medal = isTop ? ['&#129351;','&#129352;','&#129353;'][top3.indexOf(asset)] : rank;
-        srows += `<tr style="${isTop?'background:rgba(0,200,83,0.06)':''}">
+        srows += `<tr style="${isTop?'background:rgba(61,214,140,0.06)':''}">
           <td>${medal}</td>
           <td><strong>${asset}</strong></td>
           <td>
@@ -1924,7 +1924,7 @@ async function loadPortfolio() {
             data: pieEntries.map(([, d]) => hasTradePos ? d.amount : d.recommended_amount),
             backgroundColor: pieColors.slice(0, pieEntries.length),
             borderWidth: 2,
-            borderColor: '#ffffff',
+            borderColor: '#13131a',
           }]
         },
         options: {
@@ -1934,7 +1934,7 @@ async function loadPortfolio() {
           plugins: {
             legend: {
               position: 'bottom',
-              labels: { color: '#6b7280', padding: 12, font: { size: 11 } }
+              labels: { color: '#6b6b80', padding: 12, font: { size: 11 } }
             }
           }
         }
@@ -2504,14 +2504,14 @@ async function loadTradePage() {
             data: nonZero.map(([, p]) => p.amount),
             backgroundColor: palette.slice(0, nonZero.length),
             borderWidth: 2,
-            borderColor: '#ffffff',
+            borderColor: '#13131a',
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'right', labels: { color: '#6b7280', font: { size: 11 } } }
+            legend: { position: 'right', labels: { color: '#6b6b80', font: { size: 11 } } }
           }
         }
       });
