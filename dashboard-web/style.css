@@ -133,17 +133,17 @@ input, select, textarea { font-family: inherit; }
   width: var(--sidebar-w);
   background: var(--bg-sidebar);
   display: flex; flex-direction: column; align-items: center;
-  padding: 10px 0;
+  padding: 12px 0;
   flex-shrink: 0;
   z-index: 100;
-  transition: width .25s ease;
   overflow: hidden;
+  position: relative;
 }
 .sidebar-logo {
   display: flex; align-items: center; justify-content: center;
   width: 36px; height: 36px;
-  margin-bottom: 8px;
-  cursor: pointer;
+  margin-bottom: 10px;
+  cursor: pointer; flex-shrink: 0;
 }
 .sidebar-logo .logo-icon {
   width: 32px; height: 32px;
@@ -153,14 +153,59 @@ input, select, textarea { font-family: inherit; }
 .sidebar-logo .logo-icon img { width: 28px; height: 28px; object-fit: contain; border-radius: 6px; }
 .sidebar-logo .logo-text { display: none; }
 
+/* Nav wrapper: holds shortcuts + expanded */
 .sidebar-nav {
   flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 4px;
+  justify-content: center; gap: 0;
   width: 100%;
+  position: relative;
 }
+
+/* --- Shortcuts: always visible, centered vertically --- */
+.nav-shortcuts {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: transform .35s cubic-bezier(.4,0,.2,1);
+  z-index: 2;
+}
+
+/* --- Expanded: hidden by default, revealed on sidebar hover --- */
+.nav-expanded {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height .4s cubic-bezier(.4,0,.2,1),
+              opacity .3s cubic-bezier(.4,0,.2,1),
+              margin .35s cubic-bezier(.4,0,.2,1);
+  margin-top: 0;
+  z-index: 1;
+}
+
+/* Small separator line between groups */
+.nav-expanded::before {
+  content: '';
+  display: block;
+  width: 20px; height: 1px;
+  background: var(--border-light);
+  margin: 6px auto;
+  flex-shrink: 0;
+}
+
+/* HOVER STATE: sidebar hovered → expand */
+.sidebar:hover .nav-shortcuts {
+  transform: translateY(-8px);
+}
+.sidebar:hover .nav-expanded {
+  max-height: 400px;
+  opacity: 1;
+  margin-top: 4px;
+}
+
+/* Remove old nav-section styles (no longer used) */
 .nav-section { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; }
 .nav-section-label { display: none; }
 
+/* Nav items: icon-only centered buttons */
 .nav-item {
   position: relative;
   width: 36px; height: 36px;
@@ -170,11 +215,14 @@ input, select, textarea { font-family: inherit; }
   transition: all .15s;
   cursor: pointer;
   border: none; background: transparent;
+  text-decoration: none;
 }
-.nav-item:hover { color: var(--text-secondary); background: rgba(255,255,255,.04); }
+.nav-item:hover { color: var(--text-secondary); background: rgba(255,255,255,.06); }
 .nav-item.active { color: var(--accent); background: var(--accent-dim); }
 .nav-icon { font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 18px; }
 .nav-label { display: none; }
+
+/* Tooltip (appears on individual item hover) */
 .nav-tooltip {
   display: none; position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
   margin-left: 10px;
@@ -182,12 +230,14 @@ input, select, textarea { font-family: inherit; }
   color: var(--text-primary); font-size: 11px; font-weight: 500;
   padding: 4px 10px; border-radius: 6px; white-space: nowrap;
   pointer-events: none; z-index: 200;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }
 .nav-item:hover .nav-tooltip { display: block; }
 
+/* Footer: settings + logout at bottom */
 .sidebar-footer {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding-top: 8px; width: 100%;
+  padding-top: 8px; width: 100%; flex-shrink: 0;
 }
 .sidebar-footer .nav-item { width: 36px; height: 36px; }
 .sidebar-footer .status-dot {
@@ -797,14 +847,26 @@ input::placeholder, textarea::placeholder { color: var(--text-dim); }
     z-index: 100; transition: transform .25s ease;
   }
   .sidebar.mobile-open { transform: translateX(0); }
+
+  /* On mobile drawer: show everything expanded, with labels */
   .sidebar.mobile-open .nav-label { display: inline; }
   .sidebar.mobile-open .nav-item { width: 100%; justify-content: flex-start; gap: 10px; padding: 0 14px; }
-  .sidebar.mobile-open .nav-tooltip { display: none; }
-  .sidebar.mobile-open .nav-section-label { display: block; font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; padding: 10px 14px 4px; }
+  .sidebar.mobile-open .nav-tooltip { display: none !important; }
   .sidebar.mobile-open .logo-text { display: block; font-size: 14px; font-weight: 700; }
   .sidebar.mobile-open .sidebar-logo { width: 100%; justify-content: flex-start; gap: 8px; padding: 0 14px; }
   .sidebar.mobile-open .sidebar-collapse-btn { display: none; }
   .sidebar.mobile-open #sidebar-api-label { display: inline; }
+
+  /* Mobile: disable hover expand, show everything */
+  .sidebar.mobile-open .nav-expanded {
+    max-height: 500px; opacity: 1; margin-top: 4px;
+  }
+  .sidebar.mobile-open .nav-shortcuts {
+    transform: none;
+  }
+  .sidebar.mobile-open .nav-expanded::before {
+    width: calc(100% - 28px); margin: 8px auto;
+  }
 
   /* Hamburger button */
   .hamburger-btn {
