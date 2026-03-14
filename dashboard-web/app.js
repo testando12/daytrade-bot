@@ -3886,3 +3886,84 @@ async function loadLeverage() {
     if (e.target.closest('.dash-todo-close')) { closeTodo(); return; }
   });
 })();
+
+// =============================================
+// ROADMAP WIDGET
+// =============================================
+(function initRoadmap() {
+  // Definição das fases — edite aqui para atualizar o roadmap
+  const PHASES = [
+    {
+      status: 'done',
+      title: 'Fase 1 — Correção de Bugs',
+      desc: 'Removido abs() do momentum; bloqueadas entradas SHORT em todos os engines (VWAP, Squeeze, LS, FVG, PyramidBO).',
+      tag: 'Concluído',
+    },
+    {
+      status: 'active',
+      title: 'Fase 2 — Medir (200 ciclos)',
+      desc: 'Deixar o sistema rodar ~200 ciclos sem novas alterações. Comparar WR, PnL/ciclo e trades por ciclo vs. antes.',
+      tag: 'Em progresso',
+    },
+    {
+      status: 'pending',
+      title: 'Fase 3 — Melhorar Entradas',
+      desc: 'EMA50 no FVG (bullish só acima, bearish só abaixo). EMA50 no Squeeze. Verificar OHLC no feed antes de mexer no Liquidity Sweep.',
+      tag: 'Pendente',
+    },
+    {
+      status: 'pending',
+      title: 'Fase 4 — Confluência Mínima',
+      desc: 'Trade só ocorre se: momentum_score > 0.55 AND direction == LONG AND price > EMA50. Implementar após Fase 3 estabilizar.',
+      tag: 'Pendente',
+    },
+  ];
+
+  const ICON = { done: 'fa-check-circle', active: 'fa-spinner fa-spin', pending: 'fa-circle' };
+  const TAG_MAP = { done: 'done', active: 'active', pending: 'pending' };
+
+  function render() {
+    const body = document.getElementById('roadmap-body');
+    const badge = document.getElementById('roadmap-badge');
+    const updated = document.getElementById('roadmap-updated');
+    if (!body) return;
+
+    body.innerHTML = PHASES.map(p => `
+      <div class="roadmap-phase status-${p.status}">
+        <div class="roadmap-phase-icon ${p.status}">
+          <i class="fas ${ICON[p.status]}"></i>
+        </div>
+        <div class="roadmap-phase-content">
+          <div class="roadmap-phase-title">${p.title}</div>
+          <div class="roadmap-phase-desc">${p.desc}</div>
+          <span class="roadmap-phase-tag ${TAG_MAP[p.status]}">${p.tag}</span>
+        </div>
+      </div>
+    `).join('');
+
+    // Badge mostra nº de fases ativas/pendentes
+    const remaining = PHASES.filter(p => p.status !== 'done').length;
+    if (badge) {
+      badge.textContent = remaining;
+      badge.classList.toggle('hidden', remaining === 0);
+    }
+    if (updated) {
+      updated.textContent = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+  }
+
+  window.toggleRoadmap = function() {
+    const w = document.getElementById('roadmap-widget');
+    if (!w) return;
+    const isOpen = w.classList.contains('open');
+    w.classList.toggle('open', !isOpen);
+    w.classList.toggle('collapsed', isOpen);
+  };
+
+  // Inicializa após DOM pronto
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', render);
+  } else {
+    render();
+  }
+})();

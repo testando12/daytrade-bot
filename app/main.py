@@ -3637,6 +3637,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # ── Squeeze: bucket dedicado de 6% (Volatility Compression → Expansion) ─
     # v2.3: entra no início da expansão após Bollinger Squeeze confirmado por Keltner
     sq_results  = SqueezeAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
+    sq_results  = {a: d for a, d in sq_results.items() if d.get("direction") == "LONG"}  # long-only
     top_sq      = list(sq_results.keys())
     mom_sq      = {
         a: {**d, "momentum_score": max(d["squeeze_score"], 0.59)}
@@ -3647,6 +3648,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # ── Liquidity Sweep: bucket de 2% (Stop Hunt / Caça de Liquidez) ────
     # v3.0: detecta falsas rupturas seguidas de reversão institucional
     ls_results  = LiquiditySweepAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
+    ls_results  = {a: d for a, d in ls_results.items() if d.get("direction") == "LONG"}  # long-only
     top_ls      = list(ls_results.keys())
     mom_ls      = {
         a: {**d, "momentum_score": max(d["sweep_score"], 0.61)}
@@ -3663,6 +3665,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # ── Fair Value Gap: bucket de 2% (Imbalance Fill) ───────────────────
     # v3.0: detecta gaps institucionais e opera o preenchimento
     fvg_results = FVGAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=1)
+    fvg_results = {a: d for a, d in fvg_results.items() if d.get("direction") == "LONG"}  # long-only
     top_fvg     = list(fvg_results.keys())
     mom_fvg     = {
         a: {**d, "momentum_score": max(d["fvg_score"], 0.61)}
@@ -3674,6 +3677,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # v4.0: entra quando preço desvia >1.5σ do VWAP em mercado lateral (ADX<20)
     # Score: desvio VWAP 40% + RSI 35% + Volume 25%. SL=0.8 ATR, TP=1.0 ATR
     vr_results  = VWAPReversionAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=2)
+    vr_results  = {a: d for a, d in vr_results.items() if d.get("direction") == "LONG"}  # long-only: SHORT=overbought, não comprar
     top_vr      = list(vr_results.keys())
     mom_vr      = {
         a: {**d, "momentum_score": max(d["vr_score"], 0.55)}
@@ -3685,6 +3689,7 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
     # v4.0: detecta rompimentos fortes (BB + ATR expansion + EMA alignment)
     # Pyramiding: L1=100%, +1ATR→+50%, +2ATR→+30% (max 180%). SL=1.5 ATR, TP=3.0 ATR
     pb_results  = PyramidBreakoutAnalyzer.calculate_multiple_assets(klines_by_tf["1h"], top_n=2)
+    pb_results  = {a: d for a, d in pb_results.items() if d.get("direction") == "LONG"}  # long-only
     top_pb      = list(pb_results.keys())
     # Aplica multiplicador de pirâmide ao momentum_score para boost de posição
     mom_pb      = {}

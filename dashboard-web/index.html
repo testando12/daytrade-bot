@@ -1803,6 +1803,31 @@
 <!-- TOAST CONTAINER -->
 <div class="toast-container" id="toast-container"></div>
 
+<!-- =================== ROADMAP WIDGET =================== -->
+<div id="roadmap-widget" class="roadmap-widget collapsed">
+  <!-- Botão flutuante -->
+  <button class="roadmap-fab" onclick="toggleRoadmap()" title="Roadmap do Projeto">
+    <i class="fas fa-map-marked-alt"></i>
+    <span class="roadmap-fab-badge" id="roadmap-badge">1</span>
+  </button>
+  <!-- Painel -->
+  <div class="roadmap-panel" id="roadmap-panel">
+    <div class="roadmap-panel-header">
+      <div class="roadmap-panel-title">
+        <i class="fas fa-route"></i>
+        <span>Roadmap do Bot</span>
+      </div>
+      <button class="roadmap-close" onclick="toggleRoadmap()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="roadmap-panel-body" id="roadmap-body">
+      <!-- Fases injetadas pelo JS -->
+    </div>
+    <div class="roadmap-panel-footer">
+      Atualizado em <span id="roadmap-updated"></span>
+    </div>
+  </div>
+</div>
+
 <script async src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="app.js?v=30"></script>
 </body>

@@ -199,7 +199,7 @@ class MomentumAnalyzer:
         atr_rejected = not atr_ok and atr_pct > 0  # só rejeita se tiver dados
 
         entry_valid = (
-            abs(momentum_score) >= MomentumAnalyzer.ENTRY_THRESHOLD
+            momentum_score >= MomentumAnalyzer.ENTRY_THRESHOLD  # long-only: sem abs()
             and not atr_rejected
         )
 
