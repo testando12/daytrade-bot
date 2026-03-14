@@ -1730,7 +1730,7 @@ Se não souber algo, diga claramente.
 {bot_ctx}"""
 
     try:
-        response = await asyncio.get_event_loop().run_in_executor(
+        response = await asyncio.get_running_loop().run_in_executor(
             None,
             lambda: _gemini_model.generate_content(
                 f"{system_prompt}\n\nUsuário: {user_msg}"
