@@ -3888,10 +3888,10 @@ async function loadLeverage() {
 })();
 
 // =============================================
-// ROADMAP WIDGET
+// ROADMAP + CHAT IA WIDGET
 // =============================================
 (function initRoadmap() {
-  // Definição das fases — edite aqui para atualizar o roadmap
+  // ── Fases do Roadmap ──────────────────────────────────────────────
   const PHASES = [
     {
       status: 'done',
@@ -3920,9 +3920,8 @@ async function loadLeverage() {
   ];
 
   const ICON = { done: 'fa-check-circle', active: 'fa-spinner fa-spin', pending: 'fa-circle' };
-  const TAG_MAP = { done: 'done', active: 'active', pending: 'pending' };
 
-  function render() {
+  function renderRoadmap() {
     const body = document.getElementById('roadmap-body');
     const badge = document.getElementById('roadmap-badge');
     const updated = document.getElementById('roadmap-updated');
@@ -3936,12 +3935,11 @@ async function loadLeverage() {
         <div class="roadmap-phase-content">
           <div class="roadmap-phase-title">${p.title}</div>
           <div class="roadmap-phase-desc">${p.desc}</div>
-          <span class="roadmap-phase-tag ${TAG_MAP[p.status]}">${p.tag}</span>
+          <span class="roadmap-phase-tag ${p.status}">${p.tag}</span>
         </div>
       </div>
     `).join('');
 
-    // Badge mostra nº de fases ativas/pendentes
     const remaining = PHASES.filter(p => p.status !== 'done').length;
     if (badge) {
       badge.textContent = remaining;
@@ -3952,18 +3950,79 @@ async function loadLeverage() {
     }
   }
 
+  // ── Abas ─────────────────────────────────────────────────────────
+  window.switchWidgetTab = function(tab) {
+    ['chat', 'roadmap'].forEach(t => {
+      document.getElementById('content-' + t)?.classList.toggle('hidden', t !== tab);
+      document.getElementById('tab-' + t)?.classList.toggle('active', t === tab);
+    });
+  };
+
+  // ── Toggle widget ─────────────────────────────────────────────────
   window.toggleRoadmap = function() {
     const w = document.getElementById('roadmap-widget');
     if (!w) return;
     const isOpen = w.classList.contains('open');
     w.classList.toggle('open', !isOpen);
     w.classList.toggle('collapsed', isOpen);
+    if (!isOpen) {
+      setTimeout(() => document.getElementById('chat-input')?.focus(), 200);
+    }
   };
 
-  // Inicializa após DOM pronto
+  // ── Chat IA ───────────────────────────────────────────────────────
+  window.sendChat = async function() {
+    const input = document.getElementById('chat-input');
+    const btn   = document.getElementById('chat-send-btn');
+    const msgs  = document.getElementById('chat-messages');
+    if (!input || !msgs) return;
+
+    const text = input.value.trim();
+    if (!text) return;
+
+    // Mensagem do usuário
+    msgs.innerHTML += `<div class="chat-msg user"><span>${_escHtml(text)}</span></div>`;
+    input.value = '';
+    btn.disabled = true;
+
+    // Indicador de digitação
+    const loadingId = 'chat-loading-' + Date.now();
+    msgs.innerHTML += `<div class="chat-msg bot loading" id="${loadingId}"><span>Analisando...</span></div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': getApiKey() },
+        body: JSON.stringify({ message: text }),
+      });
+      const data = await res.json();
+      document.getElementById(loadingId)?.remove();
+      if (res.ok && data.reply) {
+        msgs.innerHTML += `<div class="chat-msg bot"><span>${_escHtml(data.reply)}</span></div>`;
+      } else {
+        const err = data.detail || 'Erro na resposta.';
+        msgs.innerHTML += `<div class="chat-msg bot"><span>⚠️ ${_escHtml(err)}</span></div>`;
+      }
+    } catch (e) {
+      document.getElementById(loadingId)?.remove();
+      msgs.innerHTML += `<div class="chat-msg bot"><span>⚠️ Sem conexão com o servidor.</span></div>`;
+    }
+
+    btn.disabled = false;
+    msgs.scrollTop = msgs.scrollHeight;
+  };
+
+  function _escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  // Inicializa
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', render);
+    document.addEventListener('DOMContentLoaded', renderRoadmap);
   } else {
-    render();
+    renderRoadmap();
   }
 })();

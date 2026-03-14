@@ -1613,6 +1613,136 @@ async def alerts_status():
     }
 
 
+# ── Chat IA com contexto do bot (Gemini) ─────────────────────────────────────
+import os as _os
+
+try:
+    import google.generativeai as _genai
+    _GEMINI_KEY = _os.environ.get("GEMINI_API_KEY", "")
+    if _GEMINI_KEY:
+        _genai.configure(api_key=_GEMINI_KEY)
+        _gemini_model = _genai.GenerativeModel("gemini-2.0-flash")
+        _GEMINI_OK = True
+    else:
+        _gemini_model = None
+        _GEMINI_OK = False
+except Exception:
+    _gemini_model = None
+    _GEMINI_OK = False
+
+
+def _build_bot_context() -> str:
+    """Monta contexto real do bot para enviar ao Gemini."""
+    cap    = _trade_state.get("capital", 0)
+    pnl    = _trade_state.get("total_pnl", 0)
+    pos    = _trade_state.get("positions", {})
+    cycles = _trade_state.get("cycle_count", 0)
+    regime = _trade_state.get("last_regime", "NEUTRAL")
+
+    pos_lines = []
+    for asset, p in list(pos.items())[:6]:
+        amt = p.get("amount", 0) if isinstance(p, dict) else p
+        chg = p.get("change_pct", 0) if isinstance(p, dict) else 0
+        tf  = p.get("tf", "?") if isinstance(p, dict) else "?"
+        pos_lines.append(f"  - {asset}: R${amt:.2f} | {chg:+.2f}% | tf={tf}")
+
+    # Últimas entradas do log de auditoria
+    audit_lines = []
+    try:
+        import json as _json
+        _audit_path = Path(__file__).parent.parent / "data" / "audit_log.json"
+        if _audit_path.exists():
+            with open(_audit_path, "r", encoding="utf-8") as f:
+                _audit = _json.load(f)
+            recent = _audit[-8:] if isinstance(_audit, list) else []
+            for e in reversed(recent):
+                ts   = e.get("timestamp", "")[:16]
+                typ  = e.get("type", "")
+                note = e.get("note", "")[:120]
+                audit_lines.append(f"  [{ts}] {typ}: {note}")
+    except Exception:
+        pass
+
+    perf = {}
+    try:
+        import json as _json
+        _perf_path = Path(__file__).parent.parent / "data" / "performance.json"
+        if _perf_path.exists():
+            with open(_perf_path, "r", encoding="utf-8") as f:
+                perf = _json.load(f)
+    except Exception:
+        pass
+
+    wr  = perf.get("win_rate", 0)
+    pf  = perf.get("profit_factor", 0)
+    sh  = perf.get("sharpe_ratio", 0)
+    tot = perf.get("total_trades", 0)
+
+    ctx = f"""=== CONTEXTO DO BOT PWD TRADING ===
+Capital atual: R${cap:.2f}
+PnL total acumulado: R${pnl:.2f}
+Ciclos executados: {cycles}
+Regime de mercado: {regime}
+Posições abertas ({len(pos)}):
+{chr(10).join(pos_lines) if pos_lines else "  Nenhuma"}
+
+Métricas de performance:
+  Win Rate: {wr:.1%}
+  Profit Factor: {pf:.2f}
+  Sharpe Ratio: {sh:.2f}
+  Total trades: {tot}
+
+Últimos eventos do log:
+{chr(10).join(audit_lines) if audit_lines else "  Sem registros recentes"}
+==================================="""
+    return ctx
+
+
+class _ChatRequest(BaseModel):
+    message: str
+
+
+@app.post("/api/chat", tags=["IA"])
+async def chat_ia(req: _ChatRequest, request: Request):
+    """Chat com IA Gemini com contexto real do bot."""
+    _verify_api_key(request)
+
+    if not _GEMINI_OK or _gemini_model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Gemini não configurado. Adicione GEMINI_API_KEY no Railway."
+        )
+
+    user_msg = req.message.strip()
+    if not user_msg:
+        raise HTTPException(status_code=400, detail="Mensagem vazia.")
+    if len(user_msg) > 1000:
+        raise HTTPException(status_code=400, detail="Mensagem muito longa (máx 1000 chars).")
+
+    bot_ctx = _build_bot_context()
+
+    system_prompt = f"""Você é um assistente especializado em trading algorítmico analisando o bot PWD Trading.
+Seja direto, técnico e objetivo. Responda em português.
+Quando relevante, use os dados reais do bot abaixo para embasar sua resposta.
+Não invente dados — use apenas o que está no contexto.
+Se não souber algo, diga claramente.
+
+{bot_ctx}"""
+
+    try:
+        response = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: _gemini_model.generate_content(
+                f"{system_prompt}\n\nUsuário: {user_msg}"
+            )
+        )
+        reply = response.text.strip()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro na API Gemini: {str(e)}")
+
+    return {"reply": reply}
+
+
 @app.get("/alerts/history")
 async def alerts_history(limit: int = 20):
     """Histórico de alertas"""

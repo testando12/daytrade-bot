@@ -10,6 +10,8 @@ psycopg2-binary>=2.9.0
 scikit-learn==1.4.2
 numpy==1.26.4
 slowapi>=0.1.9
+# Gemini AI — chat com contexto do bot no dashboard
+google-generativeai>=0.7.0
 # Alpaca Markets — US stocks paper/live trading
 alpaca-py>=0.20.0
 # MetaTrader5 — Windows apenas (Railway ignora automaticamente)
