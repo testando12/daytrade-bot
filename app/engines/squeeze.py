@@ -48,6 +48,17 @@ def _roc(prices: List[float], period: int = 5) -> float:
     return (prices[-1] - base) / base if base != 0 else 0.0
 
 
+def _ema_simple(prices: List[float], period: int) -> float:
+    """EMA simples para filtro de tendência."""
+    if not prices or len(prices) < period:
+        return prices[-1] if prices else 0.0
+    mult = 2.0 / (period + 1.0)
+    ema = sum(prices[:period]) / period
+    for p in prices[period:]:
+        ema = (p - ema) * mult + ema
+    return ema
+
+
 def _bb_width_series(prices: List[float], period: int = 20, std_dev: float = 2.0) -> List[float]:
     """Calcula a série de larguras das Bollinger Bands para detectar compressão histórica."""
     widths = []
@@ -246,6 +257,21 @@ class SqueezeAnalyzer:
         # Penalidade se squeeze inferior ao mínimo
         if not recently_squeezed:
             raw_score *= 0.30
+
+        # ── v2: filtro de tendência EMA20 vs EMA50 ───────────────────────────
+        # Squeeze breakouts contra a tendência principal falham muito mais
+        # Penaliza fortemente entradas contra EMA50 para melhorar WR
+        ema20 = _ema_simple(prices[-80:], 20) if len(prices) >= 20 else current_price
+        ema50 = _ema_simple(prices[-100:], 50) if len(prices) >= 50 else current_price
+        trend_up = ema20 >= ema50
+        trend_aligned = (
+            (direction == "LONG" and trend_up) or
+            (direction == "SHORT" and not trend_up)
+        )
+        if trend_aligned:
+            raw_score = min(1.0, raw_score * 1.10)  # boost leve quando alinhado
+        else:
+            raw_score *= 0.68  # penalidade — breakout contra tendência tem WR baixo
 
         squeeze_score = round(raw_score, 4)
         entry_valid   = squeeze_score >= SqueezeAnalyzer.SQ_THRESHOLD

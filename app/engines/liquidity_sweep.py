@@ -54,13 +54,19 @@ class LiquiditySweepAnalyzer:
     LS_THRESHOLD = 0.60
 
     # Lookback para calcular a zona de liquidez (onde estão os stops)
-    LOOKBACK = 20
+    # v2: reduzido 20→10 — níveis mais próximos, mais cruzamentos detectados
+    LOOKBACK = 10
 
     # Rompimento mínimo (%), abaixo disso não é um sweep relevante
-    MIN_SWEEP_PCT = 0.003   # 0.3%
+    # v2: reduzido 0.3%→0.1% — com dados de fechamento sweeps são menores
+    MIN_SWEEP_PCT = 0.001   # 0.1%
 
     # Reversão mínima (%) para confirmar que o preço voltou para dentro do range
-    MIN_REVERSAL_PCT = 0.002  # 0.2%
+    # v2: reduzido 0.2%→0.05%
+    MIN_REVERSAL_PCT = 0.0005  # 0.05%
+
+    # Janela de bars para procurar o sweep (verifica -2, -3, -4)
+    SWEEP_WINDOW = 4
 
     @staticmethod
     def calculate_sweep_score(prices: List[float], volumes: List[float]) -> Dict:
@@ -82,51 +88,61 @@ class LiquiditySweepAnalyzer:
             return empty
 
         current_price = prices[-1]
-        prev_price    = prices[-2]   # candle que "varrreu" a liquidez
-        if current_price <= 0 or prev_price <= 0:
+        if current_price <= 0:
             return empty
 
-        # ── 1. Zona de liquidez: máxima e mínima dos últimos N candles (excluindo os 2 últimos) ─
-        zone_prices  = prices[-(LiquiditySweepAnalyzer.LOOKBACK + 2):-2]
+        # ── 1. Zona de liquidez: máxima e mínima excluindo a janela de sweep ──────
+        # v2: SWEEP_WINDOW+1 bars excluídos para que o sweep possa estar nessa janela
+        win = LiquiditySweepAnalyzer.SWEEP_WINDOW + 1
+        zone_prices = prices[-(LiquiditySweepAnalyzer.LOOKBACK + win):-win]
         if not zone_prices:
             return empty
 
-        resistance   = max(zone_prices)   # onde os stops de SHORT estão acima
-        support      = min(zone_prices)   # onde os stops de LONG estão abaixo
+        resistance = max(zone_prices)   # onde os stops de SHORT estão acima
+        support    = min(zone_prices)   # onde os stops de LONG estão abaixo
 
         if resistance <= 0 or support <= 0:
             return empty
 
-        # ── 2. Detectar se houve sweep (candle anterior rompeu o nível) ─────────
-        # SHORT sweep (topo): candle anterior ficou ACIMA da resistência, atual voltou
-        short_swept = prev_price > resistance
-        short_reversal_pct = (prev_price - current_price) / prev_price if short_swept else 0.0
-        short_sweep_depth = (prev_price - resistance) / resistance if short_swept else 0.0
-
-        # LONG sweep (fundo): candle anterior ficou ABAIXO do suporte, atual voltou
-        long_swept = prev_price < support
-        long_reversal_pct = (current_price - prev_price) / prev_price if long_swept else 0.0
-        long_sweep_depth = (support - prev_price) / support if long_swept else 0.0
-
-        direction = "NONE"
-        swept_level = 0.0
+        # ── 2. v2: Detectar sweep em janela de SWEEP_WINDOW bars ───────────────────
+        # Verifica se qualquer bar recente cruzou um nível e o atual reverteu
+        # Com dados de fechamento, sweeps são menores — janela maior compensa
+        direction       = "NONE"
+        swept_level     = 0.0
         sweep_depth_pct = 0.0
-        reversal_pct = 0.0
+        reversal_pct    = 0.0
 
-        if short_swept and short_reversal_pct >= LiquiditySweepAnalyzer.MIN_REVERSAL_PCT:
-            # Topo varrido e preço voltou → SHORT
-            if current_price < resistance:  # voltou para dentro do range
-                direction       = "SHORT"
-                swept_level     = resistance
-                sweep_depth_pct = short_sweep_depth
-                reversal_pct    = short_reversal_pct
-        elif long_swept and long_reversal_pct >= LiquiditySweepAnalyzer.MIN_REVERSAL_PCT:
-            # Fundo varrido e preço voltou → LONG
-            if current_price > support:  # voltou para dentro do range
-                direction       = "LONG"
-                swept_level     = support
-                sweep_depth_pct = long_sweep_depth
-                reversal_pct    = long_reversal_pct
+        for lag in range(2, LiquiditySweepAnalyzer.SWEEP_WINDOW + 2):
+            if lag >= len(prices):
+                break
+            sweep_price = prices[-lag]
+            if sweep_price <= 0:
+                continue
+
+            # SHORT sweep: bar passado fechou acima da resistência, atual voltou abaixo
+            if sweep_price > resistance:
+                rev   = (sweep_price - current_price) / sweep_price
+                depth = (sweep_price - resistance) / resistance
+                if (rev >= LiquiditySweepAnalyzer.MIN_REVERSAL_PCT
+                        and current_price < resistance
+                        and depth > sweep_depth_pct):
+                    direction       = "SHORT"
+                    swept_level     = resistance
+                    sweep_depth_pct = depth
+                    reversal_pct    = rev
+
+            # LONG sweep: bar passado fechou abaixo do suporte, atual voltou acima
+            elif sweep_price < support:
+                rev   = (current_price - sweep_price) / sweep_price
+                depth = (support - sweep_price) / support
+                if (rev >= LiquiditySweepAnalyzer.MIN_REVERSAL_PCT
+                        and current_price > support
+                        and depth > sweep_depth_pct
+                        and direction == "NONE"):
+                    direction       = "LONG"
+                    swept_level     = support
+                    sweep_depth_pct = depth
+                    reversal_pct    = rev
 
         if direction == "NONE":
             return {**empty, "valid": True, "current_price": float(current_price),
@@ -137,13 +153,14 @@ class LiquiditySweepAnalyzer:
             return {**empty, "valid": True, "current_price": float(current_price)}
 
         # ── 3. Score da profundidade do sweep ────────────────────────────────
-        # Quanto mais profundo o wick que varrreu, mais stops foram tomados
-        # 0.3% = 0.3, 1.0% = 0.8, 2%+ = 1.0
-        depth_score = min(1.0, sweep_depth_pct / 0.015)
+        # v2: ajustado para profundidades menores (dados de fechamento)
+        # 0.1% = 0.3, 0.5% = 0.8, 1%+ = 1.0
+        depth_score = min(1.0, sweep_depth_pct / 0.005)
 
         # ── 4. Score da velocidade de reversão ───────────────────────────────
         # Reversão rápida = mais credível (preço não aceitou o nível rompido)
-        reversal_score = min(1.0, reversal_pct / 0.01)
+        # v2: calibrado para movimentos menores de fechamento
+        reversal_score = min(1.0, reversal_pct / 0.005)
 
         # ── 5. Volume do candle de sweep (alto volume = mais stops ativados) ─
         vol_score = 0.0
@@ -174,7 +191,7 @@ class LiquiditySweepAnalyzer:
         )
 
         sweep_score = round(raw_score, 4)
-        entry_valid = sweep_score >= LiquiditySweepAnalyzer.LS_THRESHOLD
+        entry_valid = sweep_score >= 0.52  # v2: reduzido 0.60→0.52
 
         return {
             "sweep_score":      sweep_score,

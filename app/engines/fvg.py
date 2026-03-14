@@ -56,13 +56,25 @@ def _std(vals: List[float]) -> float:
     return math.sqrt(sum((x - m) ** 2 for x in vals) / len(vals))
 
 
+def _ema(prices: List[float], period: int) -> float:
+    """EMA simples para filtro de tendência."""
+    if not prices or len(prices) < period:
+        return prices[-1] if prices else 0.0
+    mult = 2.0 / (period + 1.0)
+    ema = sum(prices[:period]) / period
+    for p in prices[period:]:
+        ema = (p - ema) * mult + ema
+    return ema
+
+
 class FVGAnalyzer:
     """Engine de Fair Value Gap v1 — detecta gaps institucionais e trades de fill."""
 
-    FVG_THRESHOLD    = 0.60   # score mínimo para entry_valid
+    FVG_THRESHOLD    = 0.73   # v2: elevado 0.60→0.73 — só gaps muito nítidos
     LOOKBACK         = 30     # período para calcular ATR e contexto
-    MIN_GAP_ATR_MULT = 1.2    # impulso mínimo = 1.2× ATR para ser FVG válido
-    MAX_RETRACEMENT  = 0.70   # o preço não pode já ter coberto > 70% do gap
+    MIN_GAP_ATR_MULT = 2.0    # v2: elevado 1.2→2.0 — impulso mínimo mais forte
+    MAX_RETRACEMENT  = 0.45   # v2: reduzido 0.70→0.45 — só gaps >55% não cobertos
+    MAX_GAP_AGE      = 15     # v2: ignora gaps com mais de 15 candles (muito velhos)
 
     @staticmethod
     def calculate_fvg_score(prices: List[float], volumes: List[float]) -> Dict:
@@ -108,6 +120,11 @@ class FVGAnalyzer:
         avg_vol = _mean(search_volumes) if search_volumes else 0.0
 
         for i in range(2, len(search_prices) - 1):
+            # v2: ignora gaps muito antigos (> MAX_GAP_AGE candles)
+            gap_age = len(search_prices) - 1 - i
+            if gap_age > FVGAnalyzer.MAX_GAP_AGE:
+                continue
+
             p_before  = search_prices[i - 2]   # candle "A" (antes do impulso)
             p_impulse = search_prices[i - 1]   # candle "B" (impulso)
             p_after   = search_prices[i]        # candle "C" (retração parcial)
@@ -206,7 +223,19 @@ class FVGAnalyzer:
             + 0.20 * impulse_score     # força do impulso original
             + 0.15 * vol_score         # volume no impulso
         )
-
+        # ── v2: filtro de tendência EMA20 vs EMA50 ───────────────────────
+        # FVG fill contra a tendência tem WR muito baixo — penaliza fortemente
+        ema20 = _ema(prices[-60:], 20) if len(prices) >= 20 else current_price
+        ema50 = _ema(prices[-80:], 50) if len(prices) >= 50 else current_price
+        trend_up = ema20 >= ema50
+        trend_aligned = (
+            (best_direction == "LONG" and trend_up) or
+            (best_direction == "SHORT" and not trend_up)
+        )
+        if trend_aligned:
+            raw_score = min(1.0, raw_score * 1.12)  # boost de 12% quando alinhado
+        else:
+            raw_score *= 0.62  # penalidade forte — FVG contra tendência falha muito
         fvg_score   = round(raw_score, 4)
         entry_valid = fvg_score >= FVGAnalyzer.FVG_THRESHOLD
 
