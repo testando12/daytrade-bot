@@ -4005,6 +4005,9 @@ async function loadLeverage() {
         msgs.innerHTML += `<div class="chat-msg bot"><span>⚙️ ${_escHtml(data.detail || 'Gemini não configurado — adicione GEMINI_API_KEY no Railway.')}</span></div>`;
       } else if (res.status === 401 || res.status === 403) {
         msgs.innerHTML += `<div class="chat-msg bot"><span>🔒 API Key inválida ou ausente.</span></div>`;
+      } else if (res.status === 502) {
+        const detail = (data.detail || '').split('\n')[0];
+        msgs.innerHTML += `<div class="chat-msg bot"><span>⚠️ Erro Gemini: ${_escHtml(detail)}</span></div>`;
       } else {
         const err = data.detail || `Erro ${res.status}`;
         msgs.innerHTML += `<div class="chat-msg bot"><span>⚠️ ${_escHtml(err)}</span></div>`;

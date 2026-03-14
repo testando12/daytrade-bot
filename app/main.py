@@ -1705,6 +1705,8 @@ class _ChatRequest(BaseModel):
 @app.post("/api/chat", tags=["IA"])
 async def chat_ia(req: _ChatRequest, request: Request):
     """Chat com IA Gemini com contexto real do bot."""
+    import traceback as _tb
+
     _verify_api_key(request)
 
     if not _GEMINI_OK or _gemini_model is None:
@@ -1719,28 +1721,28 @@ async def chat_ia(req: _ChatRequest, request: Request):
     if len(user_msg) > 1000:
         raise HTTPException(status_code=400, detail="Mensagem muito longa (máx 1000 chars).")
 
-    bot_ctx = _build_bot_context()
-
-    system_prompt = f"""Você é um assistente especializado em trading algorítmico analisando o bot PWD Trading.
-Seja direto, técnico e objetivo. Responda em português.
-Quando relevante, use os dados reais do bot abaixo para embasar sua resposta.
-Não invente dados — use apenas o que está no contexto.
-Se não souber algo, diga claramente.
-
-{bot_ctx}"""
-
     try:
-        response = await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: _gemini_model.generate_content(
-                f"{system_prompt}\n\nUsuário: {user_msg}"
-            )
+        bot_ctx = _build_bot_context()
+
+        system_prompt = (
+            "Você é um assistente especializado em trading algorítmico analisando o bot PWD Trading.\n"
+            "Seja direto, técnico e objetivo. Responda em português.\n"
+            "Use os dados reais do bot abaixo para embasar sua resposta. Não invente dados.\n\n"
+            + bot_ctx
+        )
+        full_prompt = system_prompt + "\n\nUsuário: " + user_msg
+
+        response = await asyncio.to_thread(
+            _gemini_model.generate_content, full_prompt
         )
         reply = response.text.strip()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erro na API Gemini: {str(e)}")
+        return {"reply": reply}
 
-    return {"reply": reply}
+    except HTTPException:
+        raise
+    except Exception as e:
+        _detail = f"{type(e).__name__}: {e}\n{_tb.format_exc()[-800:]}"
+        raise HTTPException(status_code=502, detail=_detail)
 
 
 @app.get("/alerts/history")
