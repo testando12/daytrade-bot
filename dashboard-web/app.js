@@ -3996,17 +3996,22 @@ async function loadLeverage() {
         headers: { 'Content-Type': 'application/json', 'X-API-Key': getApiKey() },
         body: JSON.stringify({ message: text }),
       });
-      const data = await res.json();
       document.getElementById(loadingId)?.remove();
+      let data = {};
+      try { data = await res.json(); } catch (_) {}
       if (res.ok && data.reply) {
         msgs.innerHTML += `<div class="chat-msg bot"><span>${_escHtml(data.reply)}</span></div>`;
+      } else if (res.status === 503) {
+        msgs.innerHTML += `<div class="chat-msg bot"><span>⚙️ ${_escHtml(data.detail || 'Gemini não configurado — adicione GEMINI_API_KEY no Railway.')}</span></div>`;
+      } else if (res.status === 401 || res.status === 403) {
+        msgs.innerHTML += `<div class="chat-msg bot"><span>🔒 API Key inválida ou ausente.</span></div>`;
       } else {
-        const err = data.detail || 'Erro na resposta.';
+        const err = data.detail || `Erro ${res.status}`;
         msgs.innerHTML += `<div class="chat-msg bot"><span>⚠️ ${_escHtml(err)}</span></div>`;
       }
     } catch (e) {
       document.getElementById(loadingId)?.remove();
-      msgs.innerHTML += `<div class="chat-msg bot"><span>⚠️ Sem conexão com o servidor.</span></div>`;
+      msgs.innerHTML += `<div class="chat-msg bot"><span>⚠️ Sem conexão — verifique se o servidor está online.</span></div>`;
     }
 
     btn.disabled = false;
