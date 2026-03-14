@@ -1618,10 +1618,11 @@ import os as _os
 
 try:
     import google.generativeai as _genai
+    from google.api_core import retry as _api_retry
     _GEMINI_KEY = _os.environ.get("GEMINI_API_KEY", "")
     if _GEMINI_KEY:
         _genai.configure(api_key=_GEMINI_KEY)
-        _gemini_model = _genai.GenerativeModel("gemini-2.0-flash")
+        _gemini_model = _genai.GenerativeModel("gemini-2.0-flash-lite")
         _GEMINI_OK = True
     else:
         _gemini_model = None
@@ -1731,7 +1732,8 @@ async def chat_ia(req: _ChatRequest, request: Request, _auth: str = Depends(veri
         full_prompt = system_prompt + "\n\nUsuário: " + user_msg
 
         response = await asyncio.to_thread(
-            _gemini_model.generate_content, full_prompt
+            _gemini_model.generate_content, full_prompt,
+            request_options={"retry": _api_retry.Retry(maximum=0)}
         )
         reply = response.text.strip()
         return {"reply": reply}
