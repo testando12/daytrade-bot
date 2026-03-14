@@ -1703,11 +1703,9 @@ class _ChatRequest(BaseModel):
 
 
 @app.post("/api/chat", tags=["IA"])
-async def chat_ia(req: _ChatRequest, request: Request):
+async def chat_ia(req: _ChatRequest, request: Request, _auth: str = Depends(verify_api_key)):
     """Chat com IA Gemini com contexto real do bot."""
     import traceback as _tb
-
-    _verify_api_key(request)
 
     if not _GEMINI_OK or _gemini_model is None:
         raise HTTPException(
