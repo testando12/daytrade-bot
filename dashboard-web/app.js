@@ -4005,6 +4005,8 @@ async function loadLeverage() {
         msgs.innerHTML += `<div class="chat-msg bot"><span>⚙️ ${_escHtml(data.detail || 'Gemini não configurado — adicione GEMINI_API_KEY no Railway.')}</span></div>`;
       } else if (res.status === 401 || res.status === 403) {
         msgs.innerHTML += `<div class="chat-msg bot"><span>🔒 API Key inválida ou ausente.</span></div>`;
+      } else if (res.status === 504) {
+        msgs.innerHTML += `<div class="chat-msg bot"><span>⏳ Gemini demorou demais. Tente novamente.</span></div>`;
       } else if (res.status === 429) {
         msgs.innerHTML += `<div class="chat-msg bot"><span>⏳ Limite de requisições atingido. Aguarde ~1 minuto e tente novamente.</span></div>`;
       } else if (res.status === 502) {

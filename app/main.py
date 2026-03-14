@@ -1618,7 +1618,6 @@ import os as _os
 
 try:
     import google.generativeai as _genai
-    from google.api_core import retry as _api_retry
     _GEMINI_KEY = _os.environ.get("GEMINI_API_KEY", "")
     if _GEMINI_KEY:
         _genai.configure(api_key=_GEMINI_KEY)
@@ -1731,18 +1730,18 @@ async def chat_ia(req: _ChatRequest, request: Request, _auth: str = Depends(veri
         )
         full_prompt = system_prompt + "\n\nUsuário: " + user_msg
 
-        response = await asyncio.to_thread(
-            _gemini_model.generate_content, full_prompt,
-            request_options={"retry": _api_retry.Retry(maximum=0)}
+        response = await asyncio.wait_for(
+            asyncio.to_thread(_gemini_model.generate_content, full_prompt),
+            timeout=25.0
         )
         reply = response.text.strip()
         return {"reply": reply}
 
     except HTTPException:
         raise
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Gemini demorou demais. Tente novamente.")
     except Exception as e:
-        err_str = str(e)
-        if "429" in err_str or "ResourceExhausted" in err_str or "quota" in err_str.lower():
             raise HTTPException(
                 status_code=429,
                 detail="Cota da API Gemini atingida. Aguarde 1 minuto e tente novamente (free tier: 15 req/min)."
