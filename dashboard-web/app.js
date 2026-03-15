@@ -933,14 +933,14 @@ function savePreRealConfig() {
 // TOAST
 // =============================================
 
-function toast(message, type = 'info') {
+function toast(message, type = 'info', duration = 3500) {
   const container = document.getElementById('toast-container');
   const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: 'âš ️' };
   const div = document.createElement('div');
   div.className = `toast ${type}`;
   div.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
   container.appendChild(div);
-  setTimeout(() => div.remove(), 3500);
+  setTimeout(() => div.remove(), duration);
 }
 
 // =============================================
@@ -3891,41 +3891,100 @@ async function loadLeverage() {
 // ROADMAP + CHAT IA WIDGET
 // =============================================
 (function initRoadmap() {
-  // ── Fases do Roadmap ──────────────────────────────────────────────
-  const PHASES = [
-    {
-      status: 'done',
-      title: 'Fase 1 — Correção de Bugs',
-      desc: 'Removido abs() do momentum; bloqueadas entradas SHORT em todos os engines (VWAP, Squeeze, LS, FVG, PyramidBO).',
-      tag: 'Concluído',
-    },
-    {
-      status: 'active',
-      title: 'Fase 2 — Medir (200 ciclos)',
-      desc: 'Deixar o sistema rodar ~200 ciclos sem novas alterações. Comparar WR, PnL/ciclo e trades por ciclo vs. antes.',
-      tag: 'Em progresso',
-    },
-    {
-      status: 'pending',
-      title: 'Fase 3 — Melhorar Entradas',
-      desc: 'EMA50 no FVG (bullish só acima, bearish só abaixo). EMA50 no Squeeze. Verificar OHLC no feed antes de mexer no Liquidity Sweep.',
-      tag: 'Pendente',
-    },
-    {
-      status: 'pending',
-      title: 'Fase 4 — Confluência Mínima',
-      desc: 'Trade só ocorre se: momentum_score > 0.55 AND direction == LONG AND price > EMA50. Implementar após Fase 3 estabilizar.',
-      tag: 'Pendente',
-    },
-  ];
+  const CYCLES_GOAL = 300;
+  let _lastCyclesNotified = 0;
+
+  // ── Fases do Roadmap (dinâmicas por ciclos) ───────────────────────
+  function _buildPhases(cycles, perf) {
+    const wr   = Number(perf.win_rate_pct  || 0);
+    const pf   = Number(perf.profit_factor || 0);
+    const dd   = Math.abs(Number(perf.max_drawdown_pct || 0));
+    const pct  = Math.min(100, Math.round((cycles / CYCLES_GOAL) * 100));
+    const goLiveReady = cycles >= CYCLES_GOAL && wr >= 65 && pf >= 3.0 && dd < 12;
+
+    const f2Status = cycles >= CYCLES_GOAL ? 'done' : 'active';
+    const f2Tag    = cycles >= CYCLES_GOAL ? 'Concluído' : 'Em progresso';
+    const f2Progress = cycles < CYCLES_GOAL
+      ? `<div style="margin-top:6px">
+           <div style="display:flex;justify-content:space-between;font-size:11px;opacity:.7;margin-bottom:3px">
+             <span>${cycles} ciclos</span><span>${CYCLES_GOAL} meta</span>
+           </div>
+           <div style="background:rgba(255,255,255,.1);border-radius:4px;height:6px;overflow:hidden">
+             <div style="width:${pct}%;height:100%;background:var(--blue);border-radius:4px;transition:width .4s"></div>
+           </div>
+         </div>`
+      : `<div style="margin-top:5px;font-size:11px;color:var(--green)">✅ ${cycles} ciclos — WR ${wr.toFixed(1)}% · PF ${pf.toFixed(2)} · DD ${dd.toFixed(1)}%</div>`;
+
+    const f3Status = goLiveReady ? 'active' : 'pending';
+    const f3Tag    = goLiveReady ? '🚀 PRONTO — Ir para LIVE!' : 'Pendente';
+
+    return [
+      {
+        status: 'done',
+        title: 'Fase 1 — Engines v2 + Extreme Mode',
+        desc: 'FVG filtro tendência + idade. Liquidity Sweep janela expandida. Squeeze EMA50. Extreme mode permanente. Overnight limiter 35%.',
+        tag: 'Concluído',
+        extra: '',
+      },
+      {
+        status: f2Status,
+        title: `Fase 2 — Validação (${CYCLES_GOAL} ciclos extreme)`,
+        desc: 'Acumular 300 ciclos no modo extreme para validar WR ≥ 65%, PF ≥ 3.0 e DD < 12% com penalidades máximas.',
+        tag: f2Tag,
+        extra: f2Progress,
+      },
+      {
+        status: f3Status,
+        title: 'Fase 3 — Go Live',
+        desc: 'Configurar API keys do broker no Railway, mudar SIM_MODE → real, TRADING_MODE → live. Banca mínima recomendada: R$ 2.000.',
+        tag: f3Tag,
+        extra: '',
+      },
+      {
+        status: 'pending',
+        title: 'Fase 4 — Escalar',
+        desc: 'Após 2 semanas em live com WR≥60%, aumentar banca para R$5.000. Meta: R$100/dia consistente.',
+        tag: 'Pendente',
+        extra: '',
+      },
+    ];
+  }
 
   const ICON = { done: 'fa-check-circle', active: 'fa-spinner fa-spin', pending: 'fa-circle' };
 
-  function renderRoadmap() {
-    const body = document.getElementById('roadmap-body');
-    const badge = document.getElementById('roadmap-badge');
+  async function renderRoadmap() {
+    const body    = document.getElementById('roadmap-body');
+    const badge   = document.getElementById('roadmap-badge');
     const updated = document.getElementById('roadmap-updated');
     if (!body) return;
+
+    // Busca ciclos ao vivo
+    let cycles = 0, perf = {};
+    try {
+      const res = await api('/performance').catch(() => null);
+      perf   = res?.data || {};
+      cycles = Number(perf.total_cycles || 0);
+    } catch (_) {}
+
+    const PHASES = _buildPhases(cycles, perf);
+
+    // Alerta único quando atinge 300 ciclos
+    if (cycles >= CYCLES_GOAL && _lastCyclesNotified < CYCLES_GOAL) {
+      _lastCyclesNotified = cycles;
+      toast('🚀 Fase 2 concluída! Bot pronto para ir ao LIVE.', 'success', 8000);
+      // Flash no banner de saúde
+      const hBanner = document.getElementById('health-banner');
+      if (hBanner) {
+        document.getElementById('health-title').textContent = '🚀 Fase 2 concluída — Pronto para LIVE!';
+        document.getElementById('health-detail').textContent = `${cycles} ciclos · WR ${Number(perf.win_rate_pct||0).toFixed(1)}% · PF ${Number(perf.profit_factor||0).toFixed(2)}`;
+        hBanner.className = 'health-banner healthy';
+        hBanner.style.display = '';
+        clearTimeout(window._healthFlashTimer);
+        window._healthFlashTimer = setTimeout(() => { hBanner.className = 'health-banner hidden'; hBanner.style.display = 'none'; }, 10000);
+      }
+    } else if (cycles > 0) {
+      _lastCyclesNotified = Math.max(_lastCyclesNotified, cycles);
+    }
 
     body.innerHTML = PHASES.map(p => `
       <div class="roadmap-phase status-${p.status}">
@@ -3935,6 +3994,7 @@ async function loadLeverage() {
         <div class="roadmap-phase-content">
           <div class="roadmap-phase-title">${p.title}</div>
           <div class="roadmap-phase-desc">${p.desc}</div>
+          ${p.extra || ''}
           <span class="roadmap-phase-tag ${p.status}">${p.tag}</span>
         </div>
       </div>
@@ -4033,7 +4093,7 @@ async function loadLeverage() {
 
   // Inicializa
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', renderRoadmap);
+    document.addEventListener('DOMContentLoaded', () => renderRoadmap());
   } else {
     renderRoadmap();
   }
