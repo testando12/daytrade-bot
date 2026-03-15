@@ -520,19 +520,19 @@ def _current_session() -> tuple:
 
     if b3_open:
         total = len(settings.ALL_ASSETS)
-        return settings.ALL_ASSETS, f"[BR] B3 + [US] US + [GLOBAL] ({total} ativos)"
+        return settings.ALL_ASSETS, f"[BR] B3 + [US] US + [GLOBAL] ({total} ativos)", False
     elif nyse_open:
         # NYSE: US stocks + ETFs internacionais + Crypto + Commodities
         us_global = settings.US_STOCKS + _intl_etfs + settings.CRYPTO_ASSETS + _commodities
-        return us_global, f"[US] NYSE + [GLOBAL] ETFs Int'l + [CRYPTO] ({len(us_global)} ativos)"
+        return us_global, f"[US] NYSE + [GLOBAL] ETFs Int'l + [CRYPTO] ({len(us_global)} ativos)", False
     elif europe_open:
         # Europa: ETFs internacionais + Forex + Crypto + Commodities
         eu_session = _intl_etfs + _forex + settings.CRYPTO_ASSETS + _commodities
-        return eu_session, f"[EU] Europa + Forex + [CRYPTO] ({len(eu_session)} ativos)"
+        return eu_session, f"[EU] Europa + Forex + [CRYPTO] ({len(eu_session)} ativos)", False
     else:
         # Noite / Ásia: Crypto + Commodities agro (CME Globex cobre madrugada)
         overnight = settings.CRYPTO_ASSETS + _commodities
-        return overnight, f"[CRYPTO+AGRO] Noite/Ásia ({len(overnight)} ativos)"
+        return overnight, f"[CRYPTO+AGRO] Noite/Ásia ({len(overnight)} ativos)", True  # is_overnight=True
 
 
 def _align_to_candle_close(min_wait_sec: int, candle_minutes: int = 5) -> int:
@@ -615,7 +615,7 @@ async def _auto_cycle_loop():
         _scheduler_state["next_run"] = datetime.now().isoformat()
 
         # Determina sessão: B3+Crypto ou Crypto-only
-        active_assets, session_label = _current_session()
+        active_assets, session_label, _is_overnight = _current_session()
         _scheduler_state["session"] = session_label
 
         # Intervalo dinâmico: mais rápido para crypto, mais lento para B3
@@ -2718,7 +2718,7 @@ def _record_cycle_performance(pnl: float, capital: float, irq: float,
 @app.get("/trade/status")
 async def trade_status():
     """Retorna o estado atual do trading: capital, posições, log de eventos."""
-    _, session_label = _current_session()
+    _, session_label, _ = _current_session()
     # Capital efetivo = capital base + ganho/perda acumulado do dia (BRT)
     from datetime import timezone as _tz, timedelta as _td
     _brt = _tz(_td(hours=-3))
@@ -3584,9 +3584,16 @@ def _momentum_acceleration(asset: str, current_score: float) -> float:
     return 1.0
 
 
+# Multiplicador de capital para sessão noturna (20h-05h BRT) — limita exposição em baixa liquidez
+_OVERNIGHT_CAPITAL_MULT = 0.35
+
 async def _run_trade_cycle_internal(assets: list = None) -> dict:
     """Lógica interna de um ciclo de trading com alocação em 3 timeframes (10/25/65%)."""
     capital = _trade_state["capital"]
+    # Reduz capital exposto durante sessão noturna (baixa liquidez + custos 5× extreme)
+    _, _sess_label, _sess_overnight = _current_session()
+    if _sess_overnight:
+        capital = round(capital * _OVERNIGHT_CAPITAL_MULT, 2)
     all_assets = assets if assets is not None else settings.ALL_ASSETS
     b3_open = _is_market_open()
     session_label = "B3+Crypto" if (assets is None or len(all_assets) > len(settings.CRYPTO_ASSETS)) else "Crypto24/7"
