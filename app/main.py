@@ -284,7 +284,7 @@ _SIM_PROFILES = {
         "min_ret_threshold": 0.0060,
     },
 }
-_sim_mode: str = "normal"   # alterado via /trade/sim-mode
+_sim_mode: str = os.getenv("SIM_MODE", "extreme")   # padrão extreme — alterável via /trade/sim-mode ou env SIM_MODE
 
 
 # Modelo de custos (simulação realista paper-first)
