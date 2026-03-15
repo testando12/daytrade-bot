@@ -647,6 +647,7 @@ async def _auto_cycle_loop():
             _scheduler_debug["step"] = "cycle_done"
             _scheduler_debug["ts"] = datetime.now().isoformat()
             _persist_scheduler_state()
+            asyncio.create_task(_push_to_mirror())  # vitrine Railway — fire-and-forget
             pnl = result.get("cycle_pnl", 0)
             irq = result.get("irq", 0)
             turbo = result.get("turbo_active", False)
@@ -741,6 +742,44 @@ async def _keep_alive_loop():
                 await client.get(url)
         except Exception:
             pass
+
+
+# ═══════════════════════════════════════════
+# MIRROR PUSH: envia estado para Railway (vitrine de dados)
+# ───────────────────────────────────────────
+# Configura no .env local:
+#   MIRROR_URL=https://daytrade-bot-production.up.railway.app
+#   MIRROR_API_KEY=<api_key_do_railway>
+# No Railway, sete MIRROR_MODE=true para desativar o engine de trading
+# ═══════════════════════════════════════════
+
+async def _push_to_mirror():
+    """Envia estado atual (capital, P&L, win/loss) para o Railway vitrine."""
+    mirror_url = os.getenv("MIRROR_URL", "").rstrip("/")
+    mirror_key = os.getenv("MIRROR_API_KEY", "")
+    if not mirror_url:
+        return
+    headers = {"X-API-Key": mirror_key, "Content-Type": "application/json"}
+    try:
+        import httpx
+        cycles_pnl = sum(c.get("pnl", 0) for c in _perf_state.get("cycles", []))
+        total_pnl  = round(float(_perf_state.get("total_pnl_offset", 0)) + cycles_pnl, 2)
+        async with httpx.AsyncClient(timeout=8) as client:
+            await client.post(f"{mirror_url}/admin/restore-trade", json={
+                "capital":      round(_trade_state.get("capital", 0), 2),
+                "total_pnl":    total_pnl,
+                "auto_trading": _trade_state.get("auto_trading", True),
+            }, headers=headers)
+            await client.post(f"{mirror_url}/admin/restore-perf", json={
+                "win_count":           _perf_state.get("win_count", 0),
+                "loss_count":          _perf_state.get("loss_count", 0),
+                "total_gain":          round(_perf_state.get("total_gain", 0.0), 2),
+                "total_loss":          round(_perf_state.get("total_loss", 0.0), 2),
+                "total_cycles_offset": _effective_total_cycles(),
+                "total_pnl_offset":    total_pnl,
+            }, headers=headers)
+    except Exception as _mirror_err:
+        print(f"[mirror] ⚠️  Falha ao sincronizar Railway: {_mirror_err}", flush=True)
 
 
 async def _reconcile_broker_positions():
@@ -895,11 +934,18 @@ async def lifespan(app: FastAPI):
     # ── Reconciliação de posições com brokers ───────────────────────────
     asyncio.get_event_loop().create_task(_reconcile_broker_positions())
     # ── Scheduler de ciclos ────────────────────────────────────────────
-    task = asyncio.create_task(_auto_cycle_loop())
+    _mirror_mode = os.getenv("MIRROR_MODE", "false").lower() == "true"
+    if _mirror_mode:
+        # Modo vitrine: só serve dados, não executa trading
+        _trade_state["auto_trading"] = False
+        task = asyncio.create_task(asyncio.sleep(0))  # task vazia
+        print("[lifespan] 🪞 MIRROR_MODE ativo — engine de trading DESABILITADO (só vitrine)", flush=True)
+    else:
+        task = asyncio.create_task(_auto_cycle_loop())
+        print("[lifespan] Bot 24/7 ativo — scheduler iniciado", flush=True)
     _scheduler_state["task"] = task
     # ── Keep-alive desativado (bot local) ─────────────────────────────
     keep_alive_task = asyncio.create_task(_keep_alive_loop())
-    print("[lifespan] Bot 24/7 ativo — scheduler iniciado", flush=True)
     yield
     # Shutdown
     _scheduler_state["running"] = False
