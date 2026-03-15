@@ -40,6 +40,7 @@ from app.engines.regime import RegimeDetector
 from app.engines.vwap_reversion import VWAPReversionAnalyzer
 from app.engines.pyramid_breakout import PyramidBreakoutAnalyzer
 from app.engines.risk_manager import risk_manager
+from app.engines import orb30_win as _orb30_win
 
 # Database
 try:
@@ -2547,6 +2548,7 @@ async def list_modules():
                 "risk_irq": True,
                 "portfolio": True,
                 "risk_manager": True,
+                "orb30_win": _orb30_win.status(),
             },
             "integrations": {
                 "binance_market_data": MARKET_DATA_AVAILABLE,
@@ -4175,9 +4177,21 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         _trade_log("GRID_PROFIT", "—", grid_pnl,
             f"📊 Grid Trading: +R$ {grid_pnl:.4f} | {len(grid_details)} ativos em grid | Capital grid: R$ {grid_capital:.2f}")
 
+    # ── ORB-30 WIN — estratégia principal futuros B3 ────────────────────────
+    _orb_result = _orb30_win.run_cycle()
+    pnl_orb30   = _orb_result["cycle_pnl"]
+    if _orb_result["signal"] not in ("FORA_HORARIO", "NO_DATA", "AGUARDANDO_ORB",
+                                      "AGUARDANDO_BREAK", "JA_OPEROU", "HOLD"):
+        _trade_log("ORB30_WIN", _orb_result["symbol"], pnl_orb30,
+            f"📈 ORB-30 WIN [{_orb_result['signal']}] "
+            f"pos={_orb_result['position']} "
+            f"entry={_orb_result['entry_price']} "
+            f"ORB {_orb_result['orb_high']}-{_orb_result['orb_low']} "
+            f"P&L ciclo: R${pnl_orb30:+.2f} | Acum: R${_orb_result['cum_pnl']:+.2f}")
+
     fees_total = round(cycle_costs.get("total", 0.0), 4)
-    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + pnl_vr + pnl_pb + grid_pnl + fees_total, 4)
-    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + pnl_vr + pnl_pb + grid_pnl, 4)
+    gross_cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + pnl_vr + pnl_pb + grid_pnl + pnl_orb30 + fees_total, 4)
+    cycle_pnl = round(pnl_5m + pnl_1h + pnl_1d + pnl_mr + pnl_bo + pnl_sq + pnl_ls + pnl_fvg + pnl_vr + pnl_pb + grid_pnl + pnl_orb30, 4)
 
     # ── 4b. Proteção Inteligente (Smart Pause/Resume + Drawdown + Semanal) ─
     from datetime import timezone as _tz2, timedelta as _td2
@@ -4303,6 +4317,21 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
             _pb_lvl = pb_results.get(asset, {}).get("pyramid_level", 1)
             new_positions[asset] = {"amount": info["amount"], "action": "BUY", "tf": "pb",
                 "pct": round(info["amount"]/capital*100, 1), "classification": f"PYRAMID_BO_{pb_dir}_L{_pb_lvl}", "change_pct": info["ret_pct"]}
+
+    # ── ORB-30 WIN: adiciona posição se aberta ────────────────────────────
+    if _orb_result.get("position") is not None:
+        _orb_sym = _orb_result["symbol"]
+        _orb_dir = _orb_result["position"]
+        new_positions[_orb_sym] = {
+            "amount":         _orb30_win.WIN_CAPITAL,
+            "action":         "BUY" if _orb_dir == "LONG" else "SELL",
+            "tf":             "orb30",
+            "pct":            round(_orb30_win.WIN_CAPITAL / capital * 100, 1),
+            "classification": f"ORB30_{_orb_dir}",
+            "change_pct":     round(pnl_orb30 / _orb30_win.WIN_CAPITAL * 100, 2) if _orb30_win.WIN_CAPITAL > 0 else 0.0,
+            "entry_price":    _orb_result.get("entry_price"),
+            "entry_time":     _orb_result.get("entry_time", _brt_now().isoformat()),
+        }
 
     # Preserva entry_time e entry_price das posições anteriores (não sobrescreve)
     for asset, pos in new_positions.items():
