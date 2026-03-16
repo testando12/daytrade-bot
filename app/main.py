@@ -976,7 +976,7 @@ async def lifespan(app: FastAPI):
     _trade_state["auto_trading"] = True
 
     # ── Lab Mode: reset estado para começar limpo ──────────────────────
-    if _LAB_MODE and os.getenv("LAB_RESET_ON_DEPLOY", "false").lower() == "true":
+    if _LAB_MODE:
         _trade_state["capital"] = 500.0
         _trade_state["total_pnl"] = 0.0
         _trade_state["positions"] = []
@@ -990,7 +990,7 @@ async def lifespan(app: FastAPI):
         _perf_state["total_cycles_offset"] = 0
         db_state.save_state("trade_state", _trade_state)
         db_state.save_state("performance", _perf_state)
-        print("[lab] 🧹 Estado zerado no deploy (LAB_RESET_ON_DEPLOY=true)", flush=True)
+        print("[lab] 🧹 Estado zerado — Lab começando limpo (R$500, 0 ciclos)", flush=True)
 
     # ── Reconciliação de posições com brokers ───────────────────────────
     asyncio.get_event_loop().create_task(_reconcile_broker_positions())
