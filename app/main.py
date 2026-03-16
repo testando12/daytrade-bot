@@ -214,8 +214,9 @@ _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
 # Alocação por timeframe: SHORT + MEDIUM + LONG + MR + BO = 100% (LIVE-SAFE: apenas 3 engines)
 # Engines desativados: SQ, LS, FVG, VR, PB — complexidade desnecessária para live
-# No Railway (LAB_MODE=true), todos os 9 engines ficam ativos para teste
-_LAB_MODE = os.getenv("LAB_MODE", "false").lower() == "true" or os.getenv("MIRROR_MODE", "false").lower() == "true"
+# No Railway (auto-detectado por RAILWAY_PUBLIC_DOMAIN ou MIRROR_MODE/LAB_MODE), todos os 9 engines ficam ativos
+_ON_RAILWAY = bool(os.getenv("RAILWAY_PUBLIC_DOMAIN"))
+_LAB_MODE = _ON_RAILWAY or os.getenv("LAB_MODE", "false").lower() == "true" or os.getenv("MIRROR_MODE", "false").lower() == "true"
 
 if _LAB_MODE:
     # LAB: todos os 9 engines ativos com alocação distribuída
@@ -975,8 +976,9 @@ async def lifespan(app: FastAPI):
     # ── Auto-trading ativo por padrão ──────────────────────────────────
     _trade_state["auto_trading"] = True
 
-    # ── Lab Mode: reset estado para começar limpo ──────────────────────
-    if _LAB_MODE:
+    # ── Lab Mode: reset estado apenas uma vez (marca com _lab_reset_version) ──
+    _RESET_VERSION = "reset_v2"  # bump para forçar novo reset
+    if _LAB_MODE and _perf_state.get("_lab_reset_version") != _RESET_VERSION:
         _trade_state["capital"] = 500.0
         _trade_state["total_pnl"] = 0.0
         _trade_state["positions"] = []
@@ -988,9 +990,10 @@ async def lifespan(app: FastAPI):
         _perf_state["cycles"] = []
         _perf_state["total_pnl_offset"] = 0.0
         _perf_state["total_cycles_offset"] = 0
+        _perf_state["_lab_reset_version"] = _RESET_VERSION
         db_state.save_state("trade_state", _trade_state)
         db_state.save_state("performance", _perf_state)
-        print("[lab] 🧹 Estado zerado — Lab começando limpo (R$500, 0 ciclos)", flush=True)
+        print(f"[lab] 🧹 Estado zerado — Lab começando limpo (R$500, 0 ciclos) [{_RESET_VERSION}]", flush=True)
 
     # ── Reconciliação de posições com brokers ───────────────────────────
     asyncio.get_event_loop().create_task(_reconcile_broker_positions())
