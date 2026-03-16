@@ -772,6 +772,9 @@ async def _keep_alive_loop():
 # ── Cache de klines do último ciclo (para enviar ao lab) ──────────
 _last_klines_cache: dict = {"5m": None, "1h": None, "1d": None}
 
+# ── Cache de klines recebidos do bot local (Railway usa no próximo ciclo) ──
+_received_klines: dict = {"5m": {}, "1h": {}, "1d": {}, "ts": 0.0}
+
 
 async def _push_to_mirror():
     """Envia estado + dados de mercado para o Railway Lab."""
@@ -3697,6 +3700,20 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
                     data_source = "brapi/yahoo"
             except Exception:
                 pass
+
+    # Injetar dados recebidos do bot local (MT5 + Binance reais)
+    _recv_age = time.time() - _received_klines.get("ts", 0)
+    if _recv_age < 1800:  # dados frescos (< 30 min)
+        for tf in ("5m", "1h", "1d"):
+            recv = _received_klines.get(tf, {})
+            if recv:
+                if klines_by_tf[tf] is None:
+                    klines_by_tf[tf] = {}
+                klines_by_tf[tf].update(recv)  # merge: dados locais sobrescrevem
+                data_source = "local+live"
+        if _LAB_MODE:
+            print(f"[lab] 📡 Usando dados do bot local ({_recv_age:.0f}s atrás)", flush=True)
+
     # Fallback para dados de teste
     for tf in ("5m", "1h", "1d"):
         if not klines_by_tf[tf]:
@@ -5583,28 +5600,27 @@ async def run_backtest_endpoint(body: dict = None):
 @app.post("/lab/feed")
 async def lab_feed(body: dict):
     """
-    Recebe dados de mercado (klines) do bot local e roda todos os engines.
-    O bot local envia isso a cada ciclo via _push_to_mirror().
+    Recebe dados de mercado (klines) do bot local.
+    Railway usa esses dados no próximo ciclo (MT5 + Binance reais).
     """
     klines = body.get("klines", {})
     if not klines:
         raise HTTPException(status_code=400, detail="Nenhum dado de klines recebido.")
 
-    klines_1h = klines.get("1h", {})
-    klines_5m = klines.get("5m", {})
-    klines_1d = klines.get("1d", {})
+    count = 0
+    for tf in ("5m", "1h", "1d"):
+        tf_data = klines.get(tf, {})
+        if tf_data:
+            _received_klines[tf].update(tf_data)
+            count += len(tf_data)
+    _received_klines["ts"] = time.time()
 
-    if not klines_1h:
-        raise HTTPException(status_code=400, detail="klines '1h' obrigatório.")
-
-    result = run_lab_cycle(klines_1h=klines_1h, klines_5m=klines_5m, klines_1d=klines_1d)
+    print(f"[lab] ✅ Recebidos {count} ativos do bot local ({list(klines.keys())})", flush=True)
 
     return {
         "success": True,
-        "cycle": result.get("cycle", 0),
-        "total_pnl": result.get("total_pnl", 0),
-        "capital": result.get("capital", 0),
-        "engines_count": len(result.get("engines", {})),
+        "assets_received": count,
+        "timeframes": list(klines.keys()),
     }
 
 
