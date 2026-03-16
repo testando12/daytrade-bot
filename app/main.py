@@ -1252,7 +1252,7 @@ async def health_check():
     _brt = _tz(_td(hours=-3))
     return {
         "status": "ok",
-        "deploy_version": "v2026.03.10-lab-reset",
+        "deploy_version": "v2026.03.10-lab-diag",
         "timestamp": datetime.now(_brt).isoformat(),
         "auto_trading": _trade_state.get("auto_trading", False),
         "scheduler_running": _scheduler_state.get("running", False),
@@ -1260,6 +1260,12 @@ async def health_check():
         "last_cycle": _trade_state.get("last_cycle"),
         "uptime_session": _scheduler_state.get("session", ""),
         "persistence": db_state.storage_info(),
+        "lab_mode": _LAB_MODE,
+        "env_mirror_mode": os.getenv("MIRROR_MODE", "NOT_SET"),
+        "env_lab_mode": os.getenv("LAB_MODE", "NOT_SET"),
+        "capital": _trade_state.get("capital"),
+        "win_count": _perf_state.get("win_count"),
+        "loss_count": _perf_state.get("loss_count"),
     }
 
 
