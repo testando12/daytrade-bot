@@ -10,4 +10,5 @@ restartPolicyMaxRetries = 10
 
 [variables]
 MIRROR_MODE = "true"
+LAB_RESET_ON_DEPLOY = "true"
 API_SECRET_KEY = "8fcMmWvKE36D82-4T1L229k3xUiIL65E2Sgm2d6si9o"

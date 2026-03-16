@@ -974,6 +974,24 @@ async def lifespan(app: FastAPI):
             print("[alerts] WhatsApp (CallMeBot) configurado", flush=True)
     # ── Auto-trading ativo por padrão ──────────────────────────────────
     _trade_state["auto_trading"] = True
+
+    # ── Lab Mode: reset estado para começar limpo ──────────────────────
+    if _LAB_MODE and os.getenv("LAB_RESET_ON_DEPLOY", "false").lower() == "true":
+        _trade_state["capital"] = 500.0
+        _trade_state["total_pnl"] = 0.0
+        _trade_state["positions"] = []
+        _trade_state["pnl_today"] = 0.0
+        _perf_state["win_count"] = 0
+        _perf_state["loss_count"] = 0
+        _perf_state["total_gain"] = 0.0
+        _perf_state["total_loss"] = 0.0
+        _perf_state["cycles"] = []
+        _perf_state["total_pnl_offset"] = 0.0
+        _perf_state["total_cycles_offset"] = 0
+        db_state.save_state("trade_state", _trade_state)
+        db_state.save_state("performance", _perf_state)
+        print("[lab] 🧹 Estado zerado no deploy (LAB_RESET_ON_DEPLOY=true)", flush=True)
+
     # ── Reconciliação de posições com brokers ───────────────────────────
     asyncio.get_event_loop().create_task(_reconcile_broker_positions())
     # ── Scheduler de ciclos ────────────────────────────────────────────
