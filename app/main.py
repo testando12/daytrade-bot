@@ -977,7 +977,7 @@ async def lifespan(app: FastAPI):
     _trade_state["auto_trading"] = True
 
     # ── Lab Mode: reset estado apenas uma vez (marca com _lab_reset_version) ──
-    _RESET_VERSION = "reset_v3"  # bump para forçar novo reset
+    _RESET_VERSION = "reset_v4"  # bump para forçar novo reset
     if _LAB_MODE and _perf_state.get("_lab_reset_version") != _RESET_VERSION:
         _trade_state["capital"] = 500.0
         _trade_state["total_pnl"] = 0.0
@@ -996,6 +996,15 @@ async def lifespan(app: FastAPI):
         _perf_state["total_cycles_offset"] = 0
         _perf_state["total_pnl_history"] = []
         _perf_state["_lab_reset_version"] = _RESET_VERSION
+        # Reset proteção (peak_capital, hard_stop, etc)
+        _protection_state["peak_capital"] = 500.0
+        _protection_state["hard_stopped"] = False
+        _protection_state["paused"] = False
+        _protection_state["pause_reason"] = ""
+        _protection_state["consecutive_losses"] = 0
+        _protection_state["size_multiplier"] = 1.0
+        _protection_state["trailing_highs"] = {}
+        _protection_state["sl_cooldown"] = {}
         db_state.save_state("trade_state", _trade_state)
         db_state.save_state("performance", _perf_state)
         print(f"[lab] 🧹 Estado zerado — Lab começando limpo (R$500, 0 ciclos) [{_RESET_VERSION}]", flush=True)
