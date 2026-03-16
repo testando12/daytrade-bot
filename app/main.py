@@ -41,6 +41,7 @@ from app.engines.vwap_reversion import VWAPReversionAnalyzer
 from app.engines.pyramid_breakout import PyramidBreakoutAnalyzer
 from app.engines.risk_manager import risk_manager
 from app.engines import orb30_win as _orb30_win
+from app.lab import run_lab_cycle, get_lab_results, reset_lab
 
 # Database
 try:
@@ -91,6 +92,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 _PUBLIC_ENDPOINTS = {
     "/", "/health", "/diagnostics", "/docs", "/openapi.json", "/redoc",
     "/ui", "/dashboard", "/simulador", "/backup-state",
+    "/lab/results",
 }
 # Prefixos públicos (static files, etc)
 _PUBLIC_PREFIXES = ("/ui/",)
@@ -210,18 +212,16 @@ def _effective_total_cycles() -> int:
 _last_reinvestment_date: str = ""  # data da última vez que reinvestiu (YYYY-MM-DD)
 _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
-# Alocação por timeframe: SHORT 2% + MEDIUM 28% + LONG 28% + MR 8% + BO 6% + SQ 5% + LS 2% + FVG 2% + VR 10% + PB 9% = 100%
-# v5.0 (otimização capital baixo): 1h gera 85% do lucro → boost 20%→28%, 5m drenou → 8%→2%, 1d 30%→28%
-# VR excela em lateral (ADX<20), PB excela em tendência (ADX>25) — sistema complementar
-# 1d é o motor de lucro (R$47 vs R$2 do 1h e R$0.6 do 5m) → boost 1d, reduz 5m
+# Alocação por timeframe: SHORT + MEDIUM + LONG + MR + BO = 100% (LIVE-SAFE: apenas 3 engines)
+# Engines desativados: SQ, LS, FVG, VR, PB — complexidade desnecessária para live
 _TIMEFRAME_ALLOC   = {"5m": 0.01, "1h": 0.25, "1d": 0.40}
-_MR_ALLOC_PCT      = 0.08   # capital dedicado ao bucket de Mean Reversion
-_BO_ALLOC_PCT      = 0.06   # capital dedicado ao bucket de Breakout
-_SQ_ALLOC_PCT      = 0.05   # capital dedicado ao bucket de Squeeze (Volatility Compression)
-_LS_ALLOC_PCT      = 0.02   # capital dedicado ao bucket de Liquidity Sweep (Stop Hunt)
-_FVG_ALLOC_PCT     = 0.02   # capital dedicado ao bucket de Fair Value Gap (Imbalance Fill)
-_VR_ALLOC_PCT      = 0.10   # capital dedicado ao bucket de VWAP Reversion (novo v4.0)
-_PB_ALLOC_PCT      = 0.09   # capital dedicado ao bucket de Pyramid Breakout (novo v4.0)
+_MR_ALLOC_PCT      = 0.15   # Mean Reversion: 15% (era 8%, absorveu capital dos desativados)
+_BO_ALLOC_PCT      = 0.19   # Breakout: 19% (era 6%, absorveu capital dos desativados)
+_SQ_ALLOC_PCT      = 0.00   # DESATIVADO — Squeeze
+_LS_ALLOC_PCT      = 0.00   # DESATIVADO — Liquidity Sweep
+_FVG_ALLOC_PCT     = 0.00   # DESATIVADO — Fair Value Gap
+_VR_ALLOC_PCT      = 0.00   # DESATIVADO — VWAP Reversion
+_PB_ALLOC_PCT      = 0.00   # DESATIVADO — Pyramid Breakout
 # v2.1 (2026-03-05): top-N reduzido para 1 por bucket — operar só o melhor sinal de cada timeframe
 _TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 1, "1d": 1}  # era 1/2/3 — com 1d=3 perdia em dias de queda
 
@@ -754,8 +754,12 @@ async def _keep_alive_loop():
 # No Railway, sete MIRROR_MODE=true para desativar o engine de trading
 # ═══════════════════════════════════════════
 
+# ── Cache de klines do último ciclo (para enviar ao lab) ──────────
+_last_klines_cache: dict = {"5m": None, "1h": None, "1d": None}
+
+
 async def _push_to_mirror():
-    """Envia estado atual (capital, P&L, win/loss) para o Railway vitrine."""
+    """Envia estado + dados de mercado para o Railway Lab."""
     mirror_url = os.getenv("MIRROR_URL", "").rstrip("/")
     mirror_key = os.getenv("MIRROR_API_KEY", "")
     if not mirror_url:
@@ -765,7 +769,8 @@ async def _push_to_mirror():
         import httpx
         cycles_pnl = sum(c.get("pnl", 0) for c in _perf_state.get("cycles", []))
         total_pnl  = round(float(_perf_state.get("total_pnl_offset", 0)) + cycles_pnl, 2)
-        async with httpx.AsyncClient(timeout=8) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
+            # 1. Estado (mirror original)
             await client.post(f"{mirror_url}/admin/restore-trade", json={
                 "capital":      round(_trade_state.get("capital", 0), 2),
                 "total_pnl":    total_pnl,
@@ -779,6 +784,25 @@ async def _push_to_mirror():
                 "total_cycles_offset": _effective_total_cycles(),
                 "total_pnl_offset":    total_pnl,
             }, headers=headers)
+            # 2. Lab feed — envia klines reais para o laboratório
+            klines_payload = {}
+            for tf in ("5m", "1h", "1d"):
+                raw = _last_klines_cache.get(tf)
+                if raw:
+                    # Serializar: só prices/volumes/highs/lows (leve)
+                    klines_payload[tf] = {}
+                    for asset, data in raw.items():
+                        klines_payload[tf][asset] = {
+                            "prices":  data.get("prices", [])[-50:],
+                            "volumes": data.get("volumes", [])[-50:],
+                            "highs":   data.get("highs", [])[-50:],
+                            "lows":    data.get("lows", [])[-50:],
+                        }
+            if klines_payload:
+                await client.post(f"{mirror_url}/lab/feed",
+                                  json={"klines": klines_payload},
+                                  headers=headers)
+                print(f"[lab] ✅ Dados enviados para lab ({len(klines_payload)} timeframes)", flush=True)
     except Exception as _mirror_err:
         print(f"[mirror] ⚠️  Falha ao sincronizar Railway: {_mirror_err}", flush=True)
 
@@ -937,10 +961,10 @@ async def lifespan(app: FastAPI):
     # ── Scheduler de ciclos ────────────────────────────────────────────
     _mirror_mode = os.getenv("MIRROR_MODE", "false").lower() == "true"
     if _mirror_mode:
-        # Modo vitrine: só serve dados, não executa trading
+        # Modo Lab: recebe dados do bot local, roda engines em simulação
         _trade_state["auto_trading"] = False
-        task = asyncio.create_task(asyncio.sleep(0))  # task vazia
-        print("[lifespan] 🪞 MIRROR_MODE ativo — engine de trading DESABILITADO (só vitrine)", flush=True)
+        task = asyncio.create_task(_lab_auto_fetch_loop())
+        print("[lifespan] 🔬 LAB MODE ativo — laboratório de estratégias (recebe dados via /lab/feed)", flush=True)
     else:
         task = asyncio.create_task(_auto_cycle_loop())
         print("[lifespan] Bot 24/7 ativo — scheduler iniciado", flush=True)
@@ -3665,6 +3689,10 @@ async def _run_trade_cycle_internal(assets: list = None) -> dict:
         if not klines_by_tf[tf]:
             klines_by_tf[tf] = test_assets_data
 
+    # Cache klines para envio ao Lab (Railway)
+    for tf in ("5m", "1h", "1d"):
+        _last_klines_cache[tf] = klines_by_tf[tf]
+
     # ── 2. Top N ativos por momentum (com filtro de score mínimo) ────────
     min_score = settings.MIN_MOMENTUM_SCORE
     no_position_reason = ""
@@ -5533,6 +5561,77 @@ async def run_backtest_endpoint(body: dict = None):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LAB — Laboratório de Estratégias (Railway recebe dados, roda 9 engines)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/lab/feed")
+async def lab_feed(body: dict):
+    """
+    Recebe dados de mercado (klines) do bot local e roda todos os engines.
+    O bot local envia isso a cada ciclo via _push_to_mirror().
+    """
+    klines = body.get("klines", {})
+    if not klines:
+        raise HTTPException(status_code=400, detail="Nenhum dado de klines recebido.")
+
+    klines_1h = klines.get("1h", {})
+    klines_5m = klines.get("5m", {})
+    klines_1d = klines.get("1d", {})
+
+    if not klines_1h:
+        raise HTTPException(status_code=400, detail="klines '1h' obrigatório.")
+
+    result = run_lab_cycle(klines_1h=klines_1h, klines_5m=klines_5m, klines_1d=klines_1d)
+
+    return {
+        "success": True,
+        "cycle": result.get("cycle", 0),
+        "total_pnl": result.get("total_pnl", 0),
+        "capital": result.get("capital", 0),
+        "engines_count": len(result.get("engines", {})),
+    }
+
+
+@app.get("/lab/results")
+async def lab_results():
+    """Retorna resultados do laboratório — público, sem auth."""
+    return {"success": True, "data": get_lab_results()}
+
+
+@app.post("/lab/reset")
+async def lab_reset(body: dict = None):
+    """Reseta o laboratório (capital virtual novo)."""
+    body = body or {}
+    capital = float(body.get("capital", 500.0))
+    reset_lab(capital)
+    return {"success": True, "message": f"Lab resetado com capital virtual ${capital:.2f}"}
+
+
+async def _lab_auto_fetch_loop():
+    """
+    Loop do Lab Mode (Railway): busca dados públicos da Binance
+    a cada 30 min e roda os engines, mesmo sem receber push do bot local.
+    """
+    await asyncio.sleep(30)  # warmup
+    print("[lab] 🔬 Lab auto-fetch loop iniciado (30 min cycle)", flush=True)
+    while True:
+        try:
+            if MARKET_DATA_AVAILABLE and market_data_service:
+                crypto_assets = list(settings.CRYPTO_ASSETS)[:10]
+                klines_1h = await market_data_service.get_all_klines(crypto_assets, "1h", 50)
+                if klines_1h:
+                    result = run_lab_cycle(klines_1h=klines_1h)
+                    print(f"[lab] 🔬 Ciclo #{result['cycle']} — "
+                          f"P&L: ${result['total_pnl']:+.2f} | "
+                          f"Capital: ${result['capital']:.2f}", flush=True)
+                else:
+                    print("[lab] ⚠️ Sem dados de mercado disponíveis", flush=True)
+        except Exception as e:
+            print(f"[lab] ❌ Erro no auto-fetch: {e}", flush=True)
+        await asyncio.sleep(1800)  # 30 minutos
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -21,7 +21,7 @@ class Settings:
 
     # Bot - Configurações de trading
     INITIAL_CAPITAL: float = float(os.getenv("INITIAL_CAPITAL", "2770"))
-    MAX_POSITION_PERCENTAGE: float = 0.30  # máximo 30% por ativo
+    MAX_POSITION_PERCENTAGE: float = 0.05  # máximo 5% por ativo (live-safe)
     MIN_POSITION_AMOUNT: float = 30.0  # ~$5 (mín Binance) em BRL = R$30
 
     # ── Mínimos notacionais por broker (rejeita ordens abaixo disso) ───
@@ -41,14 +41,14 @@ class Settings:
     ATR_MAX_SL: float = 0.04  # SL máximo 4% (proteção para grana real)
 
     # ── Grid Trading (mercado lateral) ─────────────────────────────────
-    GRID_ENABLED: bool = True
+    GRID_ENABLED: bool = False  # DESATIVADO — complexidade desnecessária para live
     GRID_LEVELS: int = 5  # número de níveis de compra/venda
     GRID_SPACING_PCT: float = 0.005  # 0.5% entre cada nível
     GRID_CAPITAL_PCT: float = 0.20  # usa 20% do capital para grid
     GRID_MIN_RANGE: float = 0.01  # volatilidade mínima para ativar grid (1%)
 
     # ── Scalping Turbo ─────────────────────────────────────────────────
-    TURBO_ENABLED: bool = True
+    TURBO_ENABLED: bool = False  # DESATIVADO — gera ruído, trades de baixa qualidade
     TURBO_VOL_THRESHOLD: float = 0.015  # volatilidade > 1.5% ativa turbo
     TURBO_CYCLE_SECONDS: int = 120  # ciclos de 2min no turbo
     TURBO_TP_PCT: float = 0.004  # take profit rápido 0.4% no turbo
@@ -64,9 +64,9 @@ class Settings:
     PARTIAL_TP_FIRST_TARGET: float = 0.012  # primeiro alvo = 1.2% (era 1.0% — deixa winner crescer)
 
     # ── Momentum Acceleration ──────────────────────────────────────────
-    MOMENTUM_ACCEL_ENABLED: bool = True
-    MOMENTUM_ACCEL_THRESHOLD: float = 0.02  # aceleração > 2% entre ciclos
-    MOMENTUM_ACCEL_BOOST: float = 1.5  # aumenta posição 50% quando acelerando
+    MOMENTUM_ACCEL_ENABLED: bool = False  # DESATIVADO — não aumentar posição automaticamente
+    MOMENTUM_ACCEL_THRESHOLD: float = 0.02
+    MOMENTUM_ACCEL_BOOST: float = 1.0  # sem boost
 
     # Limites operacionais (proteção inteligente — agressiva mas com pausa/retorno)
     MAX_DAILY_LOSS_PERCENTAGE: float = 0.05  # 5% perda diária → PAUSA (proteção real)
@@ -75,16 +75,16 @@ class Settings:
     RESUME_MOMENTUM_THRESHOLD: float = 0.60  # momentum > 0.60 → volta a operar após pausa
     CONSECUTIVE_LOSS_REDUCE: int = 3  # após 3 perdas seguidas, reduz tamanho 50%
     CONSECUTIVE_LOSS_RECOVERY: float = 0.50  # fator de redução após perdas consecutivas
-    MAX_TRADES_PER_HOUR: int = 120  # mais trades com scalping turbo
-    MAX_TRADES_PER_DAY: int = 1000  # mais trades com grid + turbo
+    MAX_TRADES_PER_HOUR: int = 10   # live-safe: máx 10 trades/hora
+    MAX_TRADES_PER_DAY: int = 50    # live-safe: máx 50 trades/dia
 
     # Filtro de score mínimo (só opera se momentum > threshold)
     # v2 (2026-03-04): elevado de 0.35→0.50 para reduzir entradas com score marginal
     # v3 (2026-03-09): elevado de 0.50→0.55 para melhorar win rate e PF
-    MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.55"))
+    MIN_MOMENTUM_SCORE: float = float(os.getenv("MIN_MOMENTUM_SCORE", "0.60"))  # live: mais seletivo
 
-    # Kelly Criterion — multiplier conservador
-    KELLY_FRACTION: float = 0.25  # usa 25% do Kelly real (Kelly fracionário)
+    # Kelly Criterion — DESATIVADO (sizing fixo 1% por trade)
+    KELLY_FRACTION: float = 0.0  # 0 = desativado, usa sizing fixo de 1% do capital
 
     # Compounding: reinveste % do lucro diário (0.0 = não, 1.0 = 100%)
     COMPOUNDING_RATE: float = float(os.getenv("COMPOUNDING_RATE", "1.0"))
@@ -195,24 +195,9 @@ class Settings:
         "IRDM11", "KNCR11",             # recebíveis (CRI)
     ]
 
-    # Criptomoedas (Binance: BTC, ETH, ...) — 45 assets 24h — v5.1 expandido
+    # Criptomoedas (Binance) — LIVE-SAFE: apenas top 5 liquidez + volume
     CRYPTO_ASSETS: List[str] = [
-        # Top 10 (originais)
-        "BTC", "ETH", "BNB", "SOL", "ADA",
-        "XRP", "DOGE", "AVAX", "DOT", "LINK",
-        # Altcoins voláteis
-        "MATIC", "SHIB", "UNI", "LTC", "ATOM",
-        "FIL", "NEAR", "APT", "ARB", "OP",
-        "INJ", "SUI", "SEI", "TIA", "PEPE",
-        "WIF", "FLOKI", "BONK", "RENDER", "FET",
-        # DeFi — alta volatilidade e volume (NOVAS v5.1)
-        "AAVE", "MKR", "COMP", "CRV", "SNX",
-        # Solana ecosystem (NOVAS v5.1)
-        "JTO", "PYTH", "JUP", "POPCAT",
-        # Telegram / TON ecosystem (NOVAS v5.1)
-        "TON", "NOT",
-        # Layer 1 emergentes (NOVAS v5.1)
-        "TAO", "STRK", "MANTA",
+        "BTC", "ETH", "SOL", "BNB", "XRP",
     ]
 
     # Forex (via Yahoo Finance: EURUSD=X, etc.)

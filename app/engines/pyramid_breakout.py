@@ -121,13 +121,11 @@ class PyramidBreakoutAnalyzer:
     EMA_FAST = 20
     EMA_SLOW = 50
 
-    # Piramidagem: multiplicador de posição por nível
+    # Piramidagem: DESATIVADA para live — posição fixa 100%, sem aumento
     PYRAMID_LEVELS = {
-        1: 1.00,   # posição base (100%)
-        2: 0.50,   # +1 ATR a favor → +50%
-        3: 0.30,   # +2 ATR a favor → +30%
+        1: 1.00,   # posição base (100%) — sem piramidagem
     }
-    # Total máximo: 180% da posição original
+    # Total máximo: 100% da posição original
 
     # Stop e TP em múltiplos de ATR
     STOP_ATR_MULT = 1.5
