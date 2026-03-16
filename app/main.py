@@ -214,14 +214,29 @@ _last_daily_summary_date: str = ""  # data do último resumo diário enviado
 
 # Alocação por timeframe: SHORT + MEDIUM + LONG + MR + BO = 100% (LIVE-SAFE: apenas 3 engines)
 # Engines desativados: SQ, LS, FVG, VR, PB — complexidade desnecessária para live
-_TIMEFRAME_ALLOC   = {"5m": 0.01, "1h": 0.25, "1d": 0.40}
-_MR_ALLOC_PCT      = 0.15   # Mean Reversion: 15% (era 8%, absorveu capital dos desativados)
-_BO_ALLOC_PCT      = 0.19   # Breakout: 19% (era 6%, absorveu capital dos desativados)
-_SQ_ALLOC_PCT      = 0.00   # DESATIVADO — Squeeze
-_LS_ALLOC_PCT      = 0.00   # DESATIVADO — Liquidity Sweep
-_FVG_ALLOC_PCT     = 0.00   # DESATIVADO — Fair Value Gap
-_VR_ALLOC_PCT      = 0.00   # DESATIVADO — VWAP Reversion
-_PB_ALLOC_PCT      = 0.00   # DESATIVADO — Pyramid Breakout
+# No Railway (LAB_MODE=true), todos os 9 engines ficam ativos para teste
+_LAB_MODE = os.getenv("LAB_MODE", "false").lower() == "true" or os.getenv("MIRROR_MODE", "false").lower() == "true"
+
+if _LAB_MODE:
+    # LAB: todos os 9 engines ativos com alocação distribuída
+    _TIMEFRAME_ALLOC   = {"5m": 0.01, "1h": 0.20, "1d": 0.30}
+    _MR_ALLOC_PCT      = 0.10
+    _BO_ALLOC_PCT      = 0.10
+    _SQ_ALLOC_PCT      = 0.07
+    _LS_ALLOC_PCT      = 0.07
+    _FVG_ALLOC_PCT     = 0.05
+    _VR_ALLOC_PCT      = 0.05
+    _PB_ALLOC_PCT      = 0.05
+else:
+    # LIVE: apenas 3 engines (momentum, MR, BO)
+    _TIMEFRAME_ALLOC   = {"5m": 0.01, "1h": 0.25, "1d": 0.40}
+    _MR_ALLOC_PCT      = 0.15
+    _BO_ALLOC_PCT      = 0.19
+    _SQ_ALLOC_PCT      = 0.00
+    _LS_ALLOC_PCT      = 0.00
+    _FVG_ALLOC_PCT     = 0.00
+    _VR_ALLOC_PCT      = 0.00
+    _PB_ALLOC_PCT      = 0.00
 # v2.1 (2026-03-05): top-N reduzido para 1 por bucket — operar só o melhor sinal de cada timeframe
 _TIMEFRAME_N_ASSETS = {"5m": 1, "1h": 1, "1d": 1}  # era 1/2/3 — com 1d=3 perdia em dias de queda
 
@@ -959,12 +974,10 @@ async def lifespan(app: FastAPI):
     # ── Reconciliação de posições com brokers ───────────────────────────
     asyncio.get_event_loop().create_task(_reconcile_broker_positions())
     # ── Scheduler de ciclos ────────────────────────────────────────────
-    _mirror_mode = os.getenv("MIRROR_MODE", "false").lower() == "true"
-    if _mirror_mode:
-        # Modo Lab: recebe dados do bot local, roda engines em simulação
-        _trade_state["auto_trading"] = False
-        task = asyncio.create_task(_lab_auto_fetch_loop())
-        print("[lifespan] 🔬 LAB MODE ativo — laboratório de estratégias (recebe dados via /lab/feed)", flush=True)
+    if _LAB_MODE:
+        # Lab roda ciclos normais com todos os 9 engines
+        task = asyncio.create_task(_auto_cycle_loop())
+        print("[lifespan] 🔬 LAB MODE — 9 engines ativos, ciclos normais (laboratório de estratégias)", flush=True)
     else:
         task = asyncio.create_task(_auto_cycle_loop())
         print("[lifespan] Bot 24/7 ativo — scheduler iniciado", flush=True)
