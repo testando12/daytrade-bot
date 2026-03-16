@@ -645,7 +645,7 @@ async def _auto_cycle_loop():
         # (verificado após o ciclo executar, aplica ao próximo intervalo)
 
         # ── Proteção: se hard stopped, só verifica a cada 5min sem operar ──
-        if _protection_state.get("hard_stopped", False):
+        if _protection_state.get("hard_stopped", False) and not _LAB_MODE:
             _scheduler_debug["step"] = "hard_stopped"
             _scheduler_debug["ts"] = datetime.now().isoformat()
             print(f"[scheduler] 🔴 HARD STOP ativo — drawdown máximo atingido. Aguardando /trade/unfreeze", flush=True)
@@ -1008,6 +1008,16 @@ async def lifespan(app: FastAPI):
         db_state.save_state("trade_state", _trade_state)
         db_state.save_state("performance", _perf_state)
         print(f"[lab] 🧹 Estado zerado — Lab começando limpo (R$500, 0 ciclos) [{_RESET_VERSION}]", flush=True)
+
+    # ── Lab Mode: sempre garantir proteção limpa (não depende de version) ──
+    if _LAB_MODE:
+        _protection_state["peak_capital"] = _trade_state.get("capital", 500.0)
+        _protection_state["hard_stopped"] = False
+        _protection_state["paused"] = False
+        _protection_state["pause_reason"] = ""
+        _protection_state["consecutive_losses"] = 0
+        _protection_state["size_multiplier"] = 1.0
+        print(f"[lab] 🛡️ Proteção resetada — peak_capital={_protection_state['peak_capital']}, hard_stop=False", flush=True)
 
     # ── Reconciliação de posições com brokers ───────────────────────────
     asyncio.get_event_loop().create_task(_reconcile_broker_positions())
@@ -3383,7 +3393,7 @@ def _update_protection(cycle_pnl: float, capital: float, mom_scores: dict):
 
     # ── Drawdown absoluto (40% do pico = HARD STOP) ─────────
     drawdown_pct = (state["peak_capital"] - capital) / state["peak_capital"] if state["peak_capital"] > 0 else 0
-    if drawdown_pct >= settings.MAX_DRAWDOWN_PERCENTAGE:
+    if drawdown_pct >= settings.MAX_DRAWDOWN_PERCENTAGE and not _LAB_MODE:
         state["hard_stopped"] = True
         state["paused"] = True
         state["pause_reason"] = f"HARD STOP: drawdown {drawdown_pct*100:.1f}% do pico R$ {state['peak_capital']:.2f}"
