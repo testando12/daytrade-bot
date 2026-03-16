@@ -75,8 +75,8 @@ class Settings:
     RESUME_MOMENTUM_THRESHOLD: float = 0.60  # momentum > 0.60 → volta a operar após pausa
     CONSECUTIVE_LOSS_REDUCE: int = 3  # após 3 perdas seguidas, reduz tamanho 50%
     CONSECUTIVE_LOSS_RECOVERY: float = 0.50  # fator de redução após perdas consecutivas
-    MAX_TRADES_PER_HOUR: int = 10   # live-safe: máx 10 trades/hora
-    MAX_TRADES_PER_DAY: int = 50    # live-safe: máx 50 trades/dia
+    MAX_TRADES_PER_HOUR: int = 1    # calibração live: 1 trade/hora
+    MAX_TRADES_PER_DAY: int = 1      # calibração live: 1 trade/dia
 
     # Filtro de score mínimo (só opera se momentum > threshold)
     # v2 (2026-03-04): elevado de 0.35→0.50 para reduzir entradas com score marginal
