@@ -407,10 +407,11 @@ def run_cycle(skip_entry: bool = False) -> Dict[str, Any]:
     # ── skip_entry: proteção global (hard stop, capital abaixo do mínimo, etc.) ──
     if skip_entry:
         return _build_result("SKIP_ENTRY")
-    # ── 7b. Janela de ENTRADA: 09:30-12:00 BRT ───────────────────────────
+    # ── 7b. Janela de ENTRADA: 09:30-13:00 BRT ───────────────────────────
     # Backtest 60d: estender de 11:00→12:00 melhora WR 38.7%→42.9% e PF 1.00→1.19
+    # Estendido para 13:00 para não perder oportunidades após restarts
     entry_open  = now.replace(hour=9,  minute=30, second=0, microsecond=0)
-    entry_close = now.replace(hour=12, minute=0,  second=0, microsecond=0)
+    entry_close = now.replace(hour=13, minute=0,  second=0, microsecond=0)
     if now < entry_open or now >= entry_close:
         return _build_result("FORA_JANELA_ENTRADA")
 

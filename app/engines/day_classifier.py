@@ -72,6 +72,13 @@ class DayClassification:
     reason:         str    # descrição humana (para logs)
 
 
+# Número de candles pós-ORB usados para classificação.
+# Backtest validou com 4 candles (~20min). Usando 8 (~40min) para mais robustez.
+# Candles além deste limite são ignorados — evita que oscilações tardias
+# diluam a consistência direcional e causem classificações erradas.
+CLASSIFIER_POST_ORB_CANDLES = 8
+
+
 def classify(
     candles:      List[Dict[str, Any]],
     orb_high:     Optional[float],
@@ -79,6 +86,7 @@ def classify(
     kst_bias:     int,         # 1=bullish, -1=bearish, 0=neutro
     orb_end_hour: int  = 9,
     orb_end_min:  int  = 30,
+    max_post_orb: int  = CLASSIFIER_POST_ORB_CANDLES,
 ) -> DayClassification:
     """
     Classifica o tipo de dia com base nos candles M5 pós-ORB.
@@ -90,6 +98,9 @@ def classify(
         kst_bias:     viés KST diário (-1 / 0 / 1)
         orb_end_hour: hora de encerramento do ORB (padrão 9)
         orb_end_min:  minuto de encerramento do ORB (padrão 30)
+        max_post_orb: máximo de candles pós-ORB a usar (padrão=8 ≈ 40min).
+                      Limitar a janela evita que oscilações tardias diluam
+                      a consistência direcional — backtest validado com 4.
 
     Returns:
         DayClassification com day_type, força, momentum, reason, etc.
@@ -111,6 +122,11 @@ def classify(
         t = c["time"]
         if t.hour > orb_end_hour or (t.hour == orb_end_hour and t.minute >= orb_end_min):
             post_orb.append(c)
+
+    # Limita à janela de classificação (primeiros N candles pós-ORB)
+    # Candles além deste limite diluem a consistência direcional
+    if max_post_orb > 0:
+        post_orb = post_orb[:max_post_orb]
 
     if len(post_orb) < CANDLES_MIN:
         return undef(f"Aguardando candles pós-ORB ({len(post_orb)}/{CANDLES_MIN})")
