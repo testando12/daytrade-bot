@@ -3,7 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PWD Trading</title>
+  <title>DTA Portal</title>
+  <script>
+    // Redirect relativo para funcionar tanto em localhost quanto em GitHub Pages
+    var base = window.location.pathname.replace(/\/[^\/]*$/, '/');
+    window.location.replace(base + 'investors.html');
+  </script>
   <link rel="icon" type="image/png" href="logo.png" />
   <link rel="apple-touch-icon" href="logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,6 +36,12 @@
     </div>
     <p class="login-subtitle">Insira sua API Key para acessar o painel</p>
     <form id="login-form" onsubmit="handleLogin(event); return false;">
+      <div class="login-input-group">
+        <label for="login-server-input" style="font-size:12px;color:#9090a8;">Servidor</label>
+        <div class="login-input-wrapper">
+          <input type="url" id="login-server-input" placeholder="https://daytrade-bot-production.up.railway.app" autocomplete="off" style="font-size:12px;" />
+        </div>
+      </div>
       <div class="login-input-group">
         <label for="login-key">API Key</label>
         <div class="login-input-wrapper">
@@ -79,6 +90,16 @@
           <span class="nav-icon"><i class="fas fa-briefcase"></i></span>
           <span class="nav-label">Portfólio</span>
           <span class="nav-tooltip">Portfólio</span>
+        </a>
+        <a class="nav-item" href="/transactions" title="Transações & P&L">
+          <span class="nav-icon"><i class="fas fa-receipt"></i></span>
+          <span class="nav-label">Transações</span>
+          <span class="nav-tooltip">Transações &amp; P&amp;L</span>
+        </a>
+        <a class="nav-item" href="/investors" title="Portal PWD">
+          <span class="nav-icon"><i class="fas fa-building-columns"></i></span>
+          <span class="nav-label">Investidores</span>
+          <span class="nav-tooltip">Portal PWD</span>
         </a>
       </div>
 

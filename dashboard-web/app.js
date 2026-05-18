@@ -26,10 +26,13 @@ window.addEventListener('load', () => {
 // CONFIG
 // =============================================
 
-// Quando acessado localmente usa localhost:8000; via túnel usa a própria origem
-let API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+// URL do servidor: localhost em dev, Railway como padrão externo, ou URL salva pelo usuário
+const _IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const _RAILWAY_URL = 'https://daytrade-bot-production.up.railway.app';
+const _SAVED_SERVER = localStorage.getItem('dt_server_url');
+let API_BASE = _IS_LOCAL
   ? 'http://localhost:8000'
-  : window.location.origin;
+  : (_SAVED_SERVER || _RAILWAY_URL);
 let currentPage = 'dashboard';
 let autoRefreshInterval = null;
 let charts = {};
@@ -59,6 +62,9 @@ function showLogin(errorMsg) {
   // Mostra qual servidor está sendo usado
   const srvSpan = document.getElementById('login-server-url');
   if (srvSpan) srvSpan.textContent = API_BASE;
+  // Preenche o campo servidor com o valor atual (para o usuário poder editar)
+  const serverInput = document.getElementById('login-server-input');
+  if (serverInput && !_IS_LOCAL) serverInput.value = API_BASE;
 }
 
 function showDashboard() {
@@ -69,10 +75,21 @@ function showDashboard() {
 async function handleLogin(e) {
   e.preventDefault();
   const input = document.getElementById('login-key');
+  const serverInput = document.getElementById('login-server-input');
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-error');
   const key = input.value.trim();
   if (!key) { err.textContent = 'Digite a API Key.'; return; }
+
+  // Se o usuário preencheu o campo servidor, usa e salva
+  if (serverInput && serverInput.value.trim()) {
+    const customUrl = serverInput.value.trim().replace(/\/$/, '');
+    localStorage.setItem('dt_server_url', customUrl);
+    API_BASE = customUrl;
+    const srvSpan = document.getElementById('login-server-url');
+    if (srvSpan) srvSpan.textContent = API_BASE;
+  }
+
   btn.disabled = true;
   btn.textContent = 'Verificando...';
   err.textContent = '';
@@ -94,7 +111,7 @@ async function handleLogin(e) {
     }
   } catch (ex) {
     console.error('[LOGIN] error:', ex);
-    err.textContent = 'Erro de conexão. Verifique se a API está online.';
+    err.textContent = `Erro de conexão com ${API_BASE}. Verifique se a API está online ou mude o Servidor.`;
   } finally {
     btn.disabled = false;
     btn.textContent = 'Entrar';
