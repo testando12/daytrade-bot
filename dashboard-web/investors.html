@@ -1711,7 +1711,9 @@
 
     const _IS_LOCAL_INV = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
     const _SAVED_INV    = localStorage.getItem('dt_inv_server_url');
-    let API_BASE = _IS_LOCAL_INV ? 'http://localhost:8001' : (_SAVED_INV || '');
+    const _DEFAULT_INV_API = 'http://127.0.0.1:8000';
+    // Por padrão no GitHub Pages, usar backend local em 127.0.0.1:8000 se não houver URL salva.
+    let API_BASE = _IS_LOCAL_INV ? (location.origin || _DEFAULT_INV_API) : (_SAVED_INV || _DEFAULT_INV_API);
     const SESSION_STORAGE = 'dta_portal_session';
     const EMAIL_STORAGE = 'dta_portal_email';
     const DAILY_GOAL = 30; // Meta realista: R$30/dia com 1 contrato WDO
@@ -2369,10 +2371,10 @@
       }
     }
 
-    // Preenche campo servidor com valor salvo (ou vazio para forçar o usuário a informar)
+    // Preenche campo servidor com valor salvo ou default local ao usar GitHub Pages.
     (function initServerField() {
       const sf = $('portal-server');
-      if (sf) sf.value = _IS_LOCAL_INV ? 'http://localhost:8001' : (_SAVED_INV || '');
+      if (sf) sf.value = _IS_LOCAL_INV ? (location.origin || _DEFAULT_INV_API) : (_SAVED_INV || _DEFAULT_INV_API);
     })();
 
     $('login-form').addEventListener('submit', async (event) => {

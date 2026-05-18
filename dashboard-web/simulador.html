@@ -383,9 +383,7 @@
 'use strict';
 
 // ── CONFIG ──────────────────────────────────────
-const _defaultApi = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ? 'http://localhost:8001'
-  : window.location.origin;
+const _defaultApi = 'http://127.0.0.1:8000';
 let API = (localStorage.getItem('sim_api') || _defaultApi).replace(/\/$/, '');
 document.getElementById('api-url-bar').value = API;
 
