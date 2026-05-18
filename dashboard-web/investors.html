@@ -1356,10 +1356,10 @@
         <button type="button" data-mode="register">Criar conta</button>
       </div>
       <form class="access-card" id="login-form">
-        <label for="portal-server" style="font-size:11px;opacity:.7;">Servidor (Railway ou tunnel)</label>
+        <label for="portal-server">Servidor da API</label>
         <div class="key-field">
           <i class="fa-solid fa-server"></i>
-          <input id="portal-server" type="url" placeholder="https://daytrade-bot-production.up.railway.app" autocomplete="off" style="font-size:12px;" />
+          <input id="portal-server" type="url" placeholder="Cole aqui a URL do tunnel ou Railway..." autocomplete="off" />
         </div>
         <div id="name-wrap" class="hidden">
           <label for="portal-name">Nome</label>
@@ -1710,9 +1710,8 @@
     'use strict';
 
     const _IS_LOCAL_INV = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
-    const _RAILWAY_INV  = 'https://daytrade-bot-production.up.railway.app';
     const _SAVED_INV    = localStorage.getItem('dt_inv_server_url');
-    let API_BASE = _IS_LOCAL_INV ? 'http://localhost:8001' : (_SAVED_INV || _RAILWAY_INV);
+    let API_BASE = _IS_LOCAL_INV ? 'http://localhost:8001' : (_SAVED_INV || '');
     const SESSION_STORAGE = 'dta_portal_session';
     const EMAIL_STORAGE = 'dta_portal_email';
     const DAILY_GOAL = 30; // Meta realista: R$30/dia com 1 contrato WDO
@@ -2370,10 +2369,10 @@
       }
     }
 
-    // Preenche campo servidor com valor salvo ou padrão
+    // Preenche campo servidor com valor salvo (ou vazio para forçar o usuário a informar)
     (function initServerField() {
       const sf = $('portal-server');
-      if (sf) sf.value = _IS_LOCAL_INV ? 'http://localhost:8001' : (_SAVED_INV || _RAILWAY_INV);
+      if (sf) sf.value = _IS_LOCAL_INV ? 'http://localhost:8001' : (_SAVED_INV || '');
     })();
 
     $('login-form').addEventListener('submit', async (event) => {
@@ -2389,6 +2388,10 @@
       const email = $('portal-email').value.trim();
       const password = $('portal-password').value;
       const name = $('portal-name').value.trim();
+      if (!effectiveBase) {
+        $('login-error').textContent = 'Informe a URL do servidor (campo "Servidor da API").';
+        return;
+      }
       if (!email || !password) {
         $('login-error').textContent = 'Informe e-mail e senha.';
         return;
@@ -2421,7 +2424,7 @@
       } catch (err) {
         if (err.message !== 'unauthorized') {
           clearSession();
-          $('login-error').textContent = 'Não foi possível validar o acesso. Verifique se a API está online.';
+          $('login-error').textContent = `Erro ao conectar em ${effectiveBase}. Verifique a URL do servidor.`;
         }
       } finally {
         $('login-btn').disabled = false;
