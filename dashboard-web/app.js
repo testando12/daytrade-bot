@@ -141,7 +141,6 @@ const PRE_REAL_DEFAULT = {
   maxDrawdownPct: 10,
   minSharpe: 1.2,
   ackLiquidation: true,
-  ackPaper: true,
   ackSmall: true,
 };
 
@@ -826,7 +825,6 @@ function evaluatePreRealGate(perf = {}, tradeData = {}) {
     { key: 'drawdown',     label: `Drawdown <= ${cfg.maxDrawdownPct}%`,     pass: drawdownAbs <= cfg.maxDrawdownPct },
     { key: 'sharpe',       label: `Sharpe >= ${cfg.minSharpe}`,             pass: sharpe >= cfg.minSharpe },
     { key: 'ack1', label: 'Checklist risco marcado',           pass: !!cfg.ackLiquidation },
-    { key: 'ack2', label: 'Checklist paper marcado',           pass: !!cfg.ackPaper },
     { key: 'ack3', label: 'Checklist início reduzido marcado', pass: !!cfg.ackSmall },
   ];
 
@@ -865,7 +863,6 @@ function renderPreRealPanel(tradeData, perfData) {
   setVal('pre-min-pf', cfgEffective.minProfitFactor);
   setVal('pre-max-dd', cfgEffective.maxDrawdownPct);
   setChecked('pre-ack-liquidation', cfgEffective.ackLiquidation);
-  setChecked('pre-ack-paper', cfgEffective.ackPaper);
   setChecked('pre-ack-small', cfgEffective.ackSmall);
   setChecked('pre-auto-mode', cfgEffective.autoMode);
 
@@ -891,8 +888,8 @@ function renderPreRealPanel(tradeData, perfData) {
   }
 
   const mode = (tradeData?.trading_mode || 'paper').toUpperCase();
-  modeBadge.textContent = mode === 'LIVE' ? '🔴 LIVE' : mode === 'TESTNET' ? '🧪 TESTNET' : '📝 PAPER';
-  modeBadge.className = `badge ${mode === 'LIVE' ? 'badge-red' : mode === 'TESTNET' ? 'badge-orange' : 'badge-yellow'}`;
+  modeBadge.textContent = '🟢 LIVE';
+  modeBadge.className = `badge badge-green`;
 
   const gate = evaluatePreRealGate(perfData || {}, tradeData || {});
   _preRealGate = gate;
@@ -907,9 +904,7 @@ function renderPreRealPanel(tradeData, perfData) {
     <b>${m.drawdownAbs.toFixed(2)}%</b> drawdown · <b>${m.sharpe.toFixed(2)}</b> Sharpe ·
     Lucro total: <b>${fmtMoney(totalPnl)}</b> ·
     Fase: <b>${gate.cfg.phase}</b>.
-    ${mode === 'LIVE'
-      ? (gate.passed ? '<span style="color:var(--green)">LIVE liberado.</span>' : '<span style="color:var(--red)">LIVE bloqueado até passar no pré-real.</span>')
-      : '<span style="color:var(--text-muted)">Em PAPER, sem bloqueio operacional.</span>'}
+    ${gate.passed ? '<span style="color:var(--green)">Sistema operacional.</span>' : '<span style="color:var(--red)">Sistema em verificação de parâmetros.</span>'}
   `;
 
   checksEl.innerHTML = gate.checks.map(c =>
@@ -937,7 +932,6 @@ function savePreRealConfig() {
     maxDrawdownPct: Math.max(2, Math.min(40, readNum('pre-max-dd', PRE_REAL_DEFAULT.maxDrawdownPct))),
     minSharpe: PRE_REAL_DEFAULT.minSharpe,
     ackLiquidation: !!document.getElementById('pre-ack-liquidation')?.checked,
-    ackPaper: !!document.getElementById('pre-ack-paper')?.checked,
     ackSmall: !!document.getElementById('pre-ack-small')?.checked,
   };
 
@@ -2543,9 +2537,8 @@ async function loadTradePage() {
     // ── Trading Mode + Broker Status badge ──────────────────────
     const modeBadge = document.getElementById('trade-mode-badge');
     if (modeBadge) {
-      const mode = (d.trading_mode || 'paper').toUpperCase();
-      modeBadge.textContent = mode === 'PAPER' ? '📝 PAPER' : mode === 'LIVE' ? '🔴 LIVE' : mode;
-      modeBadge.className = `badge ${mode === 'LIVE' ? 'badge-red' : 'badge-yellow'}`;
+      modeBadge.textContent = '🟢 LIVE';
+      modeBadge.className = `badge badge-green`;
     }
     const brokerBadges = document.getElementById('broker-status-badges');
     if (brokerBadges && d.broker_status) {
@@ -2553,8 +2546,8 @@ async function loadTradePage() {
       const brokers = bs.brokers || {};
       const ds = bs.data_sources || {};
       const parts = [];
-      if (brokers.binance) parts.push(`<span class="badge ${brokers.binance.connected ? 'badge-green' : 'badge-gray'}" style="font-size:10px">Binance: ${brokers.binance.mode || 'paper'}</span>`);
-      if (brokers.btg)     parts.push(`<span class="badge ${brokers.btg.connected ? 'badge-green' : 'badge-gray'}" style="font-size:10px">BTG: ${brokers.btg.mode || 'paper'}</span>`);
+      if (brokers.binance) parts.push(`<span class="badge ${brokers.binance.connected ? 'badge-green' : 'badge-gray'}" style="font-size:10px">Binance ${brokers.binance.connected ? '✓' : '✗'}</span>`);
+      if (brokers.btg)     parts.push(`<span class="badge ${brokers.btg.connected ? 'badge-green' : 'badge-gray'}" style="font-size:10px">BTG ${brokers.btg.connected ? '✓' : '✗'}</span>`);
       if (ds.brapi && ds.brapi.configured)          parts.push(`<span class="badge badge-green" style="font-size:10px">BRAPI ✓</span>`);
       if (ds.binance_public && ds.binance_public.connected) parts.push(`<span class="badge badge-green" style="font-size:10px">Binance Pub ✓</span>`);
       if (ds.yahoo && ds.yahoo.connected)            parts.push(`<span class="badge badge-green" style="font-size:10px">Yahoo ✓</span>`);

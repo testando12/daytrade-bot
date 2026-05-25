@@ -85,14 +85,25 @@
 
         async function loadData() {
             try {
+                // Tenta carregar de /lab/results primeiro
                 const r = await fetch(`${BASE}/lab/results`);
+                if (!r.ok) throw new Error('Erro ao carregar da API');
                 const json = await r.json();
-                if (!json.success) throw new Error('Erro ao carregar');
+                if (!json.success) throw new Error('API retornou erro');
                 render(json.data);
                 document.getElementById('status-bar').textContent =
                     `Última atualização: ${new Date().toLocaleString('pt-BR')}`;
             } catch (e) {
-                document.getElementById('status-bar').textContent = `Erro: ${e.message}`;
+                // Fallback: carrega dados mock
+                try {
+                    const mockRes = await fetch(`${BASE}/mock-data.json`);
+                    const mockJson = await mockRes.json();
+                    render(mockJson.data);
+                    document.getElementById('status-bar').textContent =
+                        `Última atualização: ${new Date().toLocaleString('pt-BR')} (modo demonstração)`;
+                } catch (e2) {
+                    document.getElementById('status-bar').textContent = `Erro ao carregar dados: ${e.message}`;
+                }
             }
         }
 
