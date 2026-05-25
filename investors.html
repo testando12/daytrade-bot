@@ -1,0 +1,2596 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DTA - Investidor</title>
+  <link rel="icon" type="image/png" href="logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #020203;
+      --panel: #090a0c;
+      --panel-2: #0d0d10;
+      --panel-3: #12090c;
+      --line: #2a2023;
+      --line-soft: rgba(255,255,255,.08);
+      --text: #f2f2f2;
+      --muted: #b8aeb1;
+      --dim: #766a6f;
+      --orange: #8b0012;
+      --orange-2: #5a000c;
+      --green: #d10a24;
+      --red: #d24a56;
+      --yellow: #9f6b70;
+      --graphite: #19171b;
+      --crimson: #8b0012;
+      --wine: #5a000c;
+      --deep-red: #2b0307;
+      --radius: 22px;
+      --radius-sm: 14px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'Cascadia Code', 'Consolas', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; font-size: 14px; -webkit-font-smoothing: antialiased; }
+    body {
+      height: 100%;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      overflow-x: hidden;
+    }
+
+    button, input { font-family: inherit; }
+    button { cursor: pointer; }
+
+    html {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.15) transparent;
+    }
+
+    *::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    *::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.12);
+      border-radius: 999px;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,.2);
+    }
+
+    .login {
+      height: 100vh;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(360px, 42vw) 1fr;
+      background: #020203;
+      overflow: hidden;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      height: 100vh;
+      min-height: 0;
+      padding: clamp(20px, 4vh, 42px) min(6vw, 70px);
+      background: linear-gradient(180deg, #09090b 0%, #020203 72%);
+      border-right: 1px solid rgba(255,255,255,.08);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: clamp(22px, 7vh, 58px);
+      font-size: .9rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #8b0012, #5a000c);
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: -.06em;
+    }
+
+    .login-copy h1 {
+      font-size: clamp(1.9rem, 5.3vh, 3rem);
+      line-height: .95;
+      letter-spacing: -.04em;
+      margin-bottom: 12px;
+    }
+
+    .login-copy p {
+      max-width: 390px;
+      color: var(--muted);
+      line-height: 1.45;
+      margin-bottom: 18px;
+    }
+
+    .access-card {
+      width: min(390px, 100%);
+      display: grid;
+      gap: 9px;
+    }
+
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      width: min(390px, 100%);
+      padding: 5px;
+      border-radius: 16px;
+      margin-bottom: 10px;
+      background: rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+
+    .auth-tabs button {
+      height: 34px;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--dim);
+      font-size: .82rem;
+      font-weight: 800;
+    }
+
+    .auth-tabs button.active {
+      background: var(--orange);
+      color: #111;
+    }
+
+    .access-card label {
+      color: var(--dim);
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+
+    .key-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 0 12px;
+    }
+
+    .key-field i { color: var(--dim); }
+    .key-field input {
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      padding: 11px 0;
+      font-size: .92rem;
+    }
+
+    .key-field input:-webkit-autofill,
+    .key-field input:-webkit-autofill:hover,
+    .key-field input:-webkit-autofill:focus {
+      -webkit-text-fill-color: var(--text);
+      caret-color: var(--text);
+      transition: background-color 999999s ease-in-out 0s;
+      box-shadow: 0 0 0 1000px transparent inset;
+    }
+
+    .primary-btn {
+      height: 42px;
+      border: 0;
+      border-radius: 14px;
+      color: #fff;
+      background: linear-gradient(135deg, #8b0012 0%, #5a000c 100%);
+      font-weight: 800;
+      transition: transform .18s ease, opacity .18s ease;
+    }
+
+    .primary-btn:hover { transform: translateY(-1px); }
+    .primary-btn:disabled { opacity: .65; transform: none; cursor: wait; }
+
+    .login-error {
+      min-height: 18px;
+      color: #ff8b78;
+      font-size: .82rem;
+    }
+
+    .login-help {
+      color: var(--dim);
+      font-size: .78rem;
+      line-height: 1.45;
+    }
+
+    .login-note {
+      margin-top: 16px;
+      color: var(--dim);
+      font-size: .78rem;
+    }
+
+    .login-visual {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      background: #0a0a0a;
+    }
+
+    @media (max-height: 720px) and (min-width: 821px) {
+      .brand { margin-bottom: 20px; }
+      .login-copy h1 { font-size: 2rem; }
+      .login-copy p { margin-bottom: 14px; }
+      .login-note { display: none; }
+    }
+
+    .login-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: .78;
+      filter: saturate(.95) contrast(1.08) brightness(.62);
+    }
+
+    .login-visual-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      opacity: .92;
+    }
+
+    .login-visual::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      background: linear-gradient(90deg, rgba(8,8,8,.22), rgba(8,8,8,.04) 42%, rgba(8,8,8,.18));
+      pointer-events: none;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      background: #020203;
+    }
+
+    .hidden { display: none !important; }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      background: linear-gradient(180deg, #09090b 0%, #020203 100%);
+      border-right: 1px solid rgba(255,255,255,.055);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px 7px;
+      gap: 12px;
+    }
+
+    .side-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 13px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.18), transparent 40%),
+        linear-gradient(135deg, #8b0012, #5a000c);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      letter-spacing: -.07em;
+      box-shadow: 0 12px 34px rgba(139,0,18,.4);
+    }
+
+    .side-nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .side-btn {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 13px;
+      display: grid;
+      place-items: center;
+      color: #76808a;
+      background: transparent;
+      transition: transform .2s ease, color .25s ease, background .25s ease;
+    }
+
+    .side-btn i {
+      position: relative;
+      z-index: 1;
+      font-size: .98rem;
+    }
+
+    .side-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(135deg, rgba(139,0,18,.2), rgba(255,255,255,.04));
+      border: 1px solid rgba(139,0,18,.28);
+      opacity: 0;
+      transform: scale(.86);
+      transition: opacity .2s ease, transform .24s cubic-bezier(.2,.8,.2,1);
+    }
+
+    .side-btn::after {
+      content: '';
+      position: absolute;
+      left: -10px;
+      top: 50%;
+      width: 3px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--orange);
+      opacity: 0;
+      transform: translateY(-50%) scaleY(.35);
+      transition: opacity .2s ease, transform .24s ease;
+    }
+
+    .side-btn.active, .side-btn:hover {
+      color: var(--text);
+      background: rgba(255,255,255,.045);
+    }
+
+    .side-btn:hover {
+      transform: translateY(-2px) scale(1.04);
+    }
+
+    .side-btn:hover::before,
+    .side-btn.active::before {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .side-btn.active::after {
+      opacity: 1;
+      transform: translateY(-50%) scaleY(1);
+    }
+
+    .side-btn#logout-btn {
+      margin-top: auto;
+    }
+
+    .side-btn#logout-btn:hover {
+      color: #ff8b78;
+    }
+
+    .side-btn#logout-btn::before {
+      background: rgba(239,85,85,.1);
+      border-color: rgba(239,85,85,.2);
+    }
+
+    .side-btn#logout-btn::after {
+      display: none;
+    }
+
+    .shell {
+      padding: 18px;
+      display: grid;
+      gap: 16px;
+      max-width: 1720px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .eyebrow {
+      color: var(--orange);
+      font-size: .74rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+    }
+
+    .topbar h1 {
+      font-size: clamp(1.35rem, 2.2vw, 2.15rem);
+      line-height: 1.1;
+      letter-spacing: -.045em;
+      margin-top: 4px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .tabbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px;
+      overflow-x: auto;
+      border-radius: 16px;
+      background: rgba(255,255,255,.035);
+      border: 1px solid rgba(255,255,255,.07);
+    }
+
+    .tabbar button {
+      min-height: 36px;
+      padding: 8px 13px;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      background: transparent;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 850;
+      white-space: nowrap;
+      transition: color .2s ease, background .2s ease, border-color .2s ease;
+    }
+
+    .tabbar button.active,
+    .tabbar button:hover {
+      color: #fff;
+      background: rgba(139,0,18,.22);
+      border-color: rgba(139,0,18,.36);
+    }
+
+    .tab-panel {
+      display: none !important;
+    }
+
+    .tab-panel.active {
+      display: grid !important;
+    }
+
+    .status-pill, .ghost-btn {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.055);
+      border: 1px solid rgba(255,255,255,.09);
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 700;
+    }
+
+    .ghost-btn {
+      color: var(--text);
+      transition: transform .2s ease, border-color .25s ease, background .25s ease, color .25s ease;
+    }
+
+    .ghost-btn:hover {
+      transform: translateY(-2px);
+      border-color: rgba(139,0,18,.32);
+      background: rgba(139,0,18,.08);
+      color: #fff;
+    }
+
+    .mobile-logout {
+      display: none;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 5px rgba(66,215,140,.12);
+    }
+
+    .dot.offline {
+      background: var(--red);
+      box-shadow: 0 0 0 5px rgba(239,85,85,.12);
+    }
+
+    .control-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(330px, .85fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .panel {
+      position: relative;
+      background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.028));
+      border: 1px solid rgba(255,255,255,.085);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      transition: transform .22s ease, border-color .3s ease, box-shadow .3s ease;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background: linear-gradient(135deg, rgba(139,0,18,.08), transparent 52%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .45s ease;
+    }
+
+    .panel > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .panel:hover {
+      transform: translateY(-4px);
+      border-color: rgba(139,0,18,.28);
+      box-shadow: 0 26px 74px rgba(0,0,0,.28), 0 0 0 1px rgba(139,0,18,.04);
+    }
+
+    .panel:hover::before {
+      opacity: 1;
+    }
+
+    /* Mantem o card do grafico estavel (sem "subir") */
+    .main-panel:hover {
+      transform: none;
+    }
+
+    .main-panel {
+      min-height: 430px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .panel-head {
+      min-height: 58px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid rgba(255,255,255,.075);
+      background: rgba(0,0,0,.2);
+    }
+
+    .panel-title {
+      font-size: .92rem;
+      font-weight: 800;
+      letter-spacing: -.01em;
+    }
+
+    .panel-sub {
+      color: var(--dim);
+      font-size: .76rem;
+      margin-top: 2px;
+    }
+
+    .segmented {
+      display: inline-flex;
+      padding: 4px;
+      gap: 4px;
+      background: rgba(0,0,0,.25);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 999px;
+    }
+
+    .segmented button {
+      min-width: 48px;
+      border: 0;
+      border-radius: 999px;
+      color: var(--dim);
+      background: transparent;
+      padding: 7px 10px;
+      font-size: .72rem;
+      font-weight: 800;
+      transition: color .2s ease, background .2s ease, transform .2s ease;
+    }
+
+    .segmented button:hover {
+      color: var(--text);
+      background: rgba(255,255,255,.075);
+      transform: translateY(-1px);
+    }
+
+    .segmented button.active {
+      background: var(--orange);
+      color: #111;
+    }
+
+    .chart-zone {
+      position: relative;
+      padding: 18px;
+      min-height: 278px;
+    }
+
+    .chart-zone canvas { width: 100% !important; height: 100% !important; min-height: 270px; }
+
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      border-top: 1px solid rgba(255,255,255,.075);
+      background: rgba(255,255,255,.06);
+    }
+
+    .kpi {
+      padding: 16px 18px;
+      background: rgba(10,10,10,.78);
+    }
+
+    .kpi small {
+      color: var(--dim);
+      font-size: .72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .kpi strong {
+      display: block;
+      font-size: clamp(1.25rem, 2vw, 1.85rem);
+      margin-top: 8px;
+      letter-spacing: -.04em;
+      white-space: nowrap;
+    }
+
+    .positive { color: var(--green) !important; }
+    .negative { color: var(--red) !important; }
+    .orange { color: var(--orange) !important; }
+
+    .side-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .readiness {
+      padding: 20px;
+      min-height: 214px;
+      display: grid;
+      align-content: space-between;
+      background:
+        radial-gradient(circle at 80% 20%, rgba(139,0,18,.18), transparent 38%),
+        linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025));
+    }
+
+    .score-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+    }
+
+    .score-line span {
+      color: var(--dim);
+      font-size: .75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+    }
+
+    .score-line strong {
+      font-size: 3.2rem;
+      line-height: .9;
+      letter-spacing: -.07em;
+    }
+
+    .progress {
+      height: 9px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,.09);
+      margin: 18px 0 14px;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--orange), #d10a24);
+      transition: width .5s ease;
+    }
+
+    .readiness p {
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: .86rem;
+    }
+
+    .metric-list {
+      display: grid;
+      gap: 1px;
+      background: rgba(255,255,255,.06);
+    }
+
+    .metric-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 16px;
+      background: rgba(10,10,10,.8);
+      transition: transform .2s ease, background .28s ease, box-shadow .28s ease;
+    }
+
+    .metric-item:hover {
+      transform: translateX(4px);
+      background: rgba(255,255,255,.065);
+      box-shadow: inset 2px 0 0 rgba(139,0,18,.7);
+    }
+
+    .metric-item span {
+      color: var(--muted);
+      font-size: .82rem;
+    }
+
+    .metric-item strong {
+      font-family: var(--mono);
+      font-size: .9rem;
+    }
+
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr) minmax(300px, .65fr);
+      gap: 16px;
+    }
+
+    .insight-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(320px, .8fr);
+      gap: 16px;
+    }
+
+    .engine-board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      background: rgba(255,255,255,.06);
+    }
+
+    .engine-card {
+      min-height: 122px;
+      padding: 15px;
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+      background: rgba(10,10,10,.82);
+      transition: transform .22s ease, background .28s ease, box-shadow .28s ease;
+    }
+
+    .engine-card:hover {
+      transform: translateY(-4px);
+      background: rgba(255,255,255,.055);
+      box-shadow: inset 0 0 0 1px rgba(139,0,18,.22);
+    }
+
+    .engine-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .engine-name {
+      color: var(--text);
+      font-size: .88rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .engine-meta {
+      color: var(--dim);
+      font-size: .72rem;
+      margin-top: 4px;
+    }
+
+    .engine-badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: var(--orange);
+      background: rgba(139,0,18,.12);
+      font-size: .66rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .engine-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .engine-stat span {
+      display: block;
+      color: var(--dim);
+      font-size: .68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .engine-stat strong {
+      display: block;
+      margin-top: 3px;
+      font-family: var(--mono);
+      font-size: .82rem;
+    }
+
+    .ops-grid {
+      display: grid;
+      gap: 1px;
+      background: rgba(255,255,255,.06);
+    }
+
+    .ops-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 13px 16px;
+      background: rgba(10,10,10,.8);
+      transition: transform .2s ease, background .28s ease, box-shadow .28s ease;
+    }
+
+    .ops-row:hover {
+      transform: translateX(4px);
+      background: rgba(255,255,255,.065);
+      box-shadow: inset 2px 0 0 rgba(139,0,18,.7);
+    }
+
+    .ops-row span {
+      color: var(--muted);
+      font-size: .82rem;
+    }
+
+    .ops-row strong {
+      font-family: var(--mono);
+      font-size: .86rem;
+      text-align: right;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 520px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.065);
+      white-space: nowrap;
+    }
+
+    th {
+      color: var(--dim);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+    }
+
+    td {
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    td strong { color: var(--text); }
+
+    tbody tr {
+      transition: transform .2s ease, background .28s ease, box-shadow .28s ease;
+    }
+
+    tbody tr:hover {
+      transform: translateX(4px);
+      background: rgba(255,255,255,.045);
+      box-shadow: inset 2px 0 0 rgba(139,0,18,.65);
+    }
+
+    .empty {
+      padding: 38px 18px;
+      color: var(--dim);
+      text-align: center;
+      line-height: 1.55;
+    }
+
+    .activity {
+      display: grid;
+      gap: 0;
+    }
+
+    .activity-item {
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 13px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.065);
+      transition: transform .2s ease, background .28s ease;
+    }
+
+    .activity-item:hover {
+      transform: translateX(4px);
+      background: rgba(255,255,255,.045);
+    }
+
+    .activity-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: var(--orange);
+      background: rgba(139,0,18,.12);
+    }
+
+    .activity-main strong {
+      display: block;
+      font-size: .86rem;
+      margin-bottom: 2px;
+    }
+
+    .activity-main span {
+      display: block;
+      color: var(--dim);
+      font-size: .75rem;
+      max-width: 420px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .activity-time {
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: .72rem;
+    }
+
+    .status-card {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .system-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.06);
+      transition: transform .2s ease, border-color .25s ease, background .25s ease;
+    }
+
+    .system-row:hover {
+      transform: translateX(4px);
+      border-color: rgba(139,0,18,.24);
+      background: rgba(139,0,18,.06);
+    }
+
+    .system-row span {
+      color: var(--muted);
+      font-size: .8rem;
+    }
+
+    .system-row strong {
+      font-size: .82rem;
+      text-align: right;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: 360px;
+      padding: 13px 15px;
+      border-radius: 14px;
+      color: var(--text);
+      background: rgba(20,20,20,.94);
+      border: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 20px 80px rgba(0,0,0,.4);
+      display: none;
+      z-index: 20;
+    }
+
+    .live-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .live-card {
+      position: relative;
+      min-height: 118px;
+      padding: 17px;
+      overflow: hidden;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.028));
+      border: 1px solid rgba(255,255,255,.08);
+      transition: transform .22s ease, border-color .3s ease, box-shadow .3s ease;
+    }
+
+    .live-card::after {
+      content: '';
+      position: absolute;
+      inset: auto -30% -70% -30%;
+      height: 120px;
+      background: radial-gradient(circle, rgba(139,0,18,.18), transparent 68%);
+      opacity: .7;
+      pointer-events: none;
+      transition: opacity .45s ease;
+    }
+
+    .live-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(139,0,18,.28);
+      box-shadow: 0 22px 58px rgba(0,0,0,.24);
+    }
+
+    .live-card:hover::after {
+      opacity: 1;
+    }
+
+    .live-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: var(--orange);
+      background: rgba(139,0,18,.12);
+      margin-bottom: 14px;
+    }
+
+    .live-card span {
+      display: block;
+      color: var(--dim);
+      font-size: .7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+    }
+
+    .live-card strong {
+      display: block;
+      margin-top: 6px;
+      font-size: 1.18rem;
+      letter-spacing: -.03em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .live-card small {
+      display: block;
+      margin-top: 6px;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: .72rem;
+    }
+
+    .status-ring {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 0 rgba(66,215,140,.38);
+      animation: breathe 2.4s ease-in-out infinite;
+    }
+
+    .status-ring.warn {
+      background: var(--yellow);
+      box-shadow: 0 0 0 0 rgba(255,189,74,.38);
+    }
+
+    .status-ring.off {
+      background: var(--red);
+      box-shadow: 0 0 0 0 rgba(239,85,85,.34);
+      animation: none;
+    }
+
+    .focus-grid {
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr) minmax(320px, .75fr);
+      gap: 16px;
+    }
+
+    .goal-panel {
+      padding: 19px;
+      display: grid;
+      align-content: space-between;
+      min-height: 190px;
+    }
+
+    .goal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .goal-value {
+      margin-top: 18px;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      line-height: .95;
+      letter-spacing: -.07em;
+    }
+
+    .goal-foot {
+      display: flex;
+      justify-content: space-between;
+      color: var(--dim);
+      font-family: var(--mono);
+      font-size: .76rem;
+      margin-top: 10px;
+    }
+
+    .decision-panel {
+      min-height: 190px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .decision-body {
+      padding: 18px;
+      display: grid;
+      align-content: center;
+      gap: 12px;
+    }
+
+    .decision-label {
+      color: var(--dim);
+      font-size: .72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .11em;
+    }
+
+    .decision-text {
+      font-size: clamp(1.05rem, 2vw, 1.45rem);
+      line-height: 1.25;
+      letter-spacing: -.035em;
+    }
+
+    .decision-meta {
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: .84rem;
+    }
+
+    .month-card {
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .month-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .month-stat {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.06);
+      transition: transform .2s ease, border-color .25s ease, background .25s ease;
+    }
+
+    .month-stat:hover {
+      transform: translateY(-3px);
+      border-color: rgba(139,0,18,.24);
+      background: rgba(139,0,18,.06);
+    }
+
+    .month-stat span {
+      color: var(--dim);
+      font-size: .68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .month-stat strong {
+      display: block;
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: .86rem;
+    }
+
+    .history-panel {
+      grid-column: span 2;
+    }
+
+    .risk-note {
+      padding: 13px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,189,74,.16);
+      background: rgba(255,189,74,.055);
+      font-size: .82rem;
+      line-height: 1.45;
+    }
+
+    .risk-note i {
+      color: var(--yellow);
+    }
+
+    .spark {
+      animation: valueFlash .7s ease;
+    }
+
+    .panel,
+    .live-card,
+    .risk-note {
+      animation: panelRise .54s cubic-bezier(.2,.8,.2,1) both;
+    }
+
+    .shell > *:nth-child(2) { animation-delay: .03s; }
+    .shell > *:nth-child(3) { animation-delay: .08s; }
+    .shell > *:nth-child(4) { animation-delay: .13s; }
+    .shell > *:nth-child(5) { animation-delay: .18s; }
+
+    @keyframes panelRise {
+      from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+      to { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+
+    @keyframes breathe {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(66,215,140,.34); transform: scale(1); }
+      50% { box-shadow: 0 0 0 10px rgba(66,215,140,0); transform: scale(1.08); }
+    }
+
+    @keyframes valueFlash {
+      0% { color: #fff; text-shadow: 0 0 18px rgba(139,0,18,.55); }
+      100% { text-shadow: none; }
+    }
+
+    @media (max-width: 1180px) {
+      .control-grid, .bottom-grid, .insight-grid, .focus-grid { grid-template-columns: 1fr; }
+      .side-stack { grid-template-columns: 1fr 1fr; }
+      .engine-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .live-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .history-panel { grid-column: span 1; }
+    }
+
+    @media (max-width: 820px) {
+      .login { grid-template-columns: 1fr; }
+      .login-visual { display: none; }
+      .login-form { min-height: 100vh; border-right: 0; }
+      .brand { margin-bottom: 58px; }
+      .app { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .shell { padding: 14px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .top-actions { justify-content: flex-start; }
+      .tabbar {
+        width: 100%;
+        border-radius: 14px;
+        scroll-snap-type: x proximity;
+      }
+      .tabbar button {
+        scroll-snap-align: start;
+        min-height: 34px;
+        padding: 7px 11px;
+        font-size: .72rem;
+      }
+      .mobile-logout { display: inline-flex; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .side-stack { grid-template-columns: 1fr; }
+      .engine-board { grid-template-columns: 1fr; }
+      .live-strip { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .kpi-row { grid-template-columns: 1fr; }
+      .panel-head { align-items: flex-start; flex-direction: column; }
+      .segmented { width: 100%; }
+      .segmented button { flex: 1; }
+      .activity-item { grid-template-columns: 34px 1fr; }
+      .activity-time { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <section id="login" class="login">
+    <div class="login-form">
+      <div class="brand"><span class="brand-mark">D</span><span>DTA</span></div>
+      <div class="login-copy">
+        <h1>Portal<br>Institucional</h1>
+        <p>Acompanhamento executivo da operação, com dados sincronizados em tempo real e leitura consolidada de patrimônio, risco e performance.</p>
+      </div>
+      <div class="auth-tabs" id="auth-tabs">
+        <button type="button" class="active" data-mode="login">Entrar</button>
+        <button type="button" data-mode="register">Criar conta</button>
+        <button type="button" data-mode="change">Trocar senha</button>
+      </div>
+      <form class="access-card" id="login-form">
+        <div id="name-wrap" class="hidden">
+          <label for="portal-name">Nome</label>
+          <div class="key-field">
+            <i class="fa-solid fa-user"></i>
+            <input id="portal-name" type="text" autocomplete="name" placeholder="Seu nome" />
+          </div>
+        </div>
+        <label for="portal-email">E-mail</label>
+        <div class="key-field">
+          <i class="fa-solid fa-envelope"></i>
+          <input id="portal-email" type="email" autocomplete="username" placeholder="admin@dta.local" />
+        </div>
+        <label for="portal-password" id="portal-password-label">Senha</label>
+        <div class="key-field">
+          <i class="fa-solid fa-lock"></i>
+          <input id="portal-password" type="password" autocomplete="current-password" placeholder="Insira sua senha" />
+        </div>
+        <div id="new-password-wrap" class="hidden">
+          <label for="portal-new-password">Nova senha</label>
+          <div class="key-field">
+            <i class="fa-solid fa-key"></i>
+            <input id="portal-new-password" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" />
+          </div>
+        </div>
+        <div id="confirm-password-wrap" class="hidden">
+          <label for="portal-confirm-password">Confirmar nova senha</label>
+          <div class="key-field">
+            <i class="fa-solid fa-check"></i>
+            <input id="portal-confirm-password" type="password" autocomplete="new-password" placeholder="Repita a nova senha" />
+          </div>
+        </div>
+        <button class="primary-btn" id="login-btn" type="submit">Acessar portal</button>
+        <div class="login-error" id="login-error"></div>
+        <div class="login-help" id="login-help">Use seu e-mail e senha cadastrados no portal DTA.</div>
+      </form>
+      <div class="login-note">DTA - Investidor</div>
+    </div>
+    <div class="login-visual" aria-hidden="true">
+      <img class="login-visual-img" src="assets/login-bg.png" alt="DTA Portal Background" />
+    </div>
+  </section>
+
+  <section id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="side-logo">D</div>
+      <nav class="side-nav" aria-label="Navegacao do portal">
+        <button class="side-btn active" data-tab="resumo" title="Resumo"><i class="fa-solid fa-chart-line"></i></button>
+        <button class="side-btn" data-tab="live" title="Ao vivo"><i class="fa-solid fa-signal"></i></button>
+        <button class="side-btn" data-tab="performance" title="Performance"><i class="fa-solid fa-wave-square"></i></button>
+        <button class="side-btn" data-tab="estrategias" title="Estratégias"><i class="fa-solid fa-microchip"></i></button>
+        <button class="side-btn" data-tab="carteira" title="Carteira"><i class="fa-solid fa-briefcase"></i></button>
+        <button class="side-btn" data-tab="mt5" title="MT5"><i class="fa-solid fa-list-check"></i></button>
+        <button class="side-btn admin-only hidden" data-tab="admin" title="Admin"><i class="fa-solid fa-users-gear"></i></button>
+      </nav>
+      <button class="side-btn" id="logout-btn" title="Sair"><i class="fa-solid fa-right-from-bracket"></i></button>
+    </aside>
+
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">DTA - Investidor</div>
+          <h1>Visão consolidada da operação</h1>
+        </div>
+        <div class="top-actions">
+          <div class="status-pill"><span class="dot" id="api-dot"></span><span id="api-label">Sincronizando</span></div>
+          <div class="status-pill"><i class="fa-regular fa-clock"></i><span id="updated-at">--:--</span></div>
+          <button class="ghost-btn" id="refresh-btn"><i class="fa-solid fa-rotate"></i>Atualizar</button>
+          <button class="ghost-btn mobile-logout" id="mobile-logout-btn"><i class="fa-solid fa-right-from-bracket"></i>Sair</button>
+        </div>
+      </header>
+
+      <nav class="tabbar" id="portal-tabs" aria-label="Abas do portal">
+        <button class="active" type="button" data-tab="resumo">Resumo</button>
+        <button type="button" data-tab="live">Ao vivo</button>
+        <button type="button" data-tab="performance">Performance</button>
+        <button type="button" data-tab="estrategias">Estratégias</button>
+        <button type="button" data-tab="carteira">Carteira</button>
+        <button type="button" data-tab="mt5">MT5</button>
+        <button class="admin-only hidden" type="button" data-tab="admin">Admin</button>
+      </nav>
+
+      <section class="live-strip tab-panel" data-tab-panel="live">
+        <div class="live-card">
+          <span class="status-ring" id="live-api-ring"></span>
+          <div class="live-icon"><i class="fa-solid fa-signal"></i></div>
+          <span>Bot online</span>
+          <strong id="live-api-status">Verificando</strong>
+          <small id="live-api-latency">latência --</small>
+        </div>
+        <div class="live-card">
+          <span class="status-ring warn" id="live-mode-ring"></span>
+          <div class="live-icon"><i class="fa-solid fa-toggle-on"></i></div>
+          <span>Modo atual</span>
+          <strong id="live-mode">Validação</strong>
+          <small id="live-mode-detail">controle somente leitura</small>
+        </div>
+        <div class="live-card">
+          <div class="live-icon"><i class="fa-solid fa-bullseye"></i></div>
+          <span>Meta do dia</span>
+          <strong id="live-goal-short">R$ --</strong>
+          <small id="live-goal-state">aguardando dados</small>
+        </div>
+        <div class="live-card">
+          <div class="live-icon"><i class="fa-solid fa-desktop"></i></div>
+          <span>PC servidor</span>
+          <strong id="live-pc-status">Local</strong>
+          <small id="live-pc-detail">localhost sincronizado</small>
+        </div>
+      </section>
+
+      <section class="control-grid tab-panel active" id="overview" data-tab-panel="resumo">
+        <div class="panel main-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Evolução patrimonial</div>
+              <div class="panel-sub" id="chart-subtitle">Curva de resultado sincronizada com o bot</div>
+            </div>
+            <div class="segmented" id="range-tabs">
+              <button class="active" data-range="1">1D</button>
+              <button data-range="7">7D</button>
+              <button data-range="30">1M</button>
+              <button data-range="all">Total</button>
+            </div>
+          </div>
+          <div class="chart-zone"><canvas id="equity-chart"></canvas></div>
+          <div class="kpi-row">
+            <div class="kpi"><small>Patrimônio atual</small><strong id="kpi-capital">R$ --</strong></div>
+            <div class="kpi"><small>Resultado hoje</small><strong id="kpi-today">R$ --</strong></div>
+            <div class="kpi"><small>Resultado acumulado</small><strong id="kpi-total">R$ --</strong></div>
+            <div class="kpi"><small>Rentabilidade</small><strong id="kpi-return">--%</strong></div>
+          </div>
+        </div>
+
+        <div class="side-stack">
+          <div class="panel readiness">
+            <div>
+              <div class="score-line">
+                <span>Índice institucional</span>
+                <strong id="readiness-score">--</strong>
+              </div>
+              <div class="progress"><span id="readiness-bar"></span></div>
+              <p id="readiness-text">Aguardando sincronização para avaliar consistência operacional.</p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Métricas de risco</div>
+                <div class="panel-sub">Indicadores de controle</div>
+              </div>
+            </div>
+            <div class="metric-list">
+              <div class="metric-item"><span>Profit factor</span><strong id="m-profit-factor">--</strong></div>
+              <div class="metric-item"><span>Drawdown máximo</span><strong id="m-drawdown">--%</strong></div>
+              <div class="metric-item"><span>Sharpe estimado</span><strong id="m-sharpe">--</strong></div>
+              <div class="metric-item"><span>Exposição atual</span><strong id="m-exposure">R$ --</strong></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="focus-grid tab-panel" data-tab-panel="live">
+        <div class="panel goal-panel">
+          <div class="goal-head">
+            <div>
+              <div class="panel-title">Meta diária</div>
+              <div class="panel-sub">Progresso sobre o alvo operacional</div>
+            </div>
+            <div class="engine-badge" id="goal-badge">Em leitura</div>
+          </div>
+          <div>
+            <div class="goal-value" id="goal-value">R$ --</div>
+            <div class="progress"><span id="goal-bar"></span></div>
+            <div class="goal-foot"><span id="goal-current">R$ --</span><span id="goal-target">R$ 100,00</span></div>
+          </div>
+        </div>
+
+        <div class="panel decision-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Última decisão do bot</div>
+              <div class="panel-sub" id="decision-time">Aguardando ciclo</div>
+            </div>
+          </div>
+          <div class="decision-body">
+            <div class="decision-label" id="decision-label">Leitura operacional</div>
+            <div class="decision-text" id="decision-text">Sem decisão recente sincronizada.</div>
+            <div class="decision-meta" id="decision-meta">Quando o bot bloquear ou liberar uma entrada, a explicação aparece aqui.</div>
+          </div>
+        </div>
+
+        <div class="panel month-card">
+          <div>
+            <div class="panel-title">Relatório do mês</div>
+            <div class="panel-sub">Resumo executivo do período atual</div>
+          </div>
+          <div class="month-grid">
+            <div class="month-stat"><span>Resultado</span><strong id="month-pnl">R$ --</strong></div>
+            <div class="month-stat"><span>Melhor dia</span><strong id="month-best">R$ --</strong></div>
+            <div class="month-stat"><span>Pior dia</span><strong id="month-worst">R$ --</strong></div>
+            <div class="month-stat"><span>Operações</span><strong id="month-trades">--</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="insight-grid tab-panel" data-tab-panel="estrategias">
+        <div class="panel" id="engines-section">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Motores da operação</div>
+              <div class="panel-sub" id="engines-subtitle">Performance por estratégia ativa</div>
+            </div>
+          </div>
+          <div class="engine-board" id="engine-board"></div>
+          <div class="empty hidden" id="engines-empty">Aguardando estatísticas por engine.</div>
+        </div>
+
+        <div class="panel" id="risk-section">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Capital e risco vivo</div>
+              <div class="panel-sub">Leitura operacional do ciclo atual</div>
+            </div>
+          </div>
+          <div class="ops-grid">
+            <div class="ops-row"><span>Capital B3 / MT5</span><strong id="ops-capital-brl">R$ --</strong></div>
+            <div class="ops-row"><span>Capital Binance</span><strong id="ops-capital-usd">US$ --</strong></div>
+            <div class="ops-row"><span>Dólar usado</span><strong id="ops-usd-rate">--</strong></div>
+            <div class="ops-row"><span>Mercado B3</span><strong id="ops-b3">--</strong></div>
+            <div class="ops-row"><span>Guarda WDO</span><strong id="ops-wdo-guard">--</strong></div>
+            <div class="ops-row"><span>Plano adaptativo</span><strong id="ops-plan">--</strong></div>
+            <div class="ops-row"><span>Última leitura</span><strong id="ops-reason">--</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="insight-grid tab-panel" data-tab-panel="performance">
+        <div class="panel history-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Histórico por dia</div>
+              <div class="panel-sub">Últimos pregões sincronizados</div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Data</th><th>Resultado</th><th>Ciclos</th><th>Win rate</th></tr></thead>
+              <tbody id="daily-history-body"></tbody>
+            </table>
+            <div class="empty hidden" id="daily-history-empty">Histórico diário ainda não disponível.</div>
+          </div>
+        </div>
+
+        <div class="panel status-card">
+          <div class="panel-title">Custos operacionais</div>
+          <div class="system-row"><span>Hoje</span><strong id="costs-today">R$ --</strong></div>
+          <div class="system-row"><span>Acumulado</span><strong id="costs-total">R$ --</strong></div>
+          <div class="system-row"><span>Spread</span><strong id="costs-spread">R$ --</strong></div>
+          <div class="system-row"><span>Slippage</span><strong id="costs-slippage">R$ --</strong></div>
+        </div>
+      </section>
+
+      <section class="bottom-grid tab-panel" data-tab-panel="carteira">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Posições abertas</div>
+              <div class="panel-sub">Carteira em acompanhamento</div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Ativo</th><th>Alocado</th><th>Resultado</th><th>Perfil</th></tr></thead>
+              <tbody id="positions-body"></tbody>
+            </table>
+            <div class="empty hidden" id="positions-empty">Sem posições abertas no momento.</div>
+          </div>
+        </div>
+
+        <div class="panel" id="activity-section">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Atividades recentes</div>
+              <div class="panel-sub">Eventos relevantes da operação</div>
+            </div>
+          </div>
+          <div class="activity" id="activity-list"></div>
+          <div class="empty hidden" id="activity-empty">Aguardando novos eventos da operação.</div>
+        </div>
+
+        <div class="panel status-card">
+          <div class="panel-title">Estado operacional</div>
+          <div class="system-row"><span>Ambiente</span><strong id="s-mode">Validação</strong></div>
+          <div class="system-row"><span>Bot</span><strong id="s-bot">--</strong></div>
+          <div class="system-row"><span>Ciclos analisados</span><strong id="s-cycles">--</strong></div>
+          <div class="system-row"><span>Taxa de acerto</span><strong id="s-winrate">--%</strong></div>
+          <div class="system-row"><span>Último ciclo</span><strong id="s-last-cycle">--</strong></div>
+        </div>
+      </section>
+
+      <section class="insight-grid tab-panel" data-tab-panel="mt5">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Movimentações MT5</div>
+              <div class="panel-sub">Últimos deals registrados na conta</div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Hora</th><th>Ativo</th><th>Lado</th><th>Vol</th><th>Preço</th><th>P&L</th></tr></thead>
+              <tbody id="mt5-deals-body"></tbody>
+            </table>
+            <div class="empty hidden" id="mt5-deals-empty">Sem movimentações MT5 recentes.</div>
+          </div>
+        </div>
+        <div class="panel status-card">
+          <div class="panel-title">Sincronização MT5</div>
+          <div class="system-row"><span>Última leitura</span><strong id="mt5-deals-updated">--</strong></div>
+          <div class="system-row"><span>Janela</span><strong id="mt5-deals-window">7 dias</strong></div>
+          <div class="system-row"><span>Itens</span><strong id="mt5-deals-count">--</strong></div>
+        </div>
+      </section>
+
+      <section class="insight-grid tab-panel admin-only hidden" id="admin-section" data-tab-panel="admin">
+        <div class="panel history-panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Administração de acessos</div>
+              <div class="panel-sub">Usuários cadastrados e histórico de login</div>
+            </div>
+            <div class="engine-badge" id="admin-users-count">-- usuários</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Usuário</th><th>Papel</th><th>Senha</th><th>Logins</th><th>Último acesso</th></tr></thead>
+              <tbody id="admin-users-body"></tbody>
+            </table>
+            <div class="empty hidden" id="admin-users-empty">Nenhum usuário cadastrado.</div>
+          </div>
+        </div>
+        <div class="panel status-card">
+          <div class="panel-title">Segurança</div>
+          <div class="system-row"><span>Admin</span><strong id="admin-email">--</strong></div>
+          <div class="system-row"><span>Senhas</span><strong>Protegidas</strong></div>
+          <div class="system-row"><span>Exibição</span><strong>Bloqueada</strong></div>
+        </div>
+      </section>
+
+      <div class="risk-note">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Operações automatizadas envolvem risco. Resultados passados, backtests e simulações não garantem desempenho futuro.</span>
+      </div>
+    </main>
+  </section>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    'use strict';
+
+    const _IS_LOCAL_INV = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
+    const _SAVED_INV    = localStorage.getItem('dt_inv_server_url');
+    const _DEFAULT_INV_API = 'https://daytrade-bot-production.up.railway.app';
+    const _LOCAL_INV_API = 'http://127.0.0.1:8001';
+    const _DEPLOYED_INV_API = 'https://val-ensures-catch-bbs.trycloudflare.com';
+    const normalizeApiBase = (value) => String(value || '').trim().replace(/\/$/, '');
+    let API_BASE = normalizeApiBase(
+      _DEPLOYED_INV_API || _SAVED_INV || (_IS_LOCAL_INV ? (location.origin || _LOCAL_INV_API) : _DEFAULT_INV_API)
+    );
+    const SESSION_STORAGE = 'dta_portal_session';
+    const EMAIL_STORAGE = 'dta_portal_email';
+    const DAILY_GOAL = 30; // Meta realista: R$30/dia com 1 contrato WDO
+    let chart = null;
+    let currentRange = '1';
+    let refreshTimer = null;
+    let authMode = 'login';
+    let lastLoadStartedAt = 0;
+    let activeTab = 'resumo';
+
+    const $ = (id) => document.getElementById(id);
+    const getSession = () => localStorage.getItem(SESSION_STORAGE) || '';
+    const setSession = (token) => localStorage.setItem(SESSION_STORAGE, token);
+    const clearSession = () => localStorage.removeItem(SESSION_STORAGE);
+    function getSessionUser() {
+      const token = getSession();
+      if (!token || !token.includes('.')) return {};
+      try {
+        const payload = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = payload + '='.repeat((4 - payload.length % 4) % 4);
+        return JSON.parse(decodeURIComponent(escape(atob(padded))));
+      } catch (_) {
+        return {};
+      }
+    }
+    const isAdminSession = () => getSessionUser()?.role === 'admin';
+    const headers = () => {
+      const h = { 'Content-Type': 'application/json' };
+      const token = getSession();
+      if (token) h.Authorization = `Bearer ${token}`;
+      return h;
+    };
+
+    function brl(value) {
+      const n = Number(value || 0);
+      return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function pct(value) {
+      const n = Number(value || 0);
+      return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+    }
+
+    function compactDate(value) {
+      if (!value) return '--';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value).slice(0, 16);
+      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function setMoneyClass(el, value) {
+      el.classList.remove('positive', 'negative');
+      const n = Number(value || 0);
+      if (n > 0) el.classList.add('positive');
+      if (n < 0) el.classList.add('negative');
+    }
+
+    function setText(id, value) {
+      const el = $(id);
+      if (!el) return;
+      const next = String(value);
+      if (el.textContent !== next) {
+        el.textContent = next;
+        el.classList.remove('spark');
+        void el.offsetWidth;
+        el.classList.add('spark');
+      }
+    }
+
+    async function api(path, options = {}) {
+      const timeoutMs = options.timeoutMs || 4500;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      let res;
+      try {
+        res = await fetch(`${API_BASE}${path}`, {
+          headers: headers(),
+          ...options,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (res.status === 401 || res.status === 403) {
+        clearSession();
+        showLogin('Sessão expirada. Entre novamente.');
+        throw new Error('unauthorized');
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    const apiPost = (path, body = {}) => api(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+
+    function payload(res) {
+      return res?.data && typeof res.data === 'object' ? res.data : (res || {});
+    }
+
+    function valueFrom(obj, keys, fallback = undefined) {
+      for (const key of keys) {
+        const value = obj?.[key];
+        if (value !== undefined && value !== null && value !== '') return value;
+      }
+      return fallback;
+    }
+
+    function cleanPortalText(value) {
+      return String(value || '')
+        .replaceAll('aceitÃ¡vel', 'aceitável')
+        .replaceAll('Ã¡', 'á')
+        .replaceAll('Ã©', 'é')
+        .replaceAll('Ã­', 'í')
+        .replaceAll('Ã³', 'ó')
+        .replaceAll('Ãº', 'ú')
+        .replaceAll('Ã£', 'ã')
+        .replaceAll('Ãµ', 'õ')
+        .replaceAll('Ã§', 'ç')
+        .replaceAll('Ãª', 'ê')
+        .replaceAll('Ã´', 'ô')
+        .replaceAll('Ã', 'Á')
+        .replaceAll('Ã‰', 'É')
+        .replaceAll('Ã‡', 'Ç');
+    }
+
+    function humanizePortalReason(value) {
+      const text = cleanPortalText(value).trim();
+      const lower = text.toLowerCase();
+      if (!text) return '';
+      if (lower.includes('sem oportunidade com risco/retorno')) {
+        return 'Sem entrada no ciclo atual. O bot não encontrou uma relação risco/retorno boa o suficiente.';
+      }
+      if (lower.includes('sem sinal válido') || lower.includes('nenhum ativo acima')) {
+        return 'Sem entrada no ciclo atual. Os sinais ainda não passaram nos filtros do bot.';
+      }
+      if (lower.includes('pausado por proteção')) {
+        return 'Bot em modo de proteção. Novas entradas ficam bloqueadas até o risco normalizar.';
+      }
+      if (lower.includes('risco elevado')) {
+        return 'Risco elevado no momento. O bot está priorizando proteção de capital.';
+      }
+      if (lower.includes('trend_day_prioriza_orb30')) {
+        return 'Dia com tendência detectada. O bot prioriza setups direcionais.';
+      }
+      if (lower.includes('lateral_day_prioriza_reversao')) {
+        return 'Mercado lateral detectado. O bot prioriza operações de reversão.';
+      }
+      if (lower.includes('neutral_day_balanceado_por_janela')) {
+        return 'Mercado neutro. O bot aguarda uma janela operacional mais clara.';
+      }
+      if (lower.includes('fixed_profile') || lower.includes('adaptive_disabled')) {
+        return 'Operação em perfil fixo. O bot mantém a configuração atual.';
+      }
+      return text;
+    }
+
+    function formatEngineName(name) {
+      const labels = {
+        orb30_win: 'ORB30 WIN',
+        ema_cross_win: 'EMA Cross WIN',
+        orb_fade_win: 'ORB Fade WIN',
+        range_scalp_win: 'Range Scalp WIN',
+        vwap_rev_wdo: 'VWAP Reversão WDO',
+        win_mr_afternoon: 'WIN Reversão tarde',
+        btc_leadlag_binance: 'BTC Lead/Lag',
+        momentum_scalp_binance: 'Momentum Scalp',
+      };
+      return labels[name] || String(name || '').replaceAll('_', ' ');
+    }
+
+    function formatPlan(plan, limit = 3) {
+      if (!plan || typeof plan !== 'object') return '';
+      const entries = Object.entries(plan);
+      const active = entries.filter(([, value]) => value === true);
+      if (!active.length) return 'Estratégia em espera';
+      return active.slice(0, limit).map(([key]) => formatEngineName(key)).join(' | ');
+    }
+
+    function showLogin(message = '') {
+      $('login').classList.remove('hidden');
+      $('app').classList.add('hidden');
+      $('login-error').textContent = message;
+      $('portal-email').value = localStorage.getItem(EMAIL_STORAGE) || '';
+      if (refreshTimer) clearInterval(refreshTimer);
+    }
+
+    function setActiveTab(tab) {
+      const isAdmin = isAdminSession();
+      const target = tab === 'admin' && !isAdmin ? 'resumo' : (tab || 'resumo');
+      activeTab = target;
+      document.querySelectorAll('[data-tab-panel]').forEach((panel) => {
+        panel.classList.toggle('active', panel.dataset.tabPanel === target);
+      });
+      document.querySelectorAll('[data-tab]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.tab === target);
+      });
+      if (chart) {
+        setTimeout(() => chart.resize(), 40);
+      }
+    }
+
+    function showApp() {
+      $('login').classList.add('hidden');
+      $('app').classList.remove('hidden');
+      const session = getSessionUser();
+      document.querySelectorAll('.admin-only').forEach((el) => {
+        el.classList.toggle('hidden', session.role !== 'admin');
+      });
+      setText('admin-email', session.sub || '--');
+      setActiveTab(activeTab);
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(loadDashboard, 30000);
+    }
+
+    function setOnline(ok) {
+      $('api-dot').classList.toggle('offline', !ok);
+      $('api-label').textContent = ok ? 'Sincronizado' : 'Sem conexão';
+    }
+
+    function toast(message) {
+      const el = $('toast');
+      el.textContent = message;
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 3200);
+    }
+
+    function setAuthMode(mode) {
+      authMode = ['register', 'change'].includes(mode) ? mode : 'login';
+      document.querySelectorAll('#auth-tabs button').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.mode === authMode);
+      });
+      $('name-wrap').classList.toggle('hidden', authMode !== 'register');
+      $('new-password-wrap').classList.toggle('hidden', authMode !== 'change');
+      $('confirm-password-wrap').classList.toggle('hidden', authMode !== 'change');
+      $('portal-password-label').textContent = authMode === 'change' ? 'Senha atual' : 'Senha';
+      $('portal-password').autocomplete = authMode === 'change' ? 'current-password' : (authMode === 'register' ? 'new-password' : 'current-password');
+      $('portal-password').placeholder = authMode === 'change' ? 'Senha atual ou temporária' : 'Insira sua senha';
+      $('login-btn').textContent = authMode === 'register' ? 'Criar conta' : (authMode === 'change' ? 'Alterar senha' : 'Acessar portal');
+      $('login-help').textContent = authMode === 'register'
+        ? 'Novas contas entram como investidor. Use uma senha com pelo menos 8 caracteres.'
+        : (authMode === 'change'
+          ? 'Informe seu e-mail, senha atual e a nova senha para atualizar o acesso.'
+          : 'Use seu e-mail e senha cadastrados no portal DTA.');
+      $('login-error').textContent = '';
+    }
+
+    function renderChart(history, perf, summary = {}, status = {}) {
+      const days = Array.isArray(history?.days) ? history.days : [];
+      let series = days.map((d) => ({ label: d.date.slice(5), pnl: Number(d.pnl || 0) }));
+      if (currentRange !== 'all') series = series.slice(-Number(currentRange));
+
+      const account = summary?.account || {};
+      const currentCapital = Number(account.capital ?? account.patrimonio_total ?? perf?.current_capital ?? status?.capital_efetivo ?? status?.capital ?? 0);
+      let running = currentCapital;
+      const reversed = [...series].reverse();
+      reversed.forEach((point) => {
+        point.equity = running;
+        running -= point.pnl;
+      });
+      const normalized = reversed.reverse().map((p) => ({ ...p, equity: p.equity }));
+
+      if (!normalized.length && currentCapital > 0) {
+        normalized.push({ label: 'Hoje', equity: currentCapital });
+      }
+
+      if (!normalized.length && Array.isArray(perf?.equity_curve)) {
+        perf.equity_curve.forEach((value, index) => normalized.push({ label: `${index + 1}`, equity: Number(value || 0) }));
+      }
+
+      const labels = normalized.map((p) => p.label);
+      const data = normalized.map((p) => p.equity);
+      const ctx = $('equity-chart');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Patrimônio',
+            data,
+            borderColor: '#d10a24',
+            backgroundColor: 'rgba(139,0,18,.22)',
+            tension: .35,
+            fill: true,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            borderWidth: 2,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#151515',
+              borderColor: 'rgba(255,255,255,.12)',
+              borderWidth: 1,
+              callbacks: { label: (ctx) => brl(ctx.parsed.y) },
+            },
+          },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,.04)' }, ticks: { color: '#6f6f6f', maxTicksLimit: 8 } },
+            y: { grid: { color: 'rgba(255,255,255,.06)' }, ticks: { color: '#6f6f6f', callback: (v) => brl(v).replace(',00', '') } },
+          },
+        },
+      });
+      $('chart-subtitle').textContent = normalized.length ? `${normalized.length} pontos carregados` : 'Aguardando histórico suficiente';
+    }
+
+    function renderDailyHistory(history) {
+      const days = Array.isArray(history?.days) ? history.days.slice(-7).reverse() : [];
+      const body = $('daily-history-body');
+      body.innerHTML = '';
+      $('daily-history-empty').classList.toggle('hidden', days.length > 0);
+      days.forEach((day) => {
+        const pnl = Number(day.pnl || 0);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong></strong></td>
+          <td></td>
+          <td></td>
+          <td></td>
+        `;
+        tr.children[0].querySelector('strong').textContent = day.date || '--';
+        tr.children[1].textContent = brl(pnl);
+        tr.children[1].className = pnl >= 0 ? 'positive' : 'negative';
+        tr.children[2].textContent = day.cycles ?? '--';
+        tr.children[3].textContent = pct(day.win_rate_pct || 0);
+        body.appendChild(tr);
+      });
+    }
+
+    function renderMt5Deals(deals) {
+      const rows = Array.isArray(deals) ? deals : [];
+      const body = $('mt5-deals-body');
+      body.innerHTML = '';
+      $('mt5-deals-empty').classList.toggle('hidden', rows.length > 0);
+      setText('mt5-deals-count', rows.length ? String(rows.length) : '--');
+      setText('mt5-deals-updated', new Date().toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+
+      rows.slice(0, 30).forEach((d) => {
+        const pnl = Number(d.profit || 0);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td></td>
+          <td><strong></strong></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+        `;
+        tr.children[0].textContent = compactDate(d.time);
+        tr.children[1].querySelector('strong').textContent = d.symbol || '--';
+        tr.children[2].textContent = d.type || '--';
+        tr.children[3].textContent = (d.volume ?? '--').toString();
+        tr.children[4].textContent = Number(d.price || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+        tr.children[5].textContent = brl(pnl);
+        tr.children[5].className = pnl >= 0 ? 'positive' : 'negative';
+        body.appendChild(tr);
+      });
+    }
+
+    function renderAdminUsers(adminData) {
+      const users = Array.isArray(adminData?.users) ? adminData.users : [];
+      const body = $('admin-users-body');
+      if (!body) return;
+      body.innerHTML = '';
+      $('admin-users-empty').classList.toggle('hidden', users.length > 0);
+      setText('admin-users-count', `${users.length} usuário${users.length === 1 ? '' : 's'}`);
+      users.forEach((user) => {
+        const lastLogin = user.last_login_at
+          ? new Date(Number(user.last_login_at) * 1000).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          : 'Nunca';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong></strong><br><small></small></td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td></td>
+        `;
+        tr.children[0].querySelector('strong').textContent = user.email || '--';
+        tr.children[0].querySelector('small').textContent = user.name || 'sem nome';
+        tr.children[1].textContent = user.role || 'investor';
+        tr.children[2].textContent = user.password_status === 'protegida' ? 'Protegida' : 'Não definida';
+        tr.children[3].textContent = String(user.login_count || 0);
+        tr.children[4].textContent = lastLogin;
+        body.appendChild(tr);
+      });
+    }
+
+    function updateMonthReport(history, perf) {
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const days = Array.isArray(history?.days) ? history.days.filter((d) => String(d.date || '').startsWith(ym)) : [];
+      const monthPnl = days.reduce((sum, d) => sum + Number(d.pnl || 0), 0);
+      const best = days.length ? Math.max(...days.map((d) => Number(d.pnl || 0))) : 0;
+      const worst = days.length ? Math.min(...days.map((d) => Number(d.pnl || 0))) : 0;
+      const trades = days.reduce((sum, d) => sum + Number(d.wins || 0) + Number(d.losses || 0), 0);
+      setText('month-pnl', days.length ? brl(monthPnl) : brl(perf?.total_pnl || 0));
+      setText('month-best', brl(best));
+      setText('month-worst', brl(worst));
+      setText('month-trades', trades || perf?.win_count + perf?.loss_count || '--');
+      setMoneyClass($('month-pnl'), days.length ? monthPnl : perf?.total_pnl || 0);
+      setMoneyClass($('month-best'), best);
+      setMoneyClass($('month-worst'), worst);
+    }
+
+    function renderPositions(summary, mt5Positions = []) {
+      const portfolioPos = summary?.portfolio?.positions || {};
+      const rows = Object.entries(portfolioPos);
+      const body = $('positions-body');
+      body.innerHTML = '';
+      
+      rows.forEach(([asset, p]) => {
+        const pnl = Number(p.pnl || 0);
+        const tr = document.createElement('tr');
+
+        const tdAsset = document.createElement('td');
+        const assetLabel = document.createElement('strong');
+        assetLabel.textContent = asset;
+        tdAsset.appendChild(assetLabel);
+
+        const tdAllocated = document.createElement('td');
+        tdAllocated.textContent = brl(p.allocated);
+
+        const tdPnl = document.createElement('td');
+        tdPnl.className = pnl >= 0 ? 'positive' : 'negative';
+        tdPnl.textContent = brl(pnl);
+
+        const tdProfile = document.createElement('td');
+        tdProfile.textContent = p.timeframe || '--';
+
+        tr.appendChild(tdAsset);
+        tr.appendChild(tdAllocated);
+        tr.appendChild(tdPnl);
+        tr.appendChild(tdProfile);
+        body.appendChild(tr);
+      });
+      
+      if (Array.isArray(mt5Positions) && mt5Positions.length > 0) {
+        mt5Positions.forEach((pos) => {
+          const pnl = Number(pos.profit || 0);
+          const tr = document.createElement('tr');
+          const tradeType = pos.type === 'buy' ? 'C' : 'V';
+
+          const tdAsset = document.createElement('td');
+          const assetLabel = document.createElement('strong');
+          assetLabel.textContent = `${pos.symbol} [${tradeType}]`;
+          tdAsset.appendChild(assetLabel);
+
+          const tdAllocated = document.createElement('td');
+          tdAllocated.textContent = brl(pos.volume * (pos.open_price || 0));
+
+          const tdPnl = document.createElement('td');
+          tdPnl.className = pnl >= 0 ? 'positive' : 'negative';
+          tdPnl.textContent = brl(pnl);
+
+          const tdProfile = document.createElement('td');
+          tdProfile.textContent = `MT5 #${pos.ticket}`;
+
+          tr.appendChild(tdAsset);
+          tr.appendChild(tdAllocated);
+          tr.appendChild(tdPnl);
+          tr.appendChild(tdProfile);
+          body.appendChild(tr);
+        });
+      }
+      
+      $('positions-empty').classList.toggle('hidden', rows.length > 0 || (Array.isArray(mt5Positions) && mt5Positions.length > 0));
+    }
+
+    function normalizeActivity(item) {
+      if (typeof item === 'string') return { title: 'Evento operacional', detail: item, time: '' };
+      const title = item.action || item.type || item.event || item.engine || 'Evento operacional';
+      const detail = item.message || item.reason || item.asset || item.symbol || JSON.stringify(item).slice(0, 120);
+      const time = item.timestamp || item.time || item.created_at || '';
+      return { title, detail, time };
+    }
+
+    function renderActivity(summary, status) {
+      const list = $('activity-list');
+      const source = Array.isArray(summary?.recent_activity) && summary.recent_activity.length
+        ? summary.recent_activity
+        : (Array.isArray(status?.log) ? status.log.slice(0, 8) : []);
+      const items = source.slice(-8).reverse().map(normalizeActivity);
+      list.innerHTML = '';
+      $('activity-empty').classList.toggle('hidden', items.length > 0);
+      items.forEach((item) => {
+        const div = document.createElement('div');
+        div.className = 'activity-item';
+
+        const icon = document.createElement('div');
+        icon.className = 'activity-icon';
+        icon.innerHTML = '<i class="fa-solid fa-pulse"></i>';
+
+        const main = document.createElement('div');
+        main.className = 'activity-main';
+        const title = document.createElement('strong');
+        title.textContent = item.title;
+        const detail = document.createElement('span');
+        detail.textContent = item.detail || 'Atualização registrada';
+        main.appendChild(title);
+        main.appendChild(detail);
+
+        const time = document.createElement('div');
+        time.className = 'activity-time';
+        time.textContent = compactDate(item.time);
+
+        div.appendChild(icon);
+        div.appendChild(main);
+        div.appendChild(time);
+        list.appendChild(div);
+      });
+    }
+
+    function updateReadiness(perf) {
+      const score = Number(perf?.readiness_score || 0);
+      const label = perf?.readiness_label || 'EM ANÁLISE';
+      $('readiness-score').textContent = score ? Math.round(score) : '--';
+      $('readiness-bar').style.width = `${Math.max(0, Math.min(100, score))}%`;
+      $('readiness-text').textContent = score
+        ? `${label}. O Índice combina consistência, ciclos, drawdown, Sharpe e profit factor para leitura institucional.`
+        : 'Aguardando dados suficientes para avaliar consistência operacional.';
+    }
+
+    function updateLiveStrip(status, perf, latencyMs) {
+      const online = latencyMs !== null && latencyMs < 4500;
+      $('live-api-ring').className = `status-ring${online ? '' : ' off'}`;
+      setText('live-api-status', online ? 'Online' : 'Sem resposta');
+      setText('live-api-latency', online ? `latência ${latencyMs}ms` : 'timeout');
+
+      const mode = status?.trading_mode || status?.sim_mode || status?.mode || (status?.live_trading ? 'Live' : 'Validação');
+      const modeNorm = String(mode || 'Validação').replace('_', ' ');
+      $('live-mode-ring').className = `status-ring${/live/i.test(modeNorm) ? '' : ' warn'}`;
+      setText('live-mode', modeNorm);
+      setText('live-mode-detail', status?.auto_trading === false ? 'bot pausado' : 'bot liberado');
+
+      const today = Number(perf?.pnl_today ?? status?.pnl_today ?? status?.pnl_hoje ?? 0);
+      setText('live-goal-short', `${brl(today)} / ${brl(DAILY_GOAL)}`);
+      setText('live-goal-state', today >= DAILY_GOAL ? 'meta atingida' : `${Math.max(0, Math.round(today / DAILY_GOAL * 100))}% do alvo`);
+
+      setText('live-pc-status', online ? 'Servidor local' : 'Aguardando PC');
+      setText('live-pc-detail', `${location.hostname}:${location.port || '80'}`);
+    }
+
+    function updateGoal(perf, status) {
+      const today = Number(perf?.pnl_today ?? status?.pnl_today ?? status?.pnl_hoje ?? 0);
+      const progress = Math.max(0, Math.min(100, today / DAILY_GOAL * 100));
+      setText('goal-value', brl(today));
+      setText('goal-current', brl(today));
+      setText('goal-target', brl(DAILY_GOAL));
+      $('goal-bar').style.width = `${progress}%`;
+      $('goal-badge').textContent = today >= DAILY_GOAL ? 'Meta atingida' : today < 0 ? 'Recuperação' : 'Em progresso';
+      setMoneyClass($('goal-value'), today);
+    }
+
+    function updateDecision(status) {
+      const reason = humanizePortalReason(valueFrom(status, ['last_no_position_reason', 'adaptive_engine_reason'], ''));
+      const plan = status?.adaptive_engine_plan;
+      const lastCycle = compactDate(status?.last_cycle);
+      const label = status?.auto_trading === false ? 'Bot pausado' : reason ? 'Sem entrada agora' : 'Monitoramento ativo';
+      const text = reason || 'Bot monitorando o mercado. Nenhum alerta relevante no último ciclo.';
+      const planText = formatPlan(plan, 3);
+      const meta = planText
+        ? `Leitura operacional: ${planText}`
+        : 'O portal está em modo somente leitura.';
+      setText('decision-label', label);
+      setText('decision-text', String(text).slice(0, 140));
+      setText('decision-meta', meta);
+      setText('decision-time', lastCycle === '--' ? 'Aguardando ciclo' : `Último ciclo ${lastCycle}`);
+    }
+
+    function updateCosts(perf) {
+      setText('costs-today', brl(perf?.costs_today_total || 0));
+      setText('costs-total', brl(perf?.costs_total || 0));
+      setText('costs-spread', brl(perf?.costs_total_spread || perf?.costs_today_spread || 0));
+      setText('costs-slippage', brl(perf?.costs_total_slippage || perf?.costs_today_slippage || 0));
+    }
+
+    function renderEngines(engineRes) {
+      const board = $('engine-board');
+      const engines = Array.isArray(engineRes?.data) ? engineRes.data : [];
+      board.innerHTML = '';
+      $('engines-empty').classList.toggle('hidden', engines.length > 0);
+      $('engines-subtitle').textContent = engineRes?.focus_mode
+        ? `Modo ${String(engineRes.focus_mode).toUpperCase()} | ${engines.length} engines monitorados`
+        : 'Performance por estratégia ativa';
+
+      engines.slice(0, 6).forEach((engine) => {
+        const name = valueFrom(engine, ['name', 'engine', 'strategy', 'id'], 'Engine');
+        const pnl = Number(valueFrom(engine, ['total_pnl', 'cum_pnl', 'pnl'], 0));
+        const wr = Number(valueFrom(engine, ['win_rate_pct', 'win_rate', 'wr'], 0));
+        const cycles = valueFrom(engine, ['cycles', 'total_cycles', 'trades', 'count'], '--');
+        const status = valueFrom(engine, ['status', 'enabled', 'active'], 'monitorado');
+
+        const card = document.createElement('div');
+        card.className = 'engine-card';
+        card.innerHTML = `
+          <div class="engine-top">
+            <div>
+              <div class="engine-name"></div>
+              <div class="engine-meta"></div>
+            </div>
+            <div class="engine-badge"></div>
+          </div>
+          <div class="engine-stats">
+            <div class="engine-stat"><span>P&L</span><strong></strong></div>
+            <div class="engine-stat"><span>Win rate</span><strong></strong></div>
+          </div>
+        `;
+        card.querySelector('.engine-name').textContent = String(name).replaceAll('_', ' ');
+        card.querySelector('.engine-meta').textContent = `${cycles} ciclos/trades`;
+        card.querySelector('.engine-badge').textContent = status === true ? 'ativo' : status === false ? 'off' : String(status).slice(0, 14);
+        const statValues = card.querySelectorAll('.engine-stat strong');
+        statValues[0].textContent = brl(pnl);
+        statValues[0].className = pnl >= 0 ? 'positive' : 'negative';
+        statValues[1].textContent = pct(wr);
+        board.appendChild(card);
+      });
+    }
+
+    function updateOpsPanels(status, perf) {
+      const capitalBrl = Number(status?.capital_brl || 0);
+      const capitalUsd = Number(status?.capital_usd || 0);
+      const capitalUsdBrl = Number(status?.capital_usd_brl || 0);
+      const usdRate = Number(status?.usd_rate || 0);
+      const b3Open = status?.b3_open;
+      const plan = status?.adaptive_engine_plan;
+      const planLabel = formatPlan(plan, 2) || humanizePortalReason(valueFrom(status, ['adaptive_engine_reason'], '--'));
+      const reason = humanizePortalReason(valueFrom(status, ['last_no_position_reason', 'adaptive_engine_reason'], 'Sem bloqueio relevante'));
+
+      $('ops-capital-brl').textContent = capitalBrl ? brl(capitalBrl) : brl(status?.capital || perf?.current_capital || 0);
+      $('ops-capital-usd').textContent = capitalUsd
+        ? `${capitalUsd.toLocaleString('pt-BR', { style: 'currency', currency: 'USD' })} / ${brl(capitalUsdBrl)}`
+        : '--';
+      $('ops-usd-rate').textContent = usdRate ? brl(usdRate).replace('R$', 'R$ ') : '--';
+      $('ops-b3').textContent = b3Open === true ? 'Aberto' : b3Open === false ? 'Fechado' : '--';
+      $('ops-wdo-guard').textContent = status?.wdo_profit_guard_active ? 'Ativo' : 'Livre';
+      $('ops-plan').textContent = planLabel || '--';
+      $('ops-reason').textContent = String(reason).slice(0, 80);
+    }
+
+    function updateKpis(summary, perf, status) {
+      const account = summary?.account || {};
+      const capital = Number(account.capital ?? perf?.current_capital ?? status?.capital ?? 0);
+      const totalPnl = Number(perf?.total_pnl ?? account.total_pnl ?? status?.total_pnl ?? 0);
+      const todayPnl = Number(perf?.pnl_today ?? status?.pnl_today ?? status?.pnl_hoje ?? 0);
+      const returnPct = capital > 0 ? (totalPnl / capital) * 100 : Number(account.rentabilidade_pct || 0);
+
+      setText('kpi-capital', brl(capital));
+      setText('kpi-today', brl(todayPnl));
+      setText('kpi-total', brl(totalPnl));
+      setText('kpi-return', pct(returnPct));
+      setMoneyClass($('kpi-today'), todayPnl);
+      setMoneyClass($('kpi-total'), totalPnl);
+      setMoneyClass($('kpi-return'), returnPct);
+
+      setText('m-profit-factor', Number(perf?.profit_factor || 0).toFixed(2));
+      setText('m-drawdown', pct(perf?.max_drawdown_pct || 0));
+      setText('m-sharpe', Number(perf?.sharpe_ratio || 0).toFixed(2));
+      setText('m-exposure', brl(account.allocated || 0));
+
+      const mode = status?.trading_mode || status?.sim_mode || status?.mode || (status?.live_trading ? 'Live' : 'Validação');
+      setText('s-mode', String(mode).replace('_', ' '));
+      setText('s-bot', status?.auto_trading === false ? 'Pausado' : 'Operação sincronizada');
+      setText('s-cycles', perf?.total_cycles ?? summary?.performance?.total_cycles ?? '--');
+      setText('s-winrate', pct(perf?.win_rate_pct || summary?.performance?.win_rate_pct || 0));
+      setText('s-last-cycle', compactDate(status?.last_cycle));
+    }
+
+    async function loadDashboard() {
+      lastLoadStartedAt = performance.now();
+      try {
+        const [summaryRes, perfRes, historyRes, statusRes, mt5Res, enginesRes, mt5DealsRes, adminRes] = await Promise.all([
+          api('/user/summary').catch(() => null),
+          api('/performance').catch(() => null),
+          api('/performance/history').catch(() => null),
+          api('/trade/status').catch(() => null),
+          api('/mt5/positions', { timeoutMs: 2500 }).catch(() => null),
+          api('/engines/performance').catch(() => null),
+          api('/mt5/deals?limit=30&days=7', { timeoutMs: 3500 }).catch(() => null),
+          isAdminSession() ? api('/admin/users').catch(() => null) : Promise.resolve(null),
+        ]);
+        const summary = payload(summaryRes);
+        const perf = payload(perfRes);
+        const history = historyRes || {};
+        const status = payload(statusRes);
+        const mt5Data = mt5Res || {};
+        const engines = enginesRes || {};
+        const mt5Deals = payload(mt5DealsRes);
+        const adminData = payload(adminRes);
+        const latency = Math.max(0, Math.round(performance.now() - lastLoadStartedAt));
+
+        setOnline(true);
+        updateLiveStrip(status, perf, latency);
+        updateKpis(summary, perf, status);
+        updateReadiness(perf);
+        updateGoal(perf, status);
+        updateDecision(status);
+        updateCosts(perf);
+        updateMonthReport(history, perf);
+        updateOpsPanels(status, perf);
+        renderEngines(engines);
+        renderChart(history, perf, summary, status);
+        renderDailyHistory(history);
+        renderPositions(summary, mt5Data?.positions);
+        renderActivity(summary, status);
+        renderMt5Deals(mt5Deals);
+        if (isAdminSession()) renderAdminUsers(adminData);
+        $('updated-at').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      } catch (err) {
+        if (err.message !== 'unauthorized') {
+          setOnline(false);
+          updateLiveStrip({}, {}, null);
+          renderChart({}, {}, {}, {});
+          renderDailyHistory({});
+          renderPositions({}, []);
+          renderActivity({}, {});
+          renderEngines({});
+          updateGoal({}, {});
+          updateDecision({});
+          updateCosts({});
+          updateMonthReport({}, {});
+          updateOpsPanels({}, {});
+          renderMt5Deals([]);
+          toast('Não foi possível sincronizar com o bot agora.');
+        }
+      }
+    }
+
+    $('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const effectiveBase = API_BASE;
+      const email = $('portal-email').value.trim();
+      const password = $('portal-password').value;
+      const newPassword = $('portal-new-password').value;
+      const confirmPassword = $('portal-confirm-password').value;
+      const name = $('portal-name').value.trim();
+      if (!effectiveBase) {
+        $('login-error').textContent = 'Não foi possível localizar o servidor do portal.';
+        return;
+      }
+      if (!email || !password) {
+        $('login-error').textContent = 'Informe e-mail e senha.';
+        return;
+      }
+      if (authMode === 'change') {
+        if (!newPassword || !confirmPassword) {
+          $('login-error').textContent = 'Informe e confirme a nova senha.';
+          return;
+        }
+        if (newPassword.length < 8) {
+          $('login-error').textContent = 'A nova senha deve ter pelo menos 8 caracteres.';
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          $('login-error').textContent = 'A confirmação não confere com a nova senha.';
+          return;
+        }
+      }
+      $('login-btn').disabled = true;
+      $('login-btn').textContent = authMode === 'register' ? 'Criando...' : (authMode === 'change' ? 'Alterando...' : 'Validando...');
+      try {
+        const authPath = authMode === 'register' ? '/auth/register' : (authMode === 'change' ? '/auth/change-password' : '/auth/login');
+        const body = authMode === 'change'
+          ? { email, current_password: password, new_password: newPassword }
+          : { email, password, name };
+        const res = await fetch(`${effectiveBase}${authPath}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          let detail = authMode === 'register'
+            ? 'Não foi possível criar a conta.'
+            : (authMode === 'change' ? 'Não foi possível alterar a senha.' : 'E-mail ou senha inválidos.');
+          try {
+            const errorPayload = await res.json();
+            detail = errorPayload.detail || detail;
+          } catch (_) {}
+          $('login-error').textContent = detail;
+          return;
+        }
+        if (authMode === 'change') {
+          localStorage.setItem(EMAIL_STORAGE, email);
+          $('portal-password').value = '';
+          $('portal-new-password').value = '';
+          $('portal-confirm-password').value = '';
+          setAuthMode('login');
+          $('login-error').textContent = 'Senha alterada. Entre com a nova senha.';
+          return;
+        }
+        const payload = await res.json();
+        const token = payload?.data?.access_token || payload?.access_token || payload?.token;
+        if (!token) throw new Error('missing-token');
+        setSession(token);
+        const validation = await fetch(`${effectiveBase}/auth/validate`, { headers: headers() });
+        if (!validation.ok) throw new Error('invalid-session');
+        localStorage.setItem(EMAIL_STORAGE, email);
+        $('portal-password').value = '';
+        showApp();
+        await loadDashboard();
+      } catch (err) {
+        if (err.message !== 'unauthorized') {
+          clearSession();
+          $('login-error').textContent = `Não foi possível validar o acesso em ${effectiveBase}. Verifique se a API está online.`;
+        }
+      } finally {
+        $('login-btn').disabled = false;
+        $('login-btn').textContent = authMode === 'register' ? 'Criar conta' : (authMode === 'change' ? 'Alterar senha' : 'Acessar portal');
+      }
+    });
+
+    $('auth-tabs').addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-mode]');
+      if (!btn) return;
+      setAuthMode(btn.dataset.mode);
+    });
+
+    $('logout-btn').addEventListener('click', () => {
+      clearSession();
+      showLogin();
+    });
+
+    $('mobile-logout-btn').addEventListener('click', () => {
+      clearSession();
+      showLogin();
+    });
+
+    $('refresh-btn').addEventListener('click', loadDashboard);
+
+    document.querySelectorAll('[data-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setActiveTab(btn.dataset.tab);
+      });
+    });
+
+    $('range-tabs').addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-range]');
+      if (!btn) return;
+      currentRange = btn.dataset.range;
+      document.querySelectorAll('#range-tabs button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadDashboard();
+    });
+
+    if (getSession()) {
+      showApp();
+      loadDashboard();
+      setInterval(() => {
+        if (getSession()) {
+          loadDashboard().catch(() => null);
+        }
+      }, 15000);
+    } else {
+      setAuthMode('login');
+      showLogin();
+    }
+  </script>
+</body>
+</html>
+
