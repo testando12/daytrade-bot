@@ -72,3 +72,6 @@ credentials.json
 *.bak
 *.backup
 *~
+
+# Exceção: server-url.json precisa ser publico pro site descobrir o tunnel
+!dashboard-web/server-url.json
