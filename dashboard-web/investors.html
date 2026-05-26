@@ -137,7 +137,7 @@
 
     .auth-tabs {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, 1fr);
       gap: 6px;
       width: min(390px, 100%);
       padding: 5px;
@@ -1354,13 +1354,9 @@
       <div class="auth-tabs" id="auth-tabs">
         <button type="button" class="active" data-mode="login">Entrar</button>
         <button type="button" data-mode="register">Criar conta</button>
+        <button type="button" data-mode="change">Trocar senha</button>
       </div>
       <form class="access-card" id="login-form">
-        <label for="portal-server">Servidor da API</label>
-        <div class="key-field">
-          <i class="fa-solid fa-server"></i>
-          <input id="portal-server" type="url" placeholder="Cole aqui a URL do tunnel ou Railway..." autocomplete="off" />
-        </div>
         <div id="name-wrap" class="hidden">
           <label for="portal-name">Nome</label>
           <div class="key-field">
@@ -1373,10 +1369,24 @@
           <i class="fa-solid fa-envelope"></i>
           <input id="portal-email" type="email" autocomplete="username" placeholder="admin@dta.local" />
         </div>
-        <label for="portal-password">Senha</label>
+        <label for="portal-password" id="portal-password-label">Senha</label>
         <div class="key-field">
           <i class="fa-solid fa-lock"></i>
           <input id="portal-password" type="password" autocomplete="current-password" placeholder="Insira sua senha" />
+        </div>
+        <div id="new-password-wrap" class="hidden">
+          <label for="portal-new-password">Nova senha</label>
+          <div class="key-field">
+            <i class="fa-solid fa-key"></i>
+            <input id="portal-new-password" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" />
+          </div>
+        </div>
+        <div id="confirm-password-wrap" class="hidden">
+          <label for="portal-confirm-password">Confirmar nova senha</label>
+          <div class="key-field">
+            <i class="fa-solid fa-check"></i>
+            <input id="portal-confirm-password" type="password" autocomplete="new-password" placeholder="Repita a nova senha" />
+          </div>
         </div>
         <button class="primary-btn" id="login-btn" type="submit">Acessar portal</button>
         <div class="login-error" id="login-error"></div>
@@ -1711,9 +1721,34 @@
 
     const _IS_LOCAL_INV = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
     const _SAVED_INV    = localStorage.getItem('dt_inv_server_url');
-    const _DEFAULT_INV_API = 'http://127.0.0.1:8000';
-    // Por padrão no GitHub Pages, usar backend local em 127.0.0.1:8000 se não houver URL salva.
-    let API_BASE = _IS_LOCAL_INV ? (location.origin || _DEFAULT_INV_API) : (_SAVED_INV || _DEFAULT_INV_API);
+    const _LOCAL_INV_API = 'http://127.0.0.1:8000';
+    const normalizeApiBase = (value) => String(value || '').trim().replace(/\/$/, '');
+    // Fallback inicial (vai ser sobrescrito pelo auto-discovery via server-url.json)
+    let API_BASE = normalizeApiBase(
+      _IS_LOCAL_INV ? (location.origin || _LOCAL_INV_API) : (_SAVED_INV || '')
+    );
+
+    // Auto-descoberta da URL do bot (mesmo sistema do app.js)
+    // Carrega URL atual de server-url.json (auto-atualizado pelo tunnel_manager.py)
+    async function _autodiscoverInvApi() {
+      if (_IS_LOCAL_INV) return;
+      try {
+        const r = await fetch('./server-url.json?ts=' + Date.now(), { cache: 'no-store' });
+        if (r.ok) {
+          const data = await r.json();
+          if (data && data.url) {
+            API_BASE = normalizeApiBase(data.url);
+            localStorage.setItem('dt_inv_server_url', API_BASE);
+            console.log('[autodiscover-inv] API_BASE =', API_BASE, '(de server-url.json)');
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[autodiscover-inv] falhou:', e);
+      }
+    }
+    // Roda autodiscovery ANTES de qualquer fetch
+    const _autodiscoverPromise = _autodiscoverInvApi();
     const SESSION_STORAGE = 'dta_portal_session';
     const EMAIL_STORAGE = 'dta_portal_email';
     const DAILY_GOAL = 30; // Meta realista: R$30/dia com 1 contrato WDO
@@ -1823,6 +1858,77 @@
       return fallback;
     }
 
+    function cleanPortalText(value) {
+      return String(value || '')
+        .replaceAll('aceitÃ¡vel', 'aceitável')
+        .replaceAll('Ã¡', 'á')
+        .replaceAll('Ã©', 'é')
+        .replaceAll('Ã­', 'í')
+        .replaceAll('Ã³', 'ó')
+        .replaceAll('Ãº', 'ú')
+        .replaceAll('Ã£', 'ã')
+        .replaceAll('Ãµ', 'õ')
+        .replaceAll('Ã§', 'ç')
+        .replaceAll('Ãª', 'ê')
+        .replaceAll('Ã´', 'ô')
+        .replaceAll('Ã', 'Á')
+        .replaceAll('Ã‰', 'É')
+        .replaceAll('Ã‡', 'Ç');
+    }
+
+    function humanizePortalReason(value) {
+      const text = cleanPortalText(value).trim();
+      const lower = text.toLowerCase();
+      if (!text) return '';
+      if (lower.includes('sem oportunidade com risco/retorno')) {
+        return 'Sem entrada no ciclo atual. O bot não encontrou uma relação risco/retorno boa o suficiente.';
+      }
+      if (lower.includes('sem sinal válido') || lower.includes('nenhum ativo acima')) {
+        return 'Sem entrada no ciclo atual. Os sinais ainda não passaram nos filtros do bot.';
+      }
+      if (lower.includes('pausado por proteção')) {
+        return 'Bot em modo de proteção. Novas entradas ficam bloqueadas até o risco normalizar.';
+      }
+      if (lower.includes('risco elevado')) {
+        return 'Risco elevado no momento. O bot está priorizando proteção de capital.';
+      }
+      if (lower.includes('trend_day_prioriza_orb30')) {
+        return 'Dia com tendência detectada. O bot prioriza setups direcionais.';
+      }
+      if (lower.includes('lateral_day_prioriza_reversao')) {
+        return 'Mercado lateral detectado. O bot prioriza operações de reversão.';
+      }
+      if (lower.includes('neutral_day_balanceado_por_janela')) {
+        return 'Mercado neutro. O bot aguarda uma janela operacional mais clara.';
+      }
+      if (lower.includes('fixed_profile') || lower.includes('adaptive_disabled')) {
+        return 'Operação em perfil fixo. O bot mantém a configuração atual.';
+      }
+      return text;
+    }
+
+    function formatEngineName(name) {
+      const labels = {
+        orb30_win: 'ORB30 WIN',
+        ema_cross_win: 'EMA Cross WIN',
+        orb_fade_win: 'ORB Fade WIN',
+        range_scalp_win: 'Range Scalp WIN',
+        vwap_rev_wdo: 'VWAP Reversão WDO',
+        win_mr_afternoon: 'WIN Reversão tarde',
+        btc_leadlag_binance: 'BTC Lead/Lag',
+        momentum_scalp_binance: 'Momentum Scalp',
+      };
+      return labels[name] || String(name || '').replaceAll('_', ' ');
+    }
+
+    function formatPlan(plan, limit = 3) {
+      if (!plan || typeof plan !== 'object') return '';
+      const entries = Object.entries(plan);
+      const active = entries.filter(([, value]) => value === true);
+      if (!active.length) return 'Estratégia em espera';
+      return active.slice(0, limit).map(([key]) => formatEngineName(key)).join(' | ');
+    }
+
     function showLogin(message = '') {
       $('login').classList.remove('hidden');
       $('app').classList.add('hidden');
@@ -1872,15 +1978,22 @@
     }
 
     function setAuthMode(mode) {
-      authMode = mode === 'register' ? 'register' : 'login';
+      authMode = ['register', 'change'].includes(mode) ? mode : 'login';
       document.querySelectorAll('#auth-tabs button').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.mode === authMode);
       });
       $('name-wrap').classList.toggle('hidden', authMode !== 'register');
-      $('login-btn').textContent = authMode === 'register' ? 'Criar conta' : 'Acessar portal';
+      $('new-password-wrap').classList.toggle('hidden', authMode !== 'change');
+      $('confirm-password-wrap').classList.toggle('hidden', authMode !== 'change');
+      $('portal-password-label').textContent = authMode === 'change' ? 'Senha atual' : 'Senha';
+      $('portal-password').autocomplete = authMode === 'change' ? 'current-password' : (authMode === 'register' ? 'new-password' : 'current-password');
+      $('portal-password').placeholder = authMode === 'change' ? 'Senha atual ou temporária' : 'Insira sua senha';
+      $('login-btn').textContent = authMode === 'register' ? 'Criar conta' : (authMode === 'change' ? 'Alterar senha' : 'Acessar portal');
       $('login-help').textContent = authMode === 'register'
         ? 'Novas contas entram como investidor. Use uma senha com pelo menos 8 caracteres.'
-        : 'Use seu e-mail e senha cadastrados no portal DTA.';
+        : (authMode === 'change'
+          ? 'Informe seu e-mail, senha atual e a nova senha para atualizar o acesso.'
+          : 'Use seu e-mail e senha cadastrados no portal DTA.');
       $('login-error').textContent = '';
     }
 
@@ -2197,13 +2310,14 @@
     }
 
     function updateDecision(status) {
-      const reason = valueFrom(status, ['last_no_position_reason', 'adaptive_engine_reason'], '');
+      const reason = humanizePortalReason(valueFrom(status, ['last_no_position_reason', 'adaptive_engine_reason'], ''));
       const plan = status?.adaptive_engine_plan;
       const lastCycle = compactDate(status?.last_cycle);
-      const label = status?.auto_trading === false ? 'Bot pausado' : reason ? 'Entrada bloqueada' : 'Monitoramento ativo';
-      const text = reason || 'Nenhum bloqueio relevante no último ciclo sincronizado.';
-      const meta = plan && typeof plan === 'object'
-        ? `Plano adaptativo: ${Object.entries(plan).slice(0, 3).map(([k, v]) => `${k} ${v}`).join(' | ')}`
+      const label = status?.auto_trading === false ? 'Bot pausado' : reason ? 'Sem entrada agora' : 'Monitoramento ativo';
+      const text = reason || 'Bot monitorando o mercado. Nenhum alerta relevante no último ciclo.';
+      const planText = formatPlan(plan, 3);
+      const meta = planText
+        ? `Leitura operacional: ${planText}`
         : 'O portal está em modo somente leitura.';
       setText('decision-label', label);
       setText('decision-text', String(text).slice(0, 140));
@@ -2267,10 +2381,8 @@
       const usdRate = Number(status?.usd_rate || 0);
       const b3Open = status?.b3_open;
       const plan = status?.adaptive_engine_plan;
-      const planLabel = plan && typeof plan === 'object'
-        ? Object.entries(plan).slice(0, 2).map(([key, value]) => `${key}:${value}`).join(' ')
-        : valueFrom(status, ['adaptive_engine_reason'], '--');
-      const reason = valueFrom(status, ['last_no_position_reason', 'adaptive_engine_reason'], 'Sem bloqueio relevante');
+      const planLabel = formatPlan(plan, 2) || humanizePortalReason(valueFrom(status, ['adaptive_engine_reason'], '--'));
+      const reason = humanizePortalReason(valueFrom(status, ['last_no_position_reason', 'adaptive_engine_reason'], 'Sem bloqueio relevante'));
 
       $('ops-capital-brl').textContent = capitalBrl ? brl(capitalBrl) : brl(status?.capital || perf?.current_capital || 0);
       $('ops-capital-usd').textContent = capitalUsd
@@ -2371,43 +2483,54 @@
       }
     }
 
-    // Preenche campo servidor com valor salvo ou default local ao usar GitHub Pages.
-    (function initServerField() {
-      const sf = $('portal-server');
-      if (sf) sf.value = _IS_LOCAL_INV ? (location.origin || _DEFAULT_INV_API) : (_SAVED_INV || _DEFAULT_INV_API);
-    })();
-
     $('login-form').addEventListener('submit', async (event) => {
       event.preventDefault();
-      // Salva e aplica URL do servidor se o usuário preencheu
-      const sf = $('portal-server');
-      if (sf && sf.value.trim() && !_IS_LOCAL_INV) {
-        const customUrl = sf.value.trim().replace(/\/$/, '');
-        localStorage.setItem('dt_inv_server_url', customUrl);
-        API_BASE = customUrl; // atualiza let para todas as chamadas seguintes
-      }
+      // Garante que autodiscovery rodou ANTES de tentar login
+      try { await _autodiscoverPromise; } catch(_){}
       const effectiveBase = API_BASE;
       const email = $('portal-email').value.trim();
       const password = $('portal-password').value;
+      const newPassword = $('portal-new-password').value;
+      const confirmPassword = $('portal-confirm-password').value;
       const name = $('portal-name').value.trim();
       if (!effectiveBase) {
-        $('login-error').textContent = 'Informe a URL do servidor (campo "Servidor da API").';
+        $('login-error').textContent = 'Não foi possível localizar o servidor do portal.';
         return;
       }
       if (!email || !password) {
         $('login-error').textContent = 'Informe e-mail e senha.';
         return;
       }
+      if (authMode === 'change') {
+        if (!newPassword || !confirmPassword) {
+          $('login-error').textContent = 'Informe e confirme a nova senha.';
+          return;
+        }
+        if (newPassword.length < 8) {
+          $('login-error').textContent = 'A nova senha deve ter pelo menos 8 caracteres.';
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          $('login-error').textContent = 'A confirmação não confere com a nova senha.';
+          return;
+        }
+      }
       $('login-btn').disabled = true;
-      $('login-btn').textContent = authMode === 'register' ? 'Criando...' : 'Validando...';
+      $('login-btn').textContent = authMode === 'register' ? 'Criando...' : (authMode === 'change' ? 'Alterando...' : 'Validando...');
       try {
-        const res = await fetch(`${effectiveBase}${authMode === 'register' ? '/auth/register' : '/auth/login'}`, {
+        const authPath = authMode === 'register' ? '/auth/register' : (authMode === 'change' ? '/auth/change-password' : '/auth/login');
+        const body = authMode === 'change'
+          ? { email, current_password: password, new_password: newPassword }
+          : { email, password, name };
+        const res = await fetch(`${effectiveBase}${authPath}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, name }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) {
-          let detail = authMode === 'register' ? 'Não foi possível criar a conta.' : 'E-mail ou senha inválidos.';
+          let detail = authMode === 'register'
+            ? 'Não foi possível criar a conta.'
+            : (authMode === 'change' ? 'Não foi possível alterar a senha.' : 'E-mail ou senha inválidos.');
           try {
             const errorPayload = await res.json();
             detail = errorPayload.detail || detail;
@@ -2415,10 +2538,21 @@
           $('login-error').textContent = detail;
           return;
         }
+        if (authMode === 'change') {
+          localStorage.setItem(EMAIL_STORAGE, email);
+          $('portal-password').value = '';
+          $('portal-new-password').value = '';
+          $('portal-confirm-password').value = '';
+          setAuthMode('login');
+          $('login-error').textContent = 'Senha alterada. Entre com a nova senha.';
+          return;
+        }
         const payload = await res.json();
         const token = payload?.data?.access_token || payload?.access_token || payload?.token;
         if (!token) throw new Error('missing-token');
         setSession(token);
+        const validation = await fetch(`${effectiveBase}/auth/validate`, { headers: headers() });
+        if (!validation.ok) throw new Error('invalid-session');
         localStorage.setItem(EMAIL_STORAGE, email);
         $('portal-password').value = '';
         showApp();
@@ -2426,11 +2560,11 @@
       } catch (err) {
         if (err.message !== 'unauthorized') {
           clearSession();
-          $('login-error').textContent = `Erro ao conectar em ${effectiveBase}. Verifique a URL do servidor.`;
+          $('login-error').textContent = `Não foi possível validar o acesso em ${effectiveBase}. Verifique se a API está online.`;
         }
       } finally {
         $('login-btn').disabled = false;
-        $('login-btn').textContent = authMode === 'register' ? 'Criar conta' : 'Acessar portal';
+        $('login-btn').textContent = authMode === 'register' ? 'Criar conta' : (authMode === 'change' ? 'Alterar senha' : 'Acessar portal');
       }
     });
 
@@ -2482,7 +2616,3 @@
   </script>
 </body>
 </html>
-
-
-
-
