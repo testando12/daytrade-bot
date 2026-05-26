@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DTA - Investidor</title>
-  <link rel="icon" type="image/png" href="logo.png" />
+  <link rel="icon" type="image/png" href="/ui/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1395,7 +1395,7 @@
       <div class="login-note">DTA - Investidor</div>
     </div>
     <div class="login-visual" aria-hidden="true">
-      <img class="login-visual-img" src="assets/login-bg.png" alt="DTA Portal Background" />
+      <img class="login-visual-img" src="/ui/assets/login-bg.png" alt="DTA Portal Background" />
     </div>
   </section>
 
@@ -1721,13 +1721,34 @@
 
     const _IS_LOCAL_INV = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:';
     const _SAVED_INV    = localStorage.getItem('dt_inv_server_url');
-    const _DEFAULT_INV_API = 'https://daytrade-bot-production.up.railway.app';
-    const _LOCAL_INV_API = 'http://127.0.0.1:8001';
-    const _DEPLOYED_INV_API = 'https://val-ensures-catch-bbs.trycloudflare.com';
+    const _LOCAL_INV_API = 'http://127.0.0.1:8000';
     const normalizeApiBase = (value) => String(value || '').trim().replace(/\/$/, '');
+    // Fallback inicial (vai ser sobrescrito pelo auto-discovery via server-url.json)
     let API_BASE = normalizeApiBase(
-      _DEPLOYED_INV_API || _SAVED_INV || (_IS_LOCAL_INV ? (location.origin || _LOCAL_INV_API) : _DEFAULT_INV_API)
+      _IS_LOCAL_INV ? (location.origin || _LOCAL_INV_API) : (_SAVED_INV || '')
     );
+
+    // Auto-descoberta da URL do bot (mesmo sistema do app.js)
+    // Carrega URL atual de server-url.json (auto-atualizado pelo tunnel_manager.py)
+    async function _autodiscoverInvApi() {
+      if (_IS_LOCAL_INV) return;
+      try {
+        const r = await fetch('./server-url.json?ts=' + Date.now(), { cache: 'no-store' });
+        if (r.ok) {
+          const data = await r.json();
+          if (data && data.url) {
+            API_BASE = normalizeApiBase(data.url);
+            localStorage.setItem('dt_inv_server_url', API_BASE);
+            console.log('[autodiscover-inv] API_BASE =', API_BASE, '(de server-url.json)');
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[autodiscover-inv] falhou:', e);
+      }
+    }
+    // Roda autodiscovery ANTES de qualquer fetch
+    const _autodiscoverPromise = _autodiscoverInvApi();
     const SESSION_STORAGE = 'dta_portal_session';
     const EMAIL_STORAGE = 'dta_portal_email';
     const DAILY_GOAL = 30; // Meta realista: R$30/dia com 1 contrato WDO
@@ -2464,6 +2485,8 @@
 
     $('login-form').addEventListener('submit', async (event) => {
       event.preventDefault();
+      // Garante que autodiscovery rodou ANTES de tentar login
+      try { await _autodiscoverPromise; } catch(_){}
       const effectiveBase = API_BASE;
       const email = $('portal-email').value.trim();
       const password = $('portal-password').value;
@@ -2593,4 +2616,3 @@
   </script>
 </body>
 </html>
-
