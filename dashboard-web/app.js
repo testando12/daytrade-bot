@@ -26,13 +26,14 @@ window.addEventListener('load', () => {
 // CONFIG
 // =============================================
 
-// URL do servidor: localhost em dev, Railway como padrão externo, ou URL salva pelo usuário
+// URL do servidor: prioriza Cloudflare Tunnel, fallback para localhost/Railway
 const _IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const _CLOUDFLARE_TUNNEL = 'https://floppy-producers-vegetable-depends.trycloudflare.com';
 const _RAILWAY_URL = 'https://daytrade-bot-production.up.railway.app';
 const _SAVED_SERVER = localStorage.getItem('dt_server_url');
 let API_BASE = _IS_LOCAL
   ? 'http://localhost:8000'
-  : (_SAVED_SERVER || _RAILWAY_URL);
+  : (_SAVED_SERVER || _CLOUDFLARE_TUNNEL || _RAILWAY_URL);
 let currentPage = 'dashboard';
 let autoRefreshInterval = null;
 let charts = {};
